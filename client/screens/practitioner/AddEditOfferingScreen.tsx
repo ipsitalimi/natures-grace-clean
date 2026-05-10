@@ -29,6 +29,17 @@ const MIN_PRICE = 500;
 const MAX_PRICE = 2500;
 const PRICE_STEP = 100;
 
+const TIME_OPTIONS = [
+  "6:00 AM", "7:00 AM", "8:00 AM", "9:00 AM", "10:00 AM", "11:00 AM",
+  "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM",
+  "6:00 PM", "7:00 PM", "8:00 PM", "9:00 PM", "10:00 PM",
+];
+const DEFAULT_START = "9:00 AM";
+const DEFAULT_END = "5:00 PM";
+
+type TimingMode = "same" | "custom";
+interface TimeSlot { start: string; end: string; }
+
 function TypeIcon({ size = 18 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -66,10 +77,399 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const DAYS_FULL = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function toDateKey(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
+
+function formatDateKey(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return `${DAYS_FULL[date.getDay()]}, ${d} ${MONTHS_SHORT[m - 1]}`;
+}
+
+// ─── Time Step Control ────────────────────────────────────────────────────────
+
+interface TimeStepControlProps {
+  value: string;
+  onChange: (v: string) => void;
+  minIndex?: number;
+  maxIndex?: number;
+}
+
+function TimeStepControl({ value, onChange, minIndex = 0, maxIndex }: TimeStepControlProps) {
+  const max = maxIndex ?? TIME_OPTIONS.length - 1;
+  const idx = TIME_OPTIONS.indexOf(value);
+  const canDec = idx > minIndex;
+  const canInc = idx < max;
+
+  return (
+    <View style={tsStyles.row}>
+      <Pressable
+        style={[tsStyles.stepBtn, !canDec && tsStyles.stepBtnDisabled]}
+        onPress={() => canDec && onChange(TIME_OPTIONS[idx - 1])}
+        disabled={!canDec}
+        testID={`time-step-left-${value.replace(/\s+/g, "-")}`}
+      >
+        <Feather name="chevron-left" size={15} color={canDec ? Colors.light.accent : Colors.light.textMuted} />
+      </Pressable>
+      <View style={tsStyles.timeBox}>
+        <ThemedText style={tsStyles.timeText}>{value}</ThemedText>
+      </View>
+      <Pressable
+        style={[tsStyles.stepBtn, !canInc && tsStyles.stepBtnDisabled]}
+        onPress={() => canInc && onChange(TIME_OPTIONS[idx + 1])}
+        disabled={!canInc}
+        testID={`time-step-right-${value.replace(/\s+/g, "-")}`}
+      >
+        <Feather name="chevron-right" size={15} color={canInc ? Colors.light.accent : Colors.light.textMuted} />
+      </Pressable>
+    </View>
+  );
+}
+
+const tsStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  stepBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: `${Colors.light.accent}10`,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  stepBtnDisabled: {
+    opacity: 0.35,
+  },
+  timeBox: {
+    minWidth: 72,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: Colors.light.backgroundRoot,
+    borderRadius: BorderRadius.xs,
+    alignItems: "center",
+  },
+  timeText: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+  },
+});
+
+// ─── Time Range Picker ────────────────────────────────────────────────────────
+
+interface TimeRangePickerProps {
+  value: TimeSlot;
+  onChange: (v: TimeSlot) => void;
+  compact?: boolean;
+}
+
+function TimeRangePicker({ value, onChange, compact = false }: TimeRangePickerProps) {
+  const startIdx = TIME_OPTIONS.indexOf(value.start);
+  const endIdx = TIME_OPTIONS.indexOf(value.end);
+
+  const handleStartChange = (newStart: string) => {
+    const newStartIdx = TIME_OPTIONS.indexOf(newStart);
+    if (endIdx <= newStartIdx) {
+      const newEnd = TIME_OPTIONS[Math.min(newStartIdx + 1, TIME_OPTIONS.length - 1)];
+      onChange({ start: newStart, end: newEnd });
+    } else {
+      onChange({ ...value, start: newStart });
+    }
+  };
+
+  const handleEndChange = (newEnd: string) => {
+    onChange({ ...value, end: newEnd });
+  };
+
+  return (
+    <View style={[trpStyles.container, compact && trpStyles.containerCompact]}>
+      <View style={trpStyles.block}>
+        <ThemedText style={trpStyles.label}>From</ThemedText>
+        <TimeStepControl
+          value={value.start}
+          onChange={handleStartChange}
+          minIndex={0}
+          maxIndex={TIME_OPTIONS.length - 2}
+        />
+      </View>
+      <Feather name="arrow-right" size={16} color={Colors.light.textMuted} style={trpStyles.arrow} />
+      <View style={trpStyles.block}>
+        <ThemedText style={trpStyles.label}>To</ThemedText>
+        <TimeStepControl
+          value={value.end}
+          onChange={handleEndChange}
+          minIndex={startIdx + 1}
+          maxIndex={TIME_OPTIONS.length - 1}
+        />
+      </View>
+    </View>
+  );
+}
+
+const trpStyles = StyleSheet.create({
+  container: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    gap: 8,
+  },
+  containerCompact: {
+    padding: Spacing.sm,
+  },
+  block: {
+    flex: 1,
+    alignItems: "center",
+    gap: 4,
+  },
+  label: {
+    fontSize: 11,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  arrow: {
+    flexShrink: 0,
+    marginTop: 14,
+  },
+});
+
+// ─── Timing Section ───────────────────────────────────────────────────────────
+
+interface TimingSectionProps {
+  selectedDates: string[];
+  timingMode: TimingMode;
+  onChangeMode: (m: TimingMode) => void;
+  globalTiming: TimeSlot;
+  onChangeGlobalTiming: (v: TimeSlot) => void;
+  dateTimings: Record<string, TimeSlot>;
+  onChangeDateTiming: (date: string, v: TimeSlot) => void;
+}
+
+function TimingSection({
+  selectedDates,
+  timingMode,
+  onChangeMode,
+  globalTiming,
+  onChangeGlobalTiming,
+  dateTimings,
+  onChangeDateTiming,
+}: TimingSectionProps) {
+  if (selectedDates.length === 0) return null;
+
+  const sorted = [...selectedDates].sort();
+
+  return (
+    <View style={timStyles.wrapper}>
+      <View style={timStyles.header}>
+        <Feather name="clock" size={15} color={Colors.light.accent} />
+        <ThemedText style={timStyles.headerTitle}>Session Timings</ThemedText>
+      </View>
+      <ThemedText style={timStyles.headerSub}>
+        Define your availability window for the selected date{selectedDates.length > 1 ? "s" : ""}.
+      </ThemedText>
+
+      <View style={timStyles.modeToggle}>
+        <Pressable
+          style={[timStyles.modeBtn, timingMode === "same" && timStyles.modeBtnActive]}
+          onPress={() => onChangeMode("same")}
+          testID="timing-mode-same"
+        >
+          <Feather
+            name="copy"
+            size={14}
+            color={timingMode === "same" ? "#FFFFFF" : Colors.light.textMuted}
+          />
+          <ThemedText
+            style={[timStyles.modeBtnText, timingMode === "same" && timStyles.modeBtnTextActive]}
+          >
+            Same for all
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[timStyles.modeBtn, timingMode === "custom" && timStyles.modeBtnActive]}
+          onPress={() => onChangeMode("custom")}
+          testID="timing-mode-custom"
+        >
+          <Feather
+            name="sliders"
+            size={14}
+            color={timingMode === "custom" ? "#FFFFFF" : Colors.light.textMuted}
+          />
+          <ThemedText
+            style={[timStyles.modeBtnText, timingMode === "custom" && timStyles.modeBtnTextActive]}
+          >
+            Per day
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      {timingMode === "same" ? (
+        <View style={timStyles.sameBlock}>
+          <TimeRangePicker value={globalTiming} onChange={onChangeGlobalTiming} />
+          <View style={timStyles.applyNote}>
+            <Feather name="check-circle" size={13} color="#4A7C59" />
+            <ThemedText style={timStyles.applyNoteText}>
+              Applied to all {selectedDates.length} selected date{selectedDates.length > 1 ? "s" : ""}
+            </ThemedText>
+          </View>
+        </View>
+      ) : (
+        <View style={timStyles.customBlock}>
+          <View style={timStyles.customHint}>
+            <Feather name="info" size={13} color={Colors.light.textMuted} />
+            <ThemedText style={timStyles.customHintText}>
+              Set a different time window for each date.
+            </ThemedText>
+          </View>
+          {sorted.map((date) => {
+            const timing = dateTimings[date] ?? globalTiming;
+            return (
+              <View key={date} style={timStyles.dateCard}>
+                <View style={timStyles.dateLabelRow}>
+                  <View style={timStyles.dateDot} />
+                  <ThemedText style={timStyles.dateCardLabel}>{formatDateKey(date)}</ThemedText>
+                  <ThemedText style={timStyles.dateCardTime}>
+                    {timing.start} – {timing.end}
+                  </ThemedText>
+                </View>
+                <TimeRangePicker
+                  value={timing}
+                  onChange={(v) => onChangeDateTiming(date, v)}
+                  compact
+                />
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const timStyles = StyleSheet.create({
+  wrapper: {
+    backgroundColor: `${Colors.light.accent}06`,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: `${Colors.light.accent}18`,
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  headerTitle: {
+    fontSize: 15,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+  },
+  headerSub: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    lineHeight: 17,
+    marginTop: -6,
+  },
+  modeToggle: {
+    flexDirection: "row",
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: 3,
+    gap: 3,
+  },
+  modeBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  modeBtnActive: {
+    backgroundColor: Colors.light.accent,
+  },
+  modeBtnText: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.textMuted,
+  },
+  modeBtnTextActive: {
+    color: "#FFFFFF",
+  },
+  sameBlock: {
+    gap: Spacing.sm,
+  },
+  applyNote: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 4,
+  },
+  applyNoteText: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: "#4A7C59",
+  },
+  customBlock: {
+    gap: Spacing.md,
+  },
+  customHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  customHintText: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    flex: 1,
+  },
+  dateCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  dateLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  dateDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: Colors.light.accent,
+    flexShrink: 0,
+  },
+  dateCardLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.text,
+  },
+  dateCardTime: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
+});
+
+// ─── Calendar Picker ──────────────────────────────────────────────────────────
 
 interface CalendarPickerProps {
   selectedDates: string[];
@@ -84,21 +484,13 @@ function CalendarPicker({ selectedDates, onToggleDate, alwaysAvailable, onToggle
   const [viewMonth, setViewMonth] = useState(today.getMonth());
 
   const goToPrevMonth = () => {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear((y) => y - 1);
-    } else {
-      setViewMonth((m) => m - 1);
-    }
+    if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
+    else setViewMonth((m) => m - 1);
   };
 
   const goToNextMonth = () => {
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear((y) => y + 1);
-    } else {
-      setViewMonth((m) => m + 1);
-    }
+    if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
+    else setViewMonth((m) => m + 1);
   };
 
   const firstDayOfWeek = new Date(viewYear, viewMonth, 1).getDay();
@@ -151,9 +543,7 @@ function CalendarPicker({ selectedDates, onToggleDate, alwaysAvailable, onToggle
           {rows.map((row, ri) => (
             <View key={ri} style={calStyles.weekRow}>
               {row.map((day, di) => {
-                if (day === null) {
-                  return <View key={di} style={calStyles.dayCell} />;
-                }
+                if (day === null) return <View key={di} style={calStyles.dayCell} />;
                 const key = toDateKey(viewYear, viewMonth, day);
                 const isSelected = selectedDates.includes(key);
                 const isToday = key === todayKey;
@@ -211,9 +601,7 @@ function CalendarPicker({ selectedDates, onToggleDate, alwaysAvailable, onToggle
 }
 
 const calStyles = StyleSheet.create({
-  wrapper: {
-    gap: Spacing.md,
-  },
+  wrapper: { gap: Spacing.md },
   alwaysRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -237,11 +625,6 @@ const calStyles = StyleSheet.create({
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
   },
   monthRow: {
     flexDirection: "row",
@@ -284,32 +667,17 @@ const calStyles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 17,
   },
-  dayCellSelected: {
-    backgroundColor: Colors.light.accent,
-  },
-  dayCellToday: {
-    borderWidth: 1.5,
-    borderColor: Colors.light.accent,
-  },
-  dayCellPast: {
-    opacity: 0.3,
-  },
+  dayCellSelected: { backgroundColor: Colors.light.accent },
+  dayCellToday: { borderWidth: 1.5, borderColor: Colors.light.accent },
+  dayCellPast: { opacity: 0.3 },
   dayText: {
     fontSize: 13,
     fontFamily: "Nunito_400Regular",
     color: Colors.light.text,
   },
-  dayTextSelected: {
-    color: "#FFFFFF",
-    fontFamily: "Nunito_700Bold",
-  },
-  dayTextToday: {
-    color: Colors.light.accent,
-    fontFamily: "Nunito_700Bold",
-  },
-  dayTextPast: {
-    color: Colors.light.textMuted,
-  },
+  dayTextSelected: { color: "#FFFFFF", fontFamily: "Nunito_700Bold" },
+  dayTextToday: { color: Colors.light.accent, fontFamily: "Nunito_700Bold" },
+  dayTextPast: { color: Colors.light.textMuted },
   selectedSummary: {
     flexDirection: "row",
     alignItems: "center",
@@ -346,6 +714,8 @@ const calStyles = StyleSheet.create({
   },
 });
 
+// ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function AddEditOfferingScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
@@ -362,13 +732,28 @@ export default function AddEditOfferingScreen() {
   const [price, setPrice] = useState<number>(existingOffering?.price ?? 1000);
   const [notes, setNotes] = useState<string>(existingOffering?.notes ?? "");
   const [saved, setSaved] = useState(false);
+
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [alwaysAvailable, setAlwaysAvailable] = useState(true);
 
+  const [timingMode, setTimingMode] = useState<TimingMode>("same");
+  const [globalTiming, setGlobalTiming] = useState<TimeSlot>({ start: DEFAULT_START, end: DEFAULT_END });
+  const [dateTimings, setDateTimings] = useState<Record<string, TimeSlot>>({});
+
   const toggleDate = (key: string) => {
-    setSelectedDates((prev) =>
-      prev.includes(key) ? prev.filter((d) => d !== key) : [...prev, key]
-    );
+    setSelectedDates((prev) => {
+      if (prev.includes(key)) {
+        const next = prev.filter((d) => d !== key);
+        const { [key]: _, ...restTimings } = dateTimings;
+        setDateTimings(restTimings);
+        return next;
+      }
+      return [...prev, key];
+    });
+  };
+
+  const handleChangeDateTiming = (date: string, v: TimeSlot) => {
+    setDateTimings((prev) => ({ ...prev, [date]: v }));
   };
 
   const canSave = selectedType !== "" && selectedDuration !== null;
@@ -388,22 +773,15 @@ export default function AddEditOfferingScreen() {
       offeringsStore.addOffering(offering);
     }
     setSaved(true);
-    setTimeout(() => {
-      navigation.goBack();
-    }, 1200);
+    setTimeout(() => navigation.goBack(), 1200);
   };
 
-  const incrementPrice = () => {
-    setPrice((p) => Math.min(p + PRICE_STEP, MAX_PRICE));
-  };
-
-  const decrementPrice = () => {
-    setPrice((p) => Math.max(p - PRICE_STEP, MIN_PRICE));
-  };
+  const incrementPrice = () => setPrice((p) => Math.min(p + PRICE_STEP, MAX_PRICE));
+  const decrementPrice = () => setPrice((p) => Math.max(p - PRICE_STEP, MIN_PRICE));
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
+      <View style={[styles.headerRow, { paddingTop: insets.top + 4 }]}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={20} color={Colors.light.accent} />
         </Pressable>
@@ -429,19 +807,11 @@ export default function AddEditOfferingScreen() {
             {SESSION_TYPES.map((type) => (
               <Pressable
                 key={type}
-                style={[
-                  styles.chip,
-                  selectedType === type && styles.chipSelected,
-                ]}
+                style={[styles.chip, selectedType === type && styles.chipSelected]}
                 onPress={() => setSelectedType(type)}
                 testID={`chip-type-${type.replace(/\s+/g, "-").toLowerCase()}`}
               >
-                <ThemedText
-                  style={[
-                    styles.chipText,
-                    selectedType === type && styles.chipTextSelected,
-                  ]}
-                >
+                <ThemedText style={[styles.chipText, selectedType === type && styles.chipTextSelected]}>
                   {type}
                 </ThemedText>
               </Pressable>
@@ -461,19 +831,11 @@ export default function AddEditOfferingScreen() {
             {DURATION_OPTIONS.map((option) => (
               <Pressable
                 key={option.minutes}
-                style={[
-                  styles.durationOption,
-                  selectedDuration === option.minutes && styles.durationOptionSelected,
-                ]}
+                style={[styles.durationOption, selectedDuration === option.minutes && styles.durationOptionSelected]}
                 onPress={() => setSelectedDuration(option.minutes)}
                 testID={`duration-${option.minutes}`}
               >
-                <ThemedText
-                  style={[
-                    styles.durationText,
-                    selectedDuration === option.minutes && styles.durationTextSelected,
-                  ]}
-                >
+                <ThemedText style={[styles.durationText, selectedDuration === option.minutes && styles.durationTextSelected]}>
                   {option.label}
                 </ThemedText>
               </Pressable>
@@ -495,9 +857,23 @@ export default function AddEditOfferingScreen() {
             alwaysAvailable={alwaysAvailable}
             onToggleAlways={(val) => {
               setAlwaysAvailable(val);
-              if (val) setSelectedDates([]);
+              if (val) {
+                setSelectedDates([]);
+                setDateTimings({});
+              }
             }}
           />
+          {!alwaysAvailable ? (
+            <TimingSection
+              selectedDates={selectedDates}
+              timingMode={timingMode}
+              onChangeMode={setTimingMode}
+              globalTiming={globalTiming}
+              onChangeGlobalTiming={setGlobalTiming}
+              dateTimings={dateTimings}
+              onChangeDateTiming={handleChangeDateTiming}
+            />
+          ) : null}
         </View>
 
         <View style={styles.section}>
@@ -533,12 +909,7 @@ export default function AddEditOfferingScreen() {
           <View style={styles.priceRange}>
             <ThemedText style={styles.priceRangeText}>&#8377;500</ThemedText>
             <View style={styles.priceFill}>
-              <View
-                style={[
-                  styles.priceBar,
-                  { width: `${((price - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100}%` },
-                ]}
-              />
+              <View style={[styles.priceBar, { width: `${((price - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100}%` }]} />
             </View>
             <ThemedText style={styles.priceRangeText}>&#8377;2,500</ThemedText>
           </View>
@@ -569,12 +940,22 @@ export default function AddEditOfferingScreen() {
             <ThemedText style={styles.previewLabel}>Preview</ThemedText>
             <View style={styles.previewRow}>
               <ThemedText style={styles.previewType}>{selectedType}</ThemedText>
-              <ThemedText style={styles.previewDot}>-</ThemedText>
+              <ThemedText style={styles.previewDot}>·</ThemedText>
               <ThemedText style={styles.previewDuration}>
                 {selectedDuration === 60 ? "1 hour" : `${selectedDuration} min`}
               </ThemedText>
             </View>
             <ThemedText style={styles.previewPrice}>&#8377;{price.toLocaleString()}</ThemedText>
+            {!alwaysAvailable && selectedDates.length > 0 ? (
+              <ThemedText style={styles.previewDates}>
+                {selectedDates.length} date{selectedDates.length > 1 ? "s" : ""} ·{" "}
+                {timingMode === "same"
+                  ? `${globalTiming.start} – ${globalTiming.end}`
+                  : "Custom timings per date"}
+              </ThemedText>
+            ) : alwaysAvailable ? (
+              <ThemedText style={styles.previewDates}>Always available</ThemedText>
+            ) : null}
           </View>
         ) : null}
 
@@ -611,7 +992,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingBottom: Spacing.md,
     gap: Spacing.md,
   },
   backButton: {
@@ -628,15 +1009,9 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  section: {
-    marginBottom: Spacing.xl,
-  },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: Spacing.lg },
+  section: { marginBottom: Spacing.xl },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -677,19 +1052,19 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
   },
-  chipTextSelected: {
-    color: "#FFFFFF",
-  },
+  chipTextSelected: { color: "#FFFFFF" },
   durationGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 10,
   },
   durationOption: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.md,
+    flex: 1,
+    minWidth: 70,
+    alignItems: "center",
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
     borderWidth: 1.5,
     borderColor: "transparent",
   },
@@ -702,9 +1077,7 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
   },
-  durationTextSelected: {
-    color: "#FFFFFF",
-  },
+  durationTextSelected: { color: "#FFFFFF" },
   priceCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -714,11 +1087,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xl,
     paddingHorizontal: Spacing.lg,
     gap: Spacing.xl,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
   },
   stepperBtn: {
     width: 40,
@@ -728,9 +1096,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stepperBtnDisabled: {
-    opacity: 0.4,
-  },
+  stepperBtnDisabled: { opacity: 0.4 },
   priceDisplay: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -780,6 +1146,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.divider,
     minHeight: 80,
     textAlignVertical: "top",
+    marginTop: Spacing.sm,
   },
   previewCard: {
     backgroundColor: Colors.light.cardBackground,
@@ -790,6 +1157,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.divider,
     borderStyle: "dashed",
     alignItems: "center",
+    gap: 4,
   },
   previewLabel: {
     fontSize: 11,
@@ -797,13 +1165,11 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
-    marginBottom: Spacing.sm,
   },
   previewRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: 4,
+    gap: 6,
   },
   previewType: {
     fontSize: 16,
@@ -811,7 +1177,7 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
   },
   previewDot: {
-    fontSize: 14,
+    fontSize: 16,
     color: Colors.light.textMuted,
   },
   previewDuration: {
@@ -823,6 +1189,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
+  },
+  previewDates: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    marginTop: 2,
   },
   saveButton: {
     backgroundColor: Colors.light.button,
@@ -839,9 +1211,7 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: "#FFFFFF",
   },
-  saveButtonTextDisabled: {
-    color: "#FFFFFF",
-  },
+  saveButtonTextDisabled: { color: "#FFFFFF" },
   confirmationBanner: {
     flexDirection: "row",
     alignItems: "center",
