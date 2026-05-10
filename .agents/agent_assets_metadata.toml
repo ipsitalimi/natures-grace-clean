@@ -1,0 +1,56 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "082tfKr-R2qp19hXqNgJd"
+uri = "file://assets/images/icons/pract-schedule-icon.png"
+type = "image"
+title = "dark high contrast schedule calendar icon"
+
+[[generated]]
+id = "EKTHiAtp-PKnX5M9EEBkB"
+uri = "file://assets/images/icons/pract-profile-icon.png"
+type = "image"
+title = "dark high contrast practitioner profile icon with dark background"
+
+[[generated]]
+id = "0bJbgzNDW2H4oiwHvxxFz"
+uri = "file://assets/images/icons/pract-earnings-icon.png"
+type = "image"
+title = "dark high contrast gold coin lotus icon"
+
+[[generated]]
+id = "F0qsjZE5feuXRrj1R19JJ"
+uri = "file://assets/images/icons/pract-reviews-icon.png"
+type = "image"
+title = "dark high contrast gold star review icon"
+
+[[generated]]
+id = "m5_zM782axmD9KGPCoiuA"
+uri = "file://assets/images/icons/seller-products-icon.png"
+type = "image"
+title = "dark high contrast apothecary jars icon"
+
+[[generated]]
+id = "48cqc3yGJ32s6weoEA0rl"
+uri = "file://assets/images/icons/seller-inventory-icon.png"
+type = "image"
+title = "dark high contrast stacked boxes icon"
+
+[[generated]]
+id = "-p9nY0JO5Ldk8L5qSzpra"
+uri = "file://assets/images/icons/seller-store-icon.png"
+type = "image"
+title = "dark high contrast store shopfront icon"
+
+[[generated]]
+id = "X56a1zPgJgmP18WcQUdxS"
+uri = "file://assets/images/icons/seller-analytics-icon.png"
+type = "image"
+title = "dark high contrast growth analytics icon with dark background"
+
+[[generated]]
+id = "s7eqOl4IuQI6lRUtDekFA"
+uri = "file://assets/images/icons/animal-healing-icon.png"
+type = "image"
+title = "generated_image"

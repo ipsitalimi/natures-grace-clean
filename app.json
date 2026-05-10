@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Nature's Grace",
+    "slug": "natures-grace",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "natures-grace",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.naturesgrace.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F3F6F1",
+        "foregroundImage": "./assets/icon.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.naturesgrace.app"
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#F3F6F1"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "6eae29b2-7cbb-428f-88af-3fd9e41108c3"
+      }
+    }
+  }
+}
