@@ -6,15 +6,17 @@ import {
   Animated,
   Dimensions,
   Modal,
+  ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
-import Svg, { Path, Circle, Rect } from "react-native-svg";
+import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
+import { sellerStats } from "@/data/sellerMockData";
 
 type RootStackParamList = {
   SessionHistory: undefined;
@@ -22,6 +24,12 @@ type RootStackParamList = {
   Support: undefined;
   Login: undefined;
   ProductListings: undefined;
+  SellerOrders: undefined;
+  SellerAnalytics: undefined;
+  SellerWallet: undefined;
+  SellerPromotions: undefined;
+  SellerReviews: undefined;
+  SellerStoreCustomization: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -29,65 +37,32 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.8;
 
-function HistoryIcon({ size, color }: { size: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Rect x="3" y="4" width="18" height="16" rx="2" stroke={color} strokeWidth="1.5" />
-      <Path d="M8 2V6" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-      <Path d="M16 2V6" stroke={color} strokeWidth="1.5" strokeLinecap="round" />
-      <Circle cx="12" cy="13" r="3" stroke={color} strokeWidth="1.5" />
-    </Svg>
-  );
-}
-
-function ListingsIcon({ size, color }: { size: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path
-        d="M12 2L14.09 8.26L21 9.27L16 14.14L17.18 21.02L12 17.77L6.82 21.02L8 14.14L3 9.27L9.91 8.26L12 2Z"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-function HelpIcon({ size, color }: { size: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="1.5" />
-      <Path
-        d="M9.09 9C9.3251 8.33167 9.78915 7.76811 10.4 7.40913C11.0108 7.05016 11.7289 6.91894 12.4272 7.03871C13.1255 7.15849 13.7588 7.52152 14.2151 8.06353C14.6713 8.60553 14.9211 9.29152 14.92 10C14.92 12 11.92 13 11.92 13"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Circle cx="12" cy="17" r="1" fill={color} />
-    </Svg>
-  );
-}
-
 interface MenuItemProps {
-  icon: React.ReactNode;
+  icon: string;
   title: string;
+  badge?: string;
   isSignOut?: boolean;
   onPress?: () => void;
 }
 
-function MenuItem({ icon, title, isSignOut, onPress }: MenuItemProps) {
+function MenuItem({ icon, title, badge, isSignOut, onPress }: MenuItemProps) {
   return (
     <Pressable style={styles.menuItem} onPress={onPress}>
-      <View style={styles.menuIconContainer}>{icon}</View>
+      <View style={styles.menuIconContainer}>
+        <Feather name={icon as any} size={18} color={isSignOut ? "#D4534A" : Colors.light.accent} />
+      </View>
       <ThemedText style={[styles.menuTitle, isSignOut && styles.signOutText]}>
         {title}
       </ThemedText>
+      {badge ? (
+        <View style={styles.menuBadge}>
+          <ThemedText style={styles.menuBadgeText}>{badge}</ThemedText>
+        </View>
+      ) : null}
       <Feather
         name="chevron-right"
-        size={18}
-        color={isSignOut ? "#D4534A" : Colors.light.textSecondary}
+        size={16}
+        color={isSignOut ? "#D4534A" : Colors.light.textMuted}
       />
     </Pressable>
   );
@@ -107,34 +82,23 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
   useEffect(() => {
     if (visible) {
       Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
+        Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
       ]).start();
     } else {
       Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
+        Animated.timing(slideAnim, { toValue: -DRAWER_WIDTH, duration: 200, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }
   }, [visible, slideAnim, fadeAnim]);
 
   if (!visible) return null;
+
+  const go = (screen: keyof RootStackParamList) => {
+    onClose();
+    setTimeout(() => navigation.navigate(screen as never), 250);
+  };
 
   return (
     <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
@@ -148,94 +112,91 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
             styles.drawer,
             {
               transform: [{ translateX: slideAnim }],
-              paddingTop: 20,
+              paddingTop: insets.top + 12,
               paddingBottom: insets.bottom + 20,
             },
           ]}
         >
-          <View style={styles.header}>
+          <View style={styles.drawerHeader}>
             <Pressable style={styles.closeButton} onPress={onClose}>
-              <Feather name="x" size={24} color={Colors.light.text} />
+              <Feather name="x" size={22} color={Colors.light.text} />
             </Pressable>
           </View>
 
           <View style={styles.profileSection}>
-            <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
-                  <Circle cx="12" cy="8" r="4" fill={Colors.light.accent} opacity={0.8} />
-                  <Path
-                    d="M4 20C4 16 8 14 12 14C16 14 20 16 20 20"
-                    stroke={Colors.light.accent}
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                </Svg>
-              </View>
+            <View style={styles.avatar}>
+              <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
+                <Circle cx="12" cy="8" r="4" fill={Colors.light.accent} opacity={0.8} />
+                <Path
+                  d="M4 20C4 16 8 14 12 14C16 14 20 16 20 20"
+                  stroke={Colors.light.accent}
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              </Svg>
             </View>
             <ThemedText style={styles.userName}>Priya Sharma</ThemedText>
             <ThemedText style={styles.userEmail}>seller@naturesgrace.com</ThemedText>
-            <View style={styles.bioContainer}>
-              <ThemedText style={styles.userBio}>
-                Nature's Grace Store Partner
-              </ThemedText>
+            <View style={styles.storeRow}>
+              <Feather name="shopping-bag" size={12} color={Colors.light.accent} />
+              <ThemedText style={styles.storeName}>Priya's Wellness Store</ThemedText>
+            </View>
+            <View style={styles.miniStats}>
+              <View style={styles.miniStat}>
+                <ThemedText style={styles.miniStatValue}>{sellerStats.totalSales}</ThemedText>
+                <ThemedText style={styles.miniStatLabel}>Sales</ThemedText>
+              </View>
+              <View style={styles.miniStatDivider} />
+              <View style={styles.miniStat}>
+                <ThemedText style={styles.miniStatValue}>{sellerStats.storeRating}</ThemedText>
+                <ThemedText style={styles.miniStatLabel}>Rating</ThemedText>
+              </View>
+              <View style={styles.miniStatDivider} />
+              <View style={styles.miniStat}>
+                <ThemedText style={styles.miniStatValue}>{sellerStats.totalProducts}</ThemedText>
+                <ThemedText style={styles.miniStatLabel}>Products</ThemedText>
+              </View>
             </View>
           </View>
 
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Store History</ThemedText>
-            <MenuItem
-              icon={<HistoryIcon size={20} color={Colors.light.accent} />}
-              title="Store History"
-              onPress={() => {
-                onClose();
-                setTimeout(() => navigation.navigate("SessionHistory" as never), 250);
-              }}
-            />
-            <MenuItem
-              icon={<ListingsIcon size={20} color={Colors.light.accent} />}
-              title="My Listings"
-              onPress={() => {
-                onClose();
-                setTimeout(() => navigation.navigate("ProductListings" as never), 250);
-              }}
-            />
-          </View>
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.menuScroll}>
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionTitle}>Store</ThemedText>
+              <MenuItem icon="shopping-bag" title="Orders" badge={`${sellerStats.pendingOrders}`} onPress={() => go("SellerOrders")} />
+              <MenuItem icon="package" title="My Listings" onPress={() => go("ProductListings")} />
+              <MenuItem icon="bar-chart-2" title="Analytics" onPress={() => go("SellerAnalytics")} />
+              <MenuItem icon="credit-card" title="Wallet & Earnings" onPress={() => go("SellerWallet")} />
+            </View>
 
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Settings</ThemedText>
-            <MenuItem
-              icon={<Feather name="settings" size={20} color={Colors.light.accent} />}
-              title="Settings"
-              onPress={() => {
-                onClose();
-                setTimeout(() => navigation.navigate("Settings" as never), 250);
-              }}
-            />
-            <MenuItem
-              icon={<HelpIcon size={20} color={Colors.light.accent} />}
-              title="Support"
-              onPress={() => {
-                onClose();
-                setTimeout(() => navigation.navigate("Support" as never), 250);
-              }}
-            />
-          </View>
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionTitle}>Marketing</ThemedText>
+              <MenuItem icon="tag" title="Promotions & Offers" onPress={() => go("SellerPromotions")} />
+              <MenuItem icon="star" title="Reviews & Ratings" onPress={() => go("SellerReviews")} />
+              <MenuItem icon="edit" title="Store Customization" onPress={() => go("SellerStoreCustomization")} />
+            </View>
 
-          <View style={styles.signOutSection}>
-            <MenuItem
-              icon={<Feather name="log-out" size={20} color="#D4534A" />}
-              title="Sign Out"
-              isSignOut
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  (navigation as any).reset({ index: 0, routes: [{ name: "Login" }] });
-                }, 250);
-              }}
-            />
-          </View>
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionTitle}>Account</ThemedText>
+              <MenuItem icon="clock" title="Store History" onPress={() => go("SessionHistory")} />
+              <MenuItem icon="settings" title="Settings" onPress={() => go("Settings")} />
+              <MenuItem icon="help-circle" title="Support" onPress={() => go("Support")} />
+            </View>
+
+            <View style={styles.signOutSection}>
+              <MenuItem
+                icon="log-out"
+                title="Sign Out"
+                isSignOut
+                onPress={() => {
+                  onClose();
+                  setTimeout(() => {
+                    (navigation as any).reset({ index: 0, routes: [{ name: "Login" }] });
+                  }, 250);
+                }}
+              />
+            </View>
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
@@ -243,9 +204,7 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-  },
+  overlay: { flex: 1 },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.4)",
@@ -259,69 +218,101 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.backgroundRoot,
     paddingHorizontal: Spacing.lg,
   },
-  header: {
+  drawerHeader: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  closeButton: {
-    padding: 4,
-  },
+  closeButton: { padding: 4 },
   profileSection: {
     alignItems: "center",
-    paddingBottom: 20,
+    paddingBottom: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.light.brownLight,
-    marginBottom: 16,
-  },
-  avatarContainer: {
-    marginBottom: 12,
+    borderBottomColor: `${Colors.light.brownLight}60`,
+    marginBottom: Spacing.md,
+    gap: 4,
   },
   avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: `${Colors.light.accent}15`,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 6,
   },
   userName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     color: Colors.light.text,
-    marginBottom: 2,
   },
   userEmail: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.light.textMuted,
-    marginBottom: 10,
+    fontFamily: "Nunito_400Regular",
   },
-  bioContainer: {
-    backgroundColor: Colors.light.cardBackground,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  storeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: `${Colors.light.accent}10`,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: 10,
+    marginTop: 2,
   },
-  userBio: {
-    fontSize: 13,
+  storeName: {
+    fontSize: 12,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+  },
+  miniStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    gap: 12,
+  },
+  miniStat: {
+    alignItems: "center",
+  },
+  miniStatValue: {
+    fontSize: 16,
+    fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
-    fontStyle: "italic",
-    textAlign: "center",
+  },
+  miniStatLabel: {
+    fontSize: 10,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
+  miniStatDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: `${Colors.light.divider}40`,
+  },
+  menuScroll: {
+    flex: 1,
   },
   section: {
-    marginBottom: 16,
+    marginBottom: Spacing.md,
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: Colors.light.text,
-    marginBottom: 8,
+    fontSize: 11,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.textMuted,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 4,
     marginLeft: 4,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
+    paddingVertical: 11,
     paddingHorizontal: 4,
   },
   menuIconContainer: {
@@ -332,15 +323,26 @@ const styles = StyleSheet.create({
   menuTitle: {
     flex: 1,
     fontSize: 15,
+    fontFamily: "Nunito_400Regular",
     color: Colors.light.text,
   },
-  signOutText: {
-    color: "#D4534A",
+  menuBadge: {
+    backgroundColor: "#D4943A",
+    borderRadius: 10,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    marginRight: 6,
   },
+  menuBadgeText: {
+    fontSize: 11,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
+  },
+  signOutText: { color: "#D4534A" },
   signOutSection: {
-    marginTop: "auto",
+    marginTop: Spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: Colors.light.brownLight,
-    paddingTop: 12,
+    borderTopColor: `${Colors.light.brownLight}60`,
+    paddingTop: 8,
   },
 });

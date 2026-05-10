@@ -33,6 +33,12 @@ import SellerTabNavigator from "@/navigation/SellerTabNavigator";
 import SellerProductDetailScreen from "@/screens/seller/SellerProductDetailScreen";
 import ProductListingsScreen from "@/screens/seller/ProductListingsScreen";
 import AddEditProductListingScreen from "@/screens/seller/AddEditProductListingScreen";
+import SellerOrdersScreen from "@/screens/seller/SellerOrdersScreen";
+import SellerAnalyticsScreen from "@/screens/seller/SellerAnalyticsScreen";
+import SellerWalletScreen from "@/screens/seller/SellerWalletScreen";
+import SellerPromotionsScreen from "@/screens/seller/SellerPromotionsScreen";
+import SellerReviewsScreen from "@/screens/seller/SellerReviewsScreen";
+import SellerStoreCustomizationScreen from "@/screens/seller/SellerStoreCustomizationScreen";
 import KnowYourAdminScreen from "@/screens/KnowYourAdminScreen";
 import FirebaseDebugScreen from "@/screens/FirebaseDebugScreen";
 import NGBuddyScreen from "@/screens/NGBuddyScreen";
@@ -77,6 +83,12 @@ export type RootStackParamList = {
   SellerProductDetail: { productId: string };
   ProductListings: undefined;
   AddEditProductListing: { listingId?: string | null; prefill?: any };
+  SellerOrders: undefined;
+  SellerAnalytics: undefined;
+  SellerWallet: undefined;
+  SellerPromotions: undefined;
+  SellerReviews: undefined;
+  SellerStoreCustomization: undefined;
   KnowYourAdmin: undefined;
   FirebaseDebug: undefined;
   NGBuddy: undefined;
@@ -262,6 +274,36 @@ export default function RootStackNavigator() {
       <Stack.Screen
         name="AddEditProductListing"
         component={AddEditProductListingScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerOrders"
+        component={SellerOrdersScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerAnalytics"
+        component={SellerAnalyticsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerWallet"
+        component={SellerWalletScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerPromotions"
+        component={SellerPromotionsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerReviews"
+        component={SellerReviewsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerStoreCustomization"
+        component={SellerStoreCustomizationScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
