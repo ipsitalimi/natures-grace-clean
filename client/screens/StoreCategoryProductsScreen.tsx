@@ -7,8 +7,11 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { StoreProduct, productImages } from "@/data/storeProducts";
+import ProductImageView from "@/components/ProductImageView";
+import { StoreProduct } from "@/data/storeProducts";
 import { useDataContext } from "@/context/DataContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { formatInr } from "@/lib/formatCurrency";
 
 type ParamList = {
   StoreCategoryProducts: { categoryId: string };
@@ -26,11 +29,11 @@ function ProductCard({ product, onPress }: ProductCardProps) {
   return (
     <View style={styles.productCard} testID={`card-product-${product.id}`}>
       <View style={styles.productImagePlaceholder}>
-        {productImages[product.id] ? (
-          <Image source={productImages[product.id]} style={styles.productImage} resizeMode="cover" />
-        ) : (
-          <View style={styles.imageFallback} />
-        )}
+        <ProductImageView
+          product={product}
+          containerStyle={styles.productImage}
+          imageStyle={styles.productImage}
+        />
       </View>
 
       <View style={styles.productInfo}>
@@ -40,7 +43,7 @@ function ProductCard({ product, onPress }: ProductCardProps) {
         </ThemedText>
         <View style={styles.productFooter}>
           <ThemedText style={styles.productPrice}>
-            ${product.price.toFixed(2)}
+            {formatInr(product.price)}
           </ThemedText>
           <Pressable
             style={({ pressed }) => [
@@ -95,7 +98,7 @@ export default function StoreCategoryProductsScreen() {
   if (!category) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -118,7 +121,7 @@ export default function StoreCategoryProductsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -136,7 +139,7 @@ export default function StoreCategoryProductsScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: insets.bottom + Spacing.xl },
+          { paddingBottom: getScrollBottomPadding(insets.bottom) + Spacing.xl },
         ]}
         showsVerticalScrollIndicator={false}
       >

@@ -1,8 +1,8 @@
 import React from "react";
 import { View, StyleSheet, Pressable, Image } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -13,14 +13,16 @@ interface AppHeaderProps {
   title?: string;
   showBack?: boolean;
   onProfilePress?: () => void;
+  /** When false and no `title`, the center logo is hidden (balanced header). Default true. */
+  showLogo?: boolean;
 }
 
-export default function AppHeader({ title, showBack = false, onProfilePress }: AppHeaderProps) {
+export default function AppHeader({ title, showBack = false, onProfilePress, showLogo = true }: AppHeaderProps) {
   const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
+  const { headerPaddingTop } = useLayoutInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 8 }]}>
+    <View style={[styles.container, { paddingTop: headerPaddingTop }]}>
       <View style={styles.leftSection}>
         {showBack ? (
           <Pressable style={styles.iconButton} onPress={() => navigation.goBack()}>
@@ -44,12 +46,14 @@ export default function AppHeader({ title, showBack = false, onProfilePress }: A
 
       {title ? (
         <ThemedText style={styles.title}>{title}</ThemedText>
-      ) : (
+      ) : showLogo ? (
         <Image
           source={logoImage}
           style={styles.centerLogo}
           resizeMode="contain"
         />
+      ) : (
+        <View style={styles.centerSpacer} />
       )}
 
       <View style={styles.rightSection}>
@@ -78,6 +82,9 @@ const styles = StyleSheet.create({
   centerLogo: {
     width: 52,
     height: 52,
+  },
+  centerSpacer: {
+    flex: 1,
   },
   rightSection: {
     width: 80,

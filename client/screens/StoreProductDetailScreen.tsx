@@ -1,5 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, Animated } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Image,
+  Animated,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,9 +17,16 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { productImages } from "@/data/storeProducts";
+import ProductImageView from "@/components/ProductImageView";
 import { useDataContext } from "@/context/DataContext";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
+import { useReviews } from "@/context/ReviewsContext";
+import { useFavorites } from "@/context/FavoritesContext";
+import type { Review } from "@/data/reviews";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { formatInr } from "@/lib/formatCurrency";
 
 type StoreParamList = {
   StoreProductDetail: { productId: string };
@@ -23,14 +40,154 @@ export default function StoreProductDetailScreen() {
   const { productId } = route.params;
   const { storeCategories } = useDataContext();
   const { addItem, getItemCount } = useCart();
+  const { session } = useAuth();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const {
+    submitReview,
+    refreshMyReviews,
+    getProductReviewStats,
+    getApprovedProductReviews,
+    getMyReviewForProduct,
+  } = useReviews();
   const product = storeCategories.flatMap((c) => c.products).find((p) => p.id === productId);
   const cartCount = getItemCount();
 
   const [showToast, setShowToast] = useState(false);
   const [toastOpacity] = useState(new Animated.Value(0));
+  const [productStats, setProductStats] = useState<{ avgRating: number; reviewCount: number } | null>(
+    null
+  );
+  const [approvedReviews, setApprovedReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(isSupabaseConfigured());
+  const [existingReview, setExistingReview] = useState<Review | null>(null);
+  const [myReviewLoading, setMyReviewLoading] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
 
-  const handleAddToCart = () => {
-    addItem(productId);
+  const favorited = product ? isFavorite("product", productId) : false;
+
+  const handleToggleFavorite = async () => {
+    if (!product || !isSupabaseConfigured() || !session?.user) return;
+    setFavoriteBusy(true);
+    await toggleFavorite({
+      itemType: "product",
+      itemId: productId,
+      itemDbId: product.id,
+      displayName: product.name,
+      displaySubtitle: product.category,
+    });
+    setFavoriteBusy(false);
+  };
+
+  useEffect(() => {
+    if (!product || !isSupabaseConfigured()) {
+      setReviewsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setReviewsLoading(true);
+    Promise.all([
+      getProductReviewStats(productId),
+      getApprovedProductReviews(productId),
+    ])
+      .then(([stats, reviews]) => {
+        if (!cancelled) {
+          setProductStats(stats);
+          setApprovedReviews(reviews);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [productId, product, getProductReviewStats, getApprovedProductReviews]);
+
+  useEffect(() => {
+    if (!product || !isSupabaseConfigured() || !session?.user) {
+      setExistingReview(null);
+      return;
+    }
+    let cancelled = false;
+    setMyReviewLoading(true);
+    getMyReviewForProduct(productId)
+      .then((row) => {
+        if (!cancelled) {
+          setExistingReview(row);
+          if (row) {
+            setRating(row.rating);
+            setReviewText(row.body);
+          }
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setMyReviewLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [productId, product, session?.user?.id, getMyReviewForProduct]);
+
+  const handleSubmitProductReview = async () => {
+    if (!product) return;
+    if (!reviewText.trim()) {
+      setReviewError("Please write a short review.");
+      return;
+    }
+    if (!session?.user) {
+      setReviewError("Sign in to submit a review.");
+      return;
+    }
+    setSubmittingReview(true);
+    setReviewError(null);
+    try {
+      const created = await submitReview({
+        targetType: "product",
+        productId: product.id,
+        practitionerName: product.name,
+        serviceLabel: product.category,
+        rating,
+        body: reviewText,
+      });
+      if (!created) {
+        setReviewError("Could not submit review.");
+      } else {
+        setExistingReview(created);
+        setReviewSubmitted(true);
+        await refreshMyReviews();
+        const [stats, reviews] = await Promise.all([
+          getProductReviewStats(productId),
+          getApprovedProductReviews(productId),
+        ]);
+        setProductStats(stats);
+        setApprovedReviews(reviews);
+      }
+    } catch (err) {
+      setReviewError(err instanceof Error ? err.message : "Could not submit review.");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const handleAddToCart = async () => {
+    if (!product) return;
+    if (!session?.user) {
+      Alert.alert("Sign in required", "Please sign in to add items to your cart.");
+      return;
+    }
+    const added = await addItem(productId, {
+      name: product.name,
+      category: product.category,
+      price: product.price,
+    });
+    if (!added) {
+      return;
+    }
     setShowToast(true);
     Animated.sequence([
       Animated.timing(toastOpacity, { toValue: 1, duration: 200, useNativeDriver: true }),
@@ -42,7 +199,7 @@ export default function StoreProductDetailScreen() {
   if (!product) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -58,11 +215,27 @@ export default function StoreProductDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
         <View style={styles.headerCenter} />
+        <Pressable
+          style={styles.headerIconButton}
+          onPress={() => void handleToggleFavorite()}
+          disabled={favoriteBusy}
+          testID="button-toggle-favorite"
+        >
+          {favoriteBusy ? (
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+          ) : (
+            <Feather
+              name="heart"
+              size={22}
+              color={favorited ? "#D4534A" : Colors.light.accent}
+            />
+          )}
+        </Pressable>
         <Pressable
           style={styles.headerIconButton}
           onPress={() => navigation.navigate("Cart")}
@@ -86,18 +259,19 @@ export default function StoreProductDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.imagePlaceholder}>
-          {productImages[product.id] ? (
-            <Image source={productImages[product.id]} style={styles.productImage} resizeMode="cover" />
-          ) : (
-            <View style={styles.imageInnerCircle} />
-          )}
+          <ProductImageView
+            product={product}
+            containerStyle={styles.productImage}
+            imageStyle={styles.productImage}
+            iconSize={40}
+          />
         </View>
 
         <View style={styles.detailSection}>
           <ThemedText style={styles.categoryLabel}>{product.category}</ThemedText>
           <ThemedText style={styles.productName}>{product.name}</ThemedText>
           <ThemedText style={styles.productPrice}>
-            ${product.price.toFixed(2)}
+            {formatInr(product.price)}
           </ThemedText>
 
           <View style={styles.divider} />
@@ -106,10 +280,97 @@ export default function StoreProductDetailScreen() {
           <ThemedText style={styles.productDescription}>
             {product.description}
           </ThemedText>
+
+          <View style={styles.divider} />
+
+          <ThemedText style={styles.sectionTitle}>Reviews</ThemedText>
+          {reviewsLoading ? (
+            <ActivityIndicator color={Colors.light.accent} style={styles.reviewSpinner} />
+          ) : productStats && productStats.reviewCount > 0 ? (
+            <ThemedText style={styles.reviewSummary}>
+              {productStats.avgRating.toFixed(1)} ★ · {productStats.reviewCount} review
+              {productStats.reviewCount === 1 ? "" : "s"}
+            </ThemedText>
+          ) : (
+            <ThemedText style={styles.reviewEmpty}>No reviews yet.</ThemedText>
+          )}
+
+          {approvedReviews.map((r) => (
+            <View key={r.id} style={styles.reviewItem}>
+              <View style={styles.reviewItemHeader}>
+                <ThemedText style={styles.reviewAuthor}>{r.userName}</ThemedText>
+                <ThemedText style={styles.reviewStars}>
+                  {"★".repeat(r.rating)}
+                  {"☆".repeat(5 - r.rating)}
+                </ThemedText>
+              </View>
+              <ThemedText style={styles.reviewBody}>{r.body}</ThemedText>
+            </View>
+          ))}
+
+          {isSupabaseConfigured() && session?.user ? (
+            <View style={styles.reviewForm}>
+              <ThemedText style={styles.reviewFormTitle}>Your review</ThemedText>
+              {myReviewLoading ? (
+                <ActivityIndicator color={Colors.light.accent} />
+              ) : existingReview || reviewSubmitted ? (
+                <>
+                  <ThemedText style={styles.reviewStatus}>
+                    {existingReview?.status === "Approved"
+                      ? "Published"
+                      : `Submitted — ${existingReview?.status ?? "Pending"} moderation`}
+                  </ThemedText>
+                  <ThemedText style={styles.reviewBodyDisplay}>{reviewText}</ThemedText>
+                </>
+              ) : (
+                <>
+                  <View style={styles.starPicker}>
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Pressable key={n} onPress={() => setRating(n)} testID={`button-product-star-${n}`}>
+                        <Feather
+                          name="star"
+                          size={22}
+                          color={n <= rating ? "#E5A93B" : Colors.light.backgroundTertiary}
+                        />
+                      </Pressable>
+                    ))}
+                  </View>
+                  <TextInput
+                    style={styles.reviewInput}
+                    value={reviewText}
+                    onChangeText={setReviewText}
+                    placeholder="Share your experience with this product..."
+                    placeholderTextColor={Colors.light.textSecondary}
+                    multiline
+                    numberOfLines={4}
+                    textAlignVertical="top"
+                    testID="input-product-review"
+                  />
+                  {reviewError ? (
+                    <ThemedText style={styles.reviewError}>{reviewError}</ThemedText>
+                  ) : null}
+                  <Pressable
+                    style={[styles.submitReviewBtn, submittingReview && styles.submitReviewDisabled]}
+                    onPress={handleSubmitProductReview}
+                    disabled={submittingReview}
+                    testID="button-submit-product-review"
+                  >
+                    {submittingReview ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <ThemedText style={styles.submitReviewText}>Submit Review</ThemedText>
+                    )}
+                  </Pressable>
+                </>
+              )}
+            </View>
+          ) : isSupabaseConfigured() ? (
+            <ThemedText style={styles.reviewSignIn}>Sign in to leave a review.</ThemedText>
+          ) : null}
         </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
+      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom) + Spacing.md }]}>
         <Pressable
           style={({ pressed }) => [
             styles.addToCartButton,
@@ -238,6 +499,102 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 24,
     color: Colors.light.textSecondary,
+  },
+  reviewSpinner: {
+    marginVertical: Spacing.md,
+  },
+  reviewSummary: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.light.accent,
+    marginBottom: Spacing.md,
+  },
+  reviewEmpty: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  reviewItem: {
+    marginBottom: Spacing.md,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.divider,
+  },
+  reviewItemHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  reviewAuthor: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.light.text,
+  },
+  reviewStars: {
+    fontSize: 12,
+    color: "#E5A93B",
+  },
+  reviewBody: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.light.textSecondary,
+  },
+  reviewForm: {
+    marginTop: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  reviewFormTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: Colors.light.text,
+  },
+  reviewStatus: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+  },
+  reviewBodyDisplay: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.light.text,
+  },
+  starPicker: {
+    flexDirection: "row",
+    gap: 8,
+    marginVertical: Spacing.sm,
+  },
+  reviewInput: {
+    borderWidth: 1,
+    borderColor: Colors.light.divider,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    fontSize: 15,
+    color: Colors.light.text,
+    minHeight: 100,
+  },
+  reviewError: {
+    fontSize: 13,
+    color: "#D94F4F",
+  },
+  reviewSignIn: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    marginTop: Spacing.md,
+  },
+  submitReviewBtn: {
+    backgroundColor: Colors.light.button,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: Spacing.sm,
+  },
+  submitReviewDisabled: {
+    opacity: 0.7,
+  },
+  submitReviewText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   bottomBar: {
     paddingHorizontal: Spacing.xl,

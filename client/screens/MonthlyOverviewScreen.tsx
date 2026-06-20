@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import React, { useMemo, useState } from "react";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -9,6 +9,9 @@ import Svg, { Path, Rect, Circle } from "react-native-svg";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import { useJournal } from "@/context/JournalContext";
+import { useGratitude } from "@/context/GratitudeContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 function CalendarIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -77,18 +80,43 @@ function StatBlock({ icon, value, label, color = Colors.light.accent }: StatBloc
   );
 }
 
+function isInCurrentMonth(dateISO: string): boolean {
+  const d = new Date(dateISO + "T12:00:00");
+  const now = new Date();
+  return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+}
+
 export default function MonthlyOverviewScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const { entries, getStreak, journalLoading, journalError } = useJournal();
+  const { myGratitudes, gratitudeLoading, gratitudeError } = useGratitude();
 
   const currentMonth = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  const monthStats = useMemo(() => {
+    const monthEntries = entries.filter((e) => isInCurrentMonth(e.dateISO));
+    const monthGratitudes = myGratitudes.filter((g) => isInCurrentMonth(g.dateISO));
+    const peacefulDays = new Set(
+      monthEntries.filter((e) => e.mood === "Peaceful").map((e) => e.dateISO)
+    ).size;
+    return {
+      entries: monthEntries.length,
+      gratitudes: monthGratitudes.length,
+      peacefulDays,
+      streak: getStreak(),
+    };
+  }, [entries, myGratitudes, getStreak]);
+
+  const loading = journalLoading || gratitudeLoading;
+  const loadError = journalError || gratitudeError;
 
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -112,51 +140,70 @@ export default function MonthlyOverviewScreen() {
           <ThemedText style={styles.monthText}>{currentMonth}</ThemedText>
         </View>
 
-        <View style={styles.summaryCard}>
-          <ThemedText style={styles.summaryTitle}>Your Reflection Journey</ThemedText>
-          <ThemedText style={styles.summaryText}>
-            This month has been a time of quiet growth. You've taken meaningful moments to pause, reflect, and appreciate the simple joys in life.
-          </ThemedText>
-        </View>
+        {loading ? (
+          <View style={styles.loadingBlock}>
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+            <ThemedText style={styles.loadingText}>Loading your overview…</ThemedText>
+          </View>
+        ) : loadError ? (
+          <View style={styles.loadingBlock}>
+            <ThemedText style={styles.loadingText}>{loadError}</ThemedText>
+          </View>
+        ) : (
+          <>
+            <View style={styles.summaryCard}>
+              <ThemedText style={styles.summaryTitle}>Your Reflection Journey</ThemedText>
+              <ThemedText style={styles.summaryText}>
+                {monthStats.entries > 0 || monthStats.gratitudes > 0
+                  ? `You've written ${monthStats.entries} journal ${monthStats.entries === 1 ? "entry" : "entries"} and logged ${monthStats.gratitudes} ${monthStats.gratitudes === 1 ? "gratitude" : "gratitudes"} this month.`
+                  : "Start journaling or logging gratitude to see your monthly journey here."}
+              </ThemedText>
+            </View>
 
-        <View style={styles.statsGrid}>
-          <StatBlock
-            icon={<PenIcon size={20} color={Colors.light.accent} />}
-            value="8"
-            label="Entries Written"
-          />
-          <StatBlock
-            icon={<HeartIcon size={20} color="#E8A87C" />}
-            value="12"
-            label="Gratitudes"
-            color="#E8A87C"
-          />
-          <StatBlock
-            icon={<SmileIcon size={20} color="#85B7A0" />}
-            value="5"
-            label="Peaceful Days"
-            color="#85B7A0"
-          />
-          <StatBlock
-            icon={<CalendarIcon size={20} color="#9A8BC4" />}
-            value="3"
-            label="Week Streak"
-            color="#9A8BC4"
-          />
-        </View>
+            <View style={styles.statsGrid}>
+              <StatBlock
+                icon={<PenIcon size={20} color={Colors.light.accent} />}
+                value={String(monthStats.entries)}
+                label="Entries Written"
+              />
+              <StatBlock
+                icon={<HeartIcon size={20} color="#E8A87C" />}
+                value={String(monthStats.gratitudes)}
+                label="Gratitudes"
+                color="#E8A87C"
+              />
+              <StatBlock
+                icon={<SmileIcon size={20} color="#85B7A0" />}
+                value={String(monthStats.peacefulDays)}
+                label="Peaceful Days"
+                color="#85B7A0"
+              />
+              <StatBlock
+                icon={<CalendarIcon size={20} color="#9A8BC4" />}
+                value={String(monthStats.streak)}
+                label="Day Streak"
+                color="#9A8BC4"
+              />
+            </View>
 
-        <View style={styles.insightCard}>
-          <ThemedText style={styles.insightTitle}>This Month's Insight</ThemedText>
-          <ThemedText style={styles.insightText}>
-            "Your entries show a growing appreciation for nature and quiet moments. You've mentioned the outdoors in 5 of your entries this month."
-          </ThemedText>
-        </View>
+            {monthStats.entries > 0 ? (
+              <View style={styles.insightCard}>
+                <ThemedText style={styles.insightTitle}>This Month's Insight</ThemedText>
+                <ThemedText style={styles.insightText}>
+                  {monthStats.peacefulDays > 0
+                    ? `You marked ${monthStats.peacefulDays} peaceful ${monthStats.peacefulDays === 1 ? "day" : "days"} in your journal this month.`
+                    : "Your mood tags will appear here as you add entries with how you're feeling."}
+                </ThemedText>
+              </View>
+            ) : null}
 
-        <View style={styles.encouragementCard}>
-          <ThemedText style={styles.encouragementText}>
-            Keep nurturing this practice. Each moment of reflection adds to your inner peace.
-          </ThemedText>
-        </View>
+            <View style={styles.encouragementCard}>
+              <ThemedText style={styles.encouragementText}>
+                Keep nurturing this practice. Each moment of reflection adds to your inner peace.
+              </ThemedText>
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -209,6 +256,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: Colors.light.accent,
+  },
+  loadingBlock: {
+    alignItems: "center",
+    paddingVertical: Spacing.xl,
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
   },
   summaryCard: {
     backgroundColor: Colors.light.accent,

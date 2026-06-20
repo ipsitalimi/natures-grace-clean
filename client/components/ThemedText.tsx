@@ -4,27 +4,21 @@ import { useTheme } from "@/hooks/useTheme";
 import { Typography } from "@/constants/theme";
 
 export type ThemedTextProps = TextProps & {
-  lightColor?: string;
-  darkColor?: string;
+  color?: string;
   type?: "h1" | "h2" | "h3" | "h4" | "body" | "small" | "link";
 };
 
 export function ThemedText({
   style,
-  lightColor,
-  darkColor,
+  color,
   type = "body",
   ...rest
 }: ThemedTextProps) {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
 
   const getColor = () => {
-    if (isDark && darkColor) {
-      return darkColor;
-    }
-
-    if (!isDark && lightColor) {
-      return lightColor;
+    if (color) {
+      return color;
     }
 
     if (type === "link") {

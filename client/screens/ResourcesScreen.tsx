@@ -7,9 +7,16 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import AppHeader from "@/components/AppHeader";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import SellerDrawer from "@/components/SellerDrawer";
+import PractitionerDrawer from "@/components/PractitionerDrawer";
+import { useIsSellerTabContext } from "@/hooks/useIsSellerTabContext";
+import { useIsPractitionerTabContext } from "@/hooks/useIsPractitionerTabContext";
 import { ResourceItem } from "@/data/mockResources";
 import { useDataContext } from "@/context/DataContext";
+import { useResourceEnrollments } from "@/context/ResourceEnrollmentsContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   ResourceDetail: { resourceId: string };
@@ -19,7 +26,15 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 const YOUTUBE_CHANNEL = "https://youtube.com/@drneelamparwani?si=27GqPeIr6pvvMEoc";
 
-function CourseCard({ resource, onPress }: { resource: ResourceItem; onPress: () => void }) {
+function CourseCard({
+  resource,
+  isEnrolled,
+  onPress,
+}: {
+  resource: ResourceItem;
+  isEnrolled: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable style={styles.courseCard} onPress={onPress} testID={`resource-card-${resource.id}`}>
       <View style={styles.courseTop}>
@@ -38,8 +53,13 @@ function CourseCard({ resource, onPress }: { resource: ResourceItem; onPress: ()
         </View>
       </View>
       <ThemedText style={styles.courseDesc} numberOfLines={2}>{resource.description}</ThemedText>
-      <Pressable style={styles.enrollButton} onPress={onPress}>
-        <ThemedText style={styles.enrollText}>{resource.actionLabel}</ThemedText>
+      <Pressable
+        style={[styles.enrollButton, isEnrolled ? styles.enrolledButton : null]}
+        onPress={onPress}
+      >
+        <ThemedText style={styles.enrollText}>
+          {isEnrolled ? "Interest recorded" : resource.actionLabel || "Express interest"}
+        </ThemedText>
         <Feather name="chevron-right" size={14} color="#FFFFFF" />
       </Pressable>
     </Pressable>
@@ -96,16 +116,21 @@ export default function ResourcesScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const isSellerTab = useIsSellerTabContext();
+  const isPractitionerTab = useIsPractitionerTabContext();
+  const isRoleTab = isSellerTab || isPractitionerTab;
   const [loading, setLoading] = useState(true);
   const { resources } = useDataContext();
+  const { isEnrolledForResource, enrollmentsLoading, enrollmentsError } = useResourceEnrollments();
+  const publishedResources = resources.filter((r) => r.published !== false);
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 400);
     return () => clearTimeout(timer);
   }, []);
 
-  const courses = resources.filter((r) => r.section === "Courses");
-  const videos = resources.filter((r) => r.section === "Video Resources");
+  const courses = publishedResources.filter((r) => r.section === "Courses");
+  const videos = publishedResources.filter((r) => r.section === "Video Resources");
 
   const openResource = (resourceId: string) => {
     navigation.navigate("ResourceDetail", { resourceId });
@@ -117,16 +142,26 @@ export default function ResourcesScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      {isSellerTab ? (
+        <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      ) : isPractitionerTab ? (
+        <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      ) : (
+        <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      )}
+      {isRoleTab ? (
+        <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
+      ) : (
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+          <View style={styles.headerCenter} />
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+            <Feather name="bell" size={22} color={Colors.light.accent} />
+          </Pressable>
+        </View>
+      )}
 
       <View style={styles.titleSection}>
         <ThemedText style={styles.pageTitle}>Courses & Resources</ThemedText>
@@ -141,7 +176,7 @@ export default function ResourcesScreen() {
       ) : (
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.section}>
@@ -150,15 +185,24 @@ export default function ResourcesScreen() {
               <ThemedText style={styles.sectionTitle}>Courses</ThemedText>
             </View>
             <ThemedText style={styles.sectionSubtitle}>
-              Learn from Dr. Neelam Parwani with over 11 years of expertise
+              Guided wellness courses — express interest to learn more
             </ThemedText>
+            {enrollmentsError ? (
+              <ThemedText style={styles.enrollmentsErrorText} testID="text-enrollments-error">
+                Could not load your course enrollments. Open a course to try again.
+              </ThemedText>
+            ) : null}
             {courses.map((resource) => (
               <CourseCard
                 key={resource.id}
                 resource={resource}
+                isEnrolled={isEnrolledForResource(resource.id)}
                 onPress={() => openResource(resource.id)}
               />
             ))}
+            {enrollmentsLoading && courses.length > 0 ? (
+              <ThemedText style={styles.enrollmentsLoadingText}>Checking enrollments…</ThemedText>
+            ) : null}
           </View>
 
           <View style={styles.dividerRow}>
@@ -186,8 +230,8 @@ export default function ResourcesScreen() {
                 <Feather name="youtube" size={22} color="#FFFFFF" />
               </View>
               <View>
-                <ThemedText style={styles.channelTitle}>Dr. Neelam Parwani</ThemedText>
-                <ThemedText style={styles.channelSubtitle}>Visit our YouTube Channel</ThemedText>
+                <ThemedText style={styles.channelTitle}>Nature&apos;s Grace</ThemedText>
+                <ThemedText style={styles.channelSubtitle}>Visit our YouTube channel</ThemedText>
               </View>
             </View>
             <Feather name="external-link" size={18} color="#FFFFFF" />
@@ -313,6 +357,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Nunito_700Bold",
     color: "#FFFFFF",
+  },
+  enrolledButton: {
+    backgroundColor: Colors.light.accent,
+  },
+  enrollmentsLoadingText: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    marginTop: 4,
+  },
+  enrollmentsErrorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#B33A3A",
+    marginBottom: Spacing.sm,
   },
   dividerRow: {
     flexDirection: "row",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, Pressable, Animated, Easing } from "react-native";
+import { View, StyleSheet, Pressable, Animated, Easing, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -10,32 +10,40 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useJournal } from "@/context/JournalContext";
 import { useGratitude } from "@/context/GratitudeContext";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type MoodStackParamList = {
   JournalEditor: { prompt?: string };
   GuidedReflection: undefined;
 };
 
-const fallbackPrompts = [
-  "What moment today made you pause and feel something?",
-  "If your body could speak right now, what would it say?",
-  "What's one thing you'd like to gently release today?",
-];
 
 export default function GuidedReflectionScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<MoodStackParamList>>();
   const { selectedMood } = useJournal();
-  const { getActivePrompts } = useGratitude();
+  const { getActivePrompts, promptsLoading } = useGratitude();
+  const { session } = useAuth();
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    if (session?.user) return;
+    Alert.alert("Sign in required", "Please sign in to use guided reflection.", [
+      { text: "OK", onPress: () => navigation.goBack() },
+    ]);
+  }, [session?.user, navigation]);
 
   const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null);
 
   const activePrompts = getActivePrompts();
-  const promptTexts = activePrompts.length >= 3
-    ? activePrompts.slice(0, 3).map((p) => p.text)
-    : fallbackPrompts;
-  const prompts = promptTexts;
+  const prompts =
+    activePrompts.length >= 3
+      ? activePrompts.slice(0, 3).map((p) => p.text)
+      : activePrompts.map((p) => p.text);
+  const hasEnoughPrompts = prompts.length >= 3;
 
   const breatheAnim = useRef(new Animated.Value(0.85)).current;
 
@@ -68,7 +76,7 @@ export default function GuidedReflectionScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -95,37 +103,48 @@ export default function GuidedReflectionScreen() {
           </View>
         ) : null}
 
-        <View style={styles.promptsContainer}>
-          {prompts.map((prompt, index) => (
-            <Pressable
-              key={index}
-              style={[
-                styles.promptCard,
-                selectedPrompt === prompt && styles.promptCardSelected,
-              ]}
-              onPress={() => setSelectedPrompt(selectedPrompt === prompt ? null : prompt)}
-              testID={`prompt-card-${index}`}
-            >
-              <View style={styles.promptNumber}>
+        {promptsLoading ? (
+          <ThemedText style={styles.subtitle}>Loading prompts…</ThemedText>
+        ) : !hasEnoughPrompts ? (
+          <View style={styles.emptyPrompts}>
+            <ThemedText style={styles.subtitle}>
+              Reflection prompts are not available yet. You can still write freely, or check back once
+              prompts are published.
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={styles.promptsContainer}>
+            {prompts.map((prompt, index) => (
+              <Pressable
+                key={index}
+                style={[
+                  styles.promptCard,
+                  selectedPrompt === prompt && styles.promptCardSelected,
+                ]}
+                onPress={() => setSelectedPrompt(selectedPrompt === prompt ? null : prompt)}
+                testID={`prompt-card-${index}`}
+              >
+                <View style={styles.promptNumber}>
+                  <ThemedText style={[
+                    styles.promptNumberText,
+                    selectedPrompt === prompt && styles.promptNumberTextSelected,
+                  ]}>
+                    {index + 1}
+                  </ThemedText>
+                </View>
                 <ThemedText style={[
-                  styles.promptNumberText,
-                  selectedPrompt === prompt && styles.promptNumberTextSelected,
+                  styles.promptText,
+                  selectedPrompt === prompt && styles.promptTextSelected,
                 ]}>
-                  {index + 1}
+                  {prompt}
                 </ThemedText>
-              </View>
-              <ThemedText style={[
-                styles.promptText,
-                selectedPrompt === prompt && styles.promptTextSelected,
-              ]}>
-                {prompt}
-              </ThemedText>
-              {selectedPrompt === prompt ? (
-                <Feather name="check-circle" size={18} color={Colors.light.accent} />
-              ) : null}
-            </Pressable>
-          ))}
-        </View>
+                {selectedPrompt === prompt ? (
+                  <Feather name="check-circle" size={18} color={Colors.light.accent} />
+                ) : null}
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         <Pressable
           style={[styles.startButton, !selectedPrompt && styles.startButtonMuted]}
@@ -233,6 +252,11 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 12,
     marginBottom: Spacing["2xl"],
+  },
+  emptyPrompts: {
+    width: "100%",
+    marginBottom: Spacing["2xl"],
+    paddingHorizontal: Spacing.sm,
   },
   promptCard: {
     flexDirection: "row",

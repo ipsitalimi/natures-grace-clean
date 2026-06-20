@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -10,12 +10,21 @@ import Svg, { Path } from "react-native-svg";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
-import { useBooking } from "@/context/BookingContext";
+import { useAuth } from "@/context/AuthContext";
+import { usePractitionerContext } from "@/context/PractitionerContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { runBookingCheckoutPayment } from "@/services/storeCheckoutService";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useCancellationPolicy } from "@/lib/cancellationPolicy";
 
 type RootStackParamList = {
   SessionSummary: {
     practitionerId: string;
+    offeringId?: string;
+    serviceName?: string;
+    sessionPrice: number;
+    sessionDateIso: string;
     selectedDate: { dayName: string; dayNum: number; monthName: string };
     selectedTime: string;
     duration: number;
@@ -66,9 +75,13 @@ export default function SessionSummaryScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<SessionSummaryRouteProp>();
-  const { practitionerId, selectedDate, selectedTime, duration } = route.params;
-  const { setUpcomingBooking } = useBooking();
+  const { practitionerId, selectedDate, selectedTime, duration, offeringId, serviceName, sessionPrice, sessionDateIso } =
+    route.params;
+  const { profile, session } = useAuth();
+  const { refresh: refreshPractitionerData } = usePractitionerContext();
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const { freeHours } = useCancellationPolicy();
 
   const { practitionerCategories } = useDataContext();
   const practitioner = practitionerCategories.flatMap((c) => c.practitioners).find((p) => p.id === practitionerId);
@@ -76,7 +89,7 @@ export default function SessionSummaryScreen() {
   if (!practitioner) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -90,25 +103,62 @@ export default function SessionSummaryScreen() {
     );
   }
 
-  const sessionPrice = calculatePrice(practitioner.pricePerSession, duration);
+  const displayDateLabel = `${selectedDate.dayName}, ${selectedDate.dayNum} ${selectedDate.monthName}`;
 
-  const handleConfirmBooking = () => {
-    setUpcomingBooking({
-      practitionerId,
-      practitionerName: practitioner.name,
-      practitionerPhoto: practitioner.photo,
-      category: getCategoryLabel(practitioner.category),
-      date: selectedDate,
-      time: selectedTime,
-      duration,
-    });
-    navigation.navigate("Placeholder", { title: "Booking Confirmed" });
+  const handleConfirmBooking = async () => {
+    if (confirming) return;
+    setConfirming(true);
+    const sessionDateLabel = displayDateLabel;
+
+    try {
+      if (!isSupabaseConfigured()) {
+        Alert.alert("Booking unavailable", "Connect Supabase to book sessions.");
+        return;
+      }
+      if (!session?.access_token) {
+        Alert.alert("Payment", "Please sign in to book a session.");
+        return;
+      }
+
+      const checkout = await runBookingCheckoutPayment({
+        amountInr: sessionPrice,
+        durationMinutes: duration,
+        practitionerId,
+        accessToken: session.access_token,
+        customerName: profile?.full_name ?? undefined,
+        customerEmail: profile?.email ?? session?.user?.email ?? undefined,
+        booking: {
+          practitionerId,
+          offeringId,
+          clientName: profile?.full_name ?? "Guest",
+          clientEmail: profile?.email ?? session?.user?.email ?? undefined,
+          serviceName: serviceName ?? getCategoryLabel(practitioner.category),
+          sessionDate: sessionDateIso,
+          sessionTime: selectedTime,
+          durationMinutes: duration,
+          amountInr: sessionPrice,
+        },
+      });
+      if (checkout.error) {
+        Alert.alert("Payment", checkout.error);
+        return;
+      }
+
+      await refreshPractitionerData();
+      if (checkout.bookingId) {
+        (navigation as any).navigate("SessionDetail", { sessionId: checkout.bookingId });
+      } else {
+        navigation.navigate("SessionHistory" as never);
+      }
+    } finally {
+      setConfirming(false);
+    }
   };
 
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -177,18 +227,22 @@ export default function SessionSummaryScreen() {
         <View style={styles.noteCard}>
           <Feather name="info" size={16} color={Colors.light.accent} />
           <ThemedText style={styles.noteText}>
-            You can cancel or reschedule up to 24 hours before the session at no charge.
+            You can cancel at least {freeHours} hours before your session per our cancellation policy. To
+            change the time, cancel (if eligible) and book again — in-app rescheduling is not available yet.
           </ThemedText>
         </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
         <Pressable
-          style={styles.confirmButton}
-          onPress={handleConfirmBooking}
+          style={[styles.confirmButton, confirming && styles.confirmButtonDisabled]}
+          onPress={() => void handleConfirmBooking()}
+          disabled={confirming}
           testID="confirm-booking-button"
         >
-          <ThemedText style={styles.confirmButtonText}>Confirm Booking</ThemedText>
+          <ThemedText style={styles.confirmButtonText}>
+            {confirming ? "Processing…" : "Confirm Booking"}
+          </ThemedText>
         </Pressable>
       </View>
     </View>
@@ -358,6 +412,9 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     paddingVertical: 16,
     alignItems: "center",
+  },
+  confirmButtonDisabled: {
+    opacity: 0.7,
   },
   confirmButtonText: {
     fontSize: 16,

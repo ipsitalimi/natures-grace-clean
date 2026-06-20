@@ -10,6 +10,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type ParamList = {
   Subcategory: { categoryId: string };
@@ -28,12 +30,16 @@ export default function SubcategoryScreen() {
   const [drawerVisible, setDrawerVisible] = useState(false);
 
   const { practitionerCategories } = useDataContext();
+  const { filterApprovedPractitioners } = usePlatformConfig();
   const category = practitionerCategories.find((c) => c.id === categoryId);
+  const approvedPractitioners = category
+    ? filterApprovedPractitioners(category.practitioners)
+    : [];
 
   if (!category) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -52,7 +58,7 @@ export default function SubcategoryScreen() {
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -77,7 +83,7 @@ export default function SubcategoryScreen() {
         <ThemedText style={styles.sectionTitle}>Choose a Service</ThemedText>
 
         {subcategories.map((sub) => {
-          const practitionerCount = category.practitioners.filter(
+          const practitionerCount = approvedPractitioners.filter(
             (p) => p.subcategory === sub.name
           ).length;
 

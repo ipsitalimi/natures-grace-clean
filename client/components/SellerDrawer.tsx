@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -16,7 +16,15 @@ import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
-import { sellerStats } from "@/data/sellerMockData";
+import { useAuth } from "@/context/AuthContext";
+import { useDataContext } from "@/context/DataContext";
+import { useOrdersContext } from "@/context/OrdersContext";
+import { useReviews } from "@/context/ReviewsContext";
+import { useSellerAnalytics } from "@/context/SellerAnalyticsContext";
+import { useSignOut } from "@/hooks/useSignOut";
+import { navigateAfterDrawerClose } from "@/lib/drawerNavigation";
+import { fetchSellerStorefrontByProfileId } from "@/services/commerce/sellerStorefrontService";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   SessionHistory: undefined;
@@ -76,8 +84,38 @@ interface SellerDrawerProps {
 export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
+  const signOut = useSignOut();
+  const { profile } = useAuth();
+  const { pendingOrderCount } = useOrdersContext();
+  const { sellerCatalog } = useDataContext();
+  const { sellerStoreStats } = useReviews();
+  const { stats } = useSellerAnalytics();
+  const [storeName, setStoreName] = useState("");
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  const displayName =
+    profile?.full_name?.trim() ||
+    profile?.email?.split("@")[0] ||
+    "Seller";
+  const displayEmail = profile?.email ?? "";
+  const storeLabel = storeName.trim() || "My Store";
+
+  useEffect(() => {
+    if (!visible || !profile?.id) return;
+    let cancelled = false;
+    void fetchSellerStorefrontByProfileId(profile.id).then((res) => {
+      if (!cancelled && res.ok) setStoreName(res.storefront.storeName);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, profile?.id]);
+
+  const storeRatingDisplay =
+    sellerStoreStats.reviewCount > 0
+      ? sellerStoreStats.avgRating.toFixed(1)
+      : "—";
 
   useEffect(() => {
     if (visible) {
@@ -96,8 +134,7 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
   if (!visible) return null;
 
   const go = (screen: keyof RootStackParamList) => {
-    onClose();
-    setTimeout(() => navigation.navigate(screen as never), 250);
+    navigateAfterDrawerClose(onClose, () => navigation.navigate(screen as never));
   };
 
   return (
@@ -112,8 +149,8 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
             styles.drawer,
             {
               transform: [{ translateX: slideAnim }],
-              paddingTop: insets.top + 12,
-              paddingBottom: insets.bottom + 20,
+              paddingTop: getHeaderPaddingTop(insets.top),
+              paddingBottom: getScrollBottomPadding(insets.bottom, 20),
             },
           ]}
         >
@@ -136,25 +173,25 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
                 />
               </Svg>
             </View>
-            <ThemedText style={styles.userName}>Priya Sharma</ThemedText>
-            <ThemedText style={styles.userEmail}>seller@naturesgrace.com</ThemedText>
+            <ThemedText style={styles.userName}>{displayName}</ThemedText>
+            <ThemedText style={styles.userEmail}>{displayEmail}</ThemedText>
             <View style={styles.storeRow}>
               <Feather name="shopping-bag" size={12} color={Colors.light.accent} />
-              <ThemedText style={styles.storeName}>Priya's Wellness Store</ThemedText>
+              <ThemedText style={styles.storeName}>{storeLabel}</ThemedText>
             </View>
             <View style={styles.miniStats}>
               <View style={styles.miniStat}>
-                <ThemedText style={styles.miniStatValue}>{sellerStats.totalSales}</ThemedText>
+                <ThemedText style={styles.miniStatValue}>{stats.totalSales}</ThemedText>
                 <ThemedText style={styles.miniStatLabel}>Sales</ThemedText>
               </View>
               <View style={styles.miniStatDivider} />
               <View style={styles.miniStat}>
-                <ThemedText style={styles.miniStatValue}>{sellerStats.storeRating}</ThemedText>
+                <ThemedText style={styles.miniStatValue}>{storeRatingDisplay}</ThemedText>
                 <ThemedText style={styles.miniStatLabel}>Rating</ThemedText>
               </View>
               <View style={styles.miniStatDivider} />
               <View style={styles.miniStat}>
-                <ThemedText style={styles.miniStatValue}>{sellerStats.totalProducts}</ThemedText>
+                <ThemedText style={styles.miniStatValue}>{sellerCatalog.length}</ThemedText>
                 <ThemedText style={styles.miniStatLabel}>Products</ThemedText>
               </View>
             </View>
@@ -163,7 +200,7 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
           <ScrollView showsVerticalScrollIndicator={false} style={styles.menuScroll}>
             <View style={styles.section}>
               <ThemedText style={styles.sectionTitle}>Store</ThemedText>
-              <MenuItem icon="shopping-bag" title="Orders" badge={`${sellerStats.pendingOrders}`} onPress={() => go("SellerOrders")} />
+              <MenuItem icon="shopping-bag" title="Orders" badge={`${pendingOrderCount}`} onPress={() => go("SellerOrders")} />
               <MenuItem icon="package" title="My Listings" onPress={() => go("ProductListings")} />
               <MenuItem icon="bar-chart-2" title="Analytics" onPress={() => go("SellerAnalytics")} />
               <MenuItem icon="credit-card" title="Wallet & Earnings" onPress={() => go("SellerWallet")} />
@@ -178,7 +215,7 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
 
             <View style={styles.section}>
               <ThemedText style={styles.sectionTitle}>Account</ThemedText>
-              <MenuItem icon="clock" title="Store History" onPress={() => go("SessionHistory")} />
+              <MenuItem icon="clock" title="Order History" onPress={() => go("SellerOrders")} />
               <MenuItem icon="settings" title="Settings" onPress={() => go("Settings")} />
               <MenuItem icon="help-circle" title="Support" onPress={() => go("Support")} />
             </View>
@@ -189,10 +226,9 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
                 title="Sign Out"
                 isSignOut
                 onPress={() => {
-                  onClose();
-                  setTimeout(() => {
-                    (navigation as any).reset({ index: 0, routes: [{ name: "Login" }] });
-                  }, 250);
+                  navigateAfterDrawerClose(onClose, () => {
+                    void signOut();
+                  });
                 }}
               />
             </View>

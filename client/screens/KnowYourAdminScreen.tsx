@@ -7,6 +7,7 @@ import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 const expertiseItems = [
   { icon: "sun", label: "Reiki Grandmaster & Advanced Su-Jok Therapist" },
@@ -43,7 +44,7 @@ export default function KnowYourAdminScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -59,7 +60,7 @@ export default function KnowYourAdminScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileCard}>

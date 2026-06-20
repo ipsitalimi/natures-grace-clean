@@ -1,21 +1,69 @@
-import React from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import React, { useCallback, useState } from "react";
+import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 
 import appLogo from "../../assets/images/natures-grace-logo.png";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import {
+  ABOUT_APP_NAME_KEY,
+  ABOUT_APP_VERSION_KEY,
+  ABOUT_MISSION_SECTION_TITLE_KEY,
+  fetchSupportCopyMap,
+  formatSupportCopyForDisplay,
+  formatSupportCopyLabel,
+  getSupportCopyKey,
+} from "@/services/content/helpSupportService";
 
 export default function AboutScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const [copyMap, setCopyMap] = useState<Record<string, string> | null>(null);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+
+  const loadAboutCopy = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setCopyMap(null);
+      setCopyLoading(false);
+      setCopyError(null);
+      return;
+    }
+    setCopyLoading(true);
+    setCopyError(null);
+    const res = await fetchSupportCopyMap();
+    setCopyLoading(false);
+    if (!res.ok) {
+      setCopyError(res.error);
+      setCopyMap(null);
+      return;
+    }
+    setCopyMap(res.map);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadAboutCopy();
+    }, [loadAboutCopy])
+  );
+
+  const appNameRaw = getSupportCopyKey(copyMap, ABOUT_APP_NAME_KEY);
+  const versionRaw = getSupportCopyKey(copyMap, ABOUT_APP_VERSION_KEY);
+  const introRaw = getSupportCopyKey(copyMap, "about_intro");
+  const missionTitleRaw = getSupportCopyKey(copyMap, ABOUT_MISSION_SECTION_TITLE_KEY);
+  const missionRaw = getSupportCopyKey(copyMap, "about_mission");
+  const badgeTitleRaw = getSupportCopyKey(copyMap, "about_badge_title");
+  const badgeBodyRaw = getSupportCopyKey(copyMap, "about_badge_text");
+  const hasLoadedCopy = Boolean(copyMap !== null && !copyLoading && !copyError && isSupabaseConfigured());
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -31,33 +79,79 @@ export default function AboutScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.logoContainer}>
           <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
-          <ThemedText style={styles.appName}>Nature's Grace</ThemedText>
-          <ThemedText style={styles.version}>Version 1.0.0</ThemedText>
+          {copyLoading && isSupabaseConfigured() ? (
+            <ActivityIndicator color={Colors.light.accent} style={{ marginVertical: Spacing.sm }} />
+          ) : (
+            <>
+              <ThemedText
+                style={[styles.appName, hasLoadedCopy && !appNameRaw ? styles.aboutMuted : undefined]}
+                testID="text-about-app-name"
+              >
+                {isSupabaseConfigured()
+                  ? formatSupportCopyForDisplay(appNameRaw)
+                  : formatSupportCopyForDisplay("")}
+              </ThemedText>
+              <ThemedText
+                style={[styles.version, hasLoadedCopy && !versionRaw ? styles.aboutMuted : undefined]}
+                testID="text-about-app-version"
+              >
+                {isSupabaseConfigured()
+                  ? formatSupportCopyForDisplay(versionRaw)
+                  : formatSupportCopyForDisplay("")}
+              </ThemedText>
+            </>
+          )}
         </View>
 
+        {!isSupabaseConfigured() ? (
+          <ThemedText style={styles.hint}>Connect Supabase for editable About copy.</ThemedText>
+        ) : null}
+
+        {copyLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.hint}>Loading…</ThemedText>
+          </View>
+        ) : null}
+
+        {copyError ? (
+          <Pressable onPress={() => void loadAboutCopy()} testID="button-about-retry">
+            <ThemedText style={styles.error}>{copyError} — tap to retry</ThemedText>
+          </Pressable>
+        ) : null}
+
         <View style={styles.card}>
-          <ThemedText style={styles.description}>
-            Nature's Grace is a holistic wellness platform dedicated to nurturing your mind, body, and spirit. Founded with the vision of making wellness accessible to everyone, we connect you with experienced practitioners, guided practices, and a supportive community.
+          <ThemedText style={[styles.description, hasLoadedCopy && !introRaw ? styles.aboutMuted : undefined]}>
+            {formatSupportCopyForDisplay(introRaw)}
           </ThemedText>
         </View>
 
         <View style={styles.card}>
-          <ThemedText style={styles.cardTitle}>Our Mission</ThemedText>
-          <ThemedText style={styles.cardText}>
-            To create a calm, grounded space where individuals can explore healing modalities, build mindful habits, and find connection on their wellness journey.
+          <ThemedText
+            style={[styles.cardTitle, hasLoadedCopy && !missionTitleRaw ? styles.aboutMuted : undefined]}
+            testID="text-about-mission-heading"
+          >
+            {isSupabaseConfigured()
+              ? formatSupportCopyLabel(missionTitleRaw, { showEmpty: hasLoadedCopy })
+              : formatSupportCopyForDisplay("")}
+          </ThemedText>
+          <ThemedText style={[styles.cardText, hasLoadedCopy && !missionRaw ? styles.aboutMuted : undefined]}>
+            {formatSupportCopyForDisplay(missionRaw)}
           </ThemedText>
         </View>
 
         <View style={styles.badge}>
           <Feather name="award" size={24} color={Colors.light.accent} />
-          <ThemedText style={styles.badgeTitle}>11 Years of Healing</ThemedText>
-          <ThemedText style={styles.badgeText}>
-            Celebrating over a decade of serving our wellness community with love and dedication.
+          <ThemedText style={[styles.badgeTitle, hasLoadedCopy && !badgeTitleRaw ? styles.aboutMuted : undefined]}>
+            {formatSupportCopyForDisplay(badgeTitleRaw)}
+          </ThemedText>
+          <ThemedText style={[styles.badgeText, hasLoadedCopy && !badgeBodyRaw ? styles.aboutBadgeMuted : undefined]}>
+            {formatSupportCopyForDisplay(badgeBodyRaw)}
           </ThemedText>
         </View>
       </ScrollView>
@@ -101,6 +195,22 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  hint: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  error: {
+    fontSize: 14,
+    color: "#8B3A3A",
+    marginBottom: Spacing.md,
   },
   logoContainer: {
     alignItems: "center",
@@ -164,5 +274,13 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     textAlign: "center",
     lineHeight: 21,
+  },
+  aboutMuted: {
+    fontStyle: "italic",
+    color: Colors.light.textSecondary,
+  },
+  aboutBadgeMuted: {
+    fontStyle: "italic",
+    opacity: 0.85,
   },
 });

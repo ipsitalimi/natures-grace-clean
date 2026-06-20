@@ -1,87 +1,15 @@
 import React from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import { View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
 
-import { ThemedText } from "@/components/ThemedText";
 import SellerHomeScreen from "@/screens/seller/SellerHomeScreen";
 import SellerProductsScreen from "@/screens/seller/SellerProductsScreen";
 import CommunityStackNavigator from "@/navigation/CommunityStackNavigator";
 import MoodStackNavigator from "@/navigation/MoodStackNavigator";
-import { Colors, Spacing } from "@/constants/theme";
+import { Colors } from "@/constants/theme";
 import ResourcesScreen from "@/screens/ResourcesScreen";
-
-function FloatingHomeButton() {
-  const navigation = useNavigation();
-  return (
-    <View style={[wrapperStyles.floatingWrap, { top: 8 }]} pointerEvents="box-none">
-      <Pressable
-        style={wrapperStyles.floatingBtn}
-        onPress={() => (navigation as any).navigate("SellerHomeTab")}
-        testID="button-back-home"
-      >
-        <Feather name="arrow-left" size={14} color="#FFFFFF" />
-        <ThemedText style={wrapperStyles.floatingText}>Home</ThemedText>
-      </Pressable>
-    </View>
-  );
-}
-
-function SellerCommunityWrapper() {
-  return (
-    <View style={wrapperStyles.wrapper}>
-      <CommunityStackNavigator />
-      <FloatingHomeButton />
-    </View>
-  );
-}
-
-function SellerResourcesWrapper() {
-  return (
-    <View style={wrapperStyles.wrapper}>
-      <ResourcesScreen />
-      <FloatingHomeButton />
-    </View>
-  );
-}
-
-function SellerJournalWrapper() {
-  return (
-    <View style={wrapperStyles.wrapper}>
-      <MoodStackNavigator />
-      <FloatingHomeButton />
-    </View>
-  );
-}
-
-const wrapperStyles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-  },
-  floatingWrap: {
-    position: "absolute",
-    left: Spacing.lg,
-    zIndex: 100,
-  },
-  floatingBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: Colors.light.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    opacity: 0.9,
-  },
-  floatingText: {
-    fontSize: 12,
-    fontFamily: "Nunito_700Bold",
-    color: "#FFFFFF",
-  },
-});
 
 export type SellerTabParamList = {
   SellerHomeTab: undefined;
@@ -242,7 +170,7 @@ export default function SellerTabNavigator() {
       />
       <Tab.Screen
         name="SellerCommunityTab"
-        component={SellerCommunityWrapper}
+        component={CommunityStackNavigator}
         options={{
           title: "Community",
           tabBarIcon: ({ color, focused }) => (
@@ -254,7 +182,7 @@ export default function SellerTabNavigator() {
       />
       <Tab.Screen
         name="SellerResourcesTab"
-        component={SellerResourcesWrapper}
+        component={ResourcesScreen}
         options={{
           title: "Resources",
           tabBarIcon: ({ color, focused }) => (
@@ -266,7 +194,7 @@ export default function SellerTabNavigator() {
       />
       <Tab.Screen
         name="SellerJournalTab"
-        component={SellerJournalWrapper}
+        component={MoodStackNavigator}
         options={{
           title: "Journal",
           tabBarIcon: ({ color, focused }) => (

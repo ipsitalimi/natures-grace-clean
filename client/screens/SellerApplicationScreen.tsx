@@ -1,24 +1,39 @@
-import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, TextInput, Pressable } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, ScrollView, StyleSheet, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import RoleAgreementSection from "@/components/legal/RoleAgreementSection";
+import {
+  buildAcceptanceInputs,
+  fetchLegalVersions,
+  isSellerAgreementCurrent,
+  parseProfileLegalAcceptance,
+  recordLegalAcceptances,
+} from "@/services/legal/legalAcceptanceService";
+import { submitRoleApplication } from "@/services/platform/roleApplicationsService";
+import { uploadApplicationDocuments } from "@/services/platform/applicationDocumentsService";
+import ApplicationDocumentsSection from "@/components/ApplicationDocumentsSection";
+import type { LocalFile } from "@/lib/storageUpload";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 const PRODUCT_CATEGORIES = ["Wellness Essentials", "Herbal & Organic", "Mindfulness Tools", "Skincare & Body", "Nutrition & Supplements", "Home & Living"];
-
-function sendApplicationToAdminEmail(data: Record<string, string>) {
-  console.log("--- Seller Application Submitted ---");
-  console.log("Simulating email to admin: naturesgrace.reiki@gmail.com");
-  console.log("Application Data:", JSON.stringify(data, null, 2));
-  console.log("--- End of simulated email ---");
-}
 
 export default function SellerApplicationScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { appNameDisplay } = useAppBrandCopy();
+  const { session, profile, refreshProfile } = useAuth();
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [agreementCurrent, setAgreementCurrent] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -29,20 +44,73 @@ export default function SellerApplicationScreen() {
   const [description, setDescription] = useState("");
   const [website, setWebsite] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
+  const [pendingDocs, setPendingDocs] = useState<LocalFile[]>([]);
 
-  const handleSubmit = () => {
-    sendApplicationToAdminEmail({
-      fullName,
-      email,
-      phone,
-      brandName,
-      category,
-      productTypes,
-      description,
-      website,
-      whyJoin,
-    });
-    setSubmitted(true);
+  useEffect(() => {
+    if (profile) {
+      if (profile.full_name) setFullName(profile.full_name);
+      if (profile.email) setEmail(profile.email);
+      if (profile.phone) setPhone(profile.phone);
+    }
+  }, [profile?.full_name, profile?.email, profile?.phone]);
+
+  useEffect(() => {
+    if (!profile) return;
+    void (async () => {
+      const versions = await fetchLegalVersions();
+      const acceptance = parseProfileLegalAcceptance(profile);
+      const current = isSellerAgreementCurrent(acceptance, versions);
+      setAgreementCurrent(current);
+      if (current) setAgreementChecked(true);
+    })();
+  }, [profile]);
+
+  const canSubmit = isSupabaseConfigured() && Boolean(session?.user);
+  const agreementReady = agreementCurrent || agreementChecked;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || submitting || !agreementReady) return;
+    if (!fullName.trim() || !email.trim() || !brandName.trim() || !category) {
+      setSubmitError("Please fill in your name, email, brand name, and product category.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      if (!agreementCurrent) {
+        const versions = await fetchLegalVersions();
+        const recordResult = await recordLegalAcceptances(
+          buildAcceptanceInputs(["seller_agreement"], versions)
+        );
+        if (!recordResult.ok) {
+          throw new Error(recordResult.error ?? "Could not record Seller Agreement acceptance");
+        }
+        await refreshProfile();
+      }
+
+      const application = await submitRoleApplication("Seller", {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        brandName: brandName.trim(),
+        category,
+        productTypes: productTypes.trim(),
+        description: description.trim(),
+        website: website.trim(),
+        whyJoin: whyJoin.trim(),
+      });
+      if (pendingDocs.length && application) {
+        const uploadResult = await uploadApplicationDocuments(application.id, pendingDocs, "seller_supporting");
+        if (uploadResult.errors.length) {
+          console.warn("[SellerApplication] document upload:", uploadResult.errors.join("; "));
+        }
+      }
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not submit application");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReturn = () => {
@@ -58,7 +126,7 @@ export default function SellerApplicationScreen() {
           </View>
           <ThemedText style={styles.confirmationTitle}>Application Submitted</ThemedText>
           <ThemedText style={styles.confirmationMessage}>
-            Your seller application has been sent to the Nature's Grace team for review.
+            Your seller application has been sent to the {appNameDisplay} team for review.
           </ThemedText>
           <ThemedText style={styles.confirmationSubtext}>
             We'll contact you once your store profile is approved.
@@ -77,21 +145,35 @@ export default function SellerApplicationScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + Spacing.lg }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) + Spacing.sm }]}>
         <Pressable style={styles.backButton} onPress={handleReturn} testID="button-back">
           <Feather name="arrow-left" size={20} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.screenTitle}>Seller Application</ThemedText>
+        <ThemedText style={styles.screenTitle}>Become a Seller</ThemedText>
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
         <ThemedText style={styles.introText}>
-          Sell your wellness products through the Nature's Grace community.
+          Sell your wellness products through the {appNameDisplay} community.
         </ThemedText>
+
+        {!canSubmit ? (
+          <ThemedText style={styles.hintText} testID="text-seller-sign-in">
+            {isSupabaseConfigured()
+              ? "Sign in to submit your seller application."
+              : "Applications require a connected account."}
+          </ThemedText>
+        ) : null}
+
+        {submitError ? (
+          <ThemedText style={styles.errorText} testID="text-seller-submit-error">
+            {submitError}
+          </ThemedText>
+        ) : null}
 
         <ThemedText style={styles.label}>Full Name</ThemedText>
         <TextInput
@@ -187,7 +269,7 @@ export default function SellerApplicationScreen() {
           testID="input-seller-website"
         />
 
-        <ThemedText style={styles.label}>Why do you want to sell on Nature's Grace?</ThemedText>
+        <ThemedText style={styles.label}>Why do you want to sell on {appNameDisplay}?</ThemedText>
         <TextInput
           style={[styles.input, styles.textArea]}
           value={whyJoin}
@@ -199,12 +281,31 @@ export default function SellerApplicationScreen() {
           testID="input-seller-why-join"
         />
 
+        <ApplicationDocumentsSection
+          files={pendingDocs}
+          onChange={setPendingDocs}
+          disabled={submitting}
+        />
+
+        {!agreementCurrent ? (
+          <RoleAgreementSection
+            docKey="seller_agreement"
+            checked={agreementChecked}
+            onCheckedChange={setAgreementChecked}
+          />
+        ) : null}
+
         <Pressable
-          style={styles.submitButton}
-          onPress={handleSubmit}
+          style={[styles.submitButton, !canSubmit || submitting || !agreementReady ? styles.submitButtonDisabled : null]}
+          onPress={() => void handleSubmit()}
+          disabled={!canSubmit || submitting || !agreementReady}
           testID="button-submit-seller-application"
         >
-          <ThemedText style={styles.submitButtonText}>Submit Application</ThemedText>
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.submitButtonText}>Submit Application</ThemedText>
+          )}
         </Pressable>
       </ScrollView>
     </View>
@@ -249,6 +350,18 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     marginBottom: Spacing.xl,
     lineHeight: 20,
+  },
+  hintText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#B33A3A",
+    marginBottom: Spacing.md,
   },
   label: {
     fontSize: 13,
@@ -305,6 +418,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: Spacing.xl,
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
   },
   submitButtonText: {
     fontSize: 16,

@@ -4,14 +4,16 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { ResourceItem } from "@/data/mockResources";
 
-type ResourceType = "Article" | "Practice" | "Audio Session";
+type ResourceType = "Article" | "Practice" | "Audio Session" | "Course";
 
 const typeIcons: Record<ResourceType, keyof typeof Feather.glyphMap> = {
   "Article": "file-text",
   "Practice": "activity",
   "Audio Session": "headphones",
+  "Course": "book-open",
 };
 
 function sectionFromType(type: ResourceType): string {
@@ -19,6 +21,7 @@ function sectionFromType(type: ResourceType): string {
     case "Article": return "Articles";
     case "Audio Session": return "Audio Sessions";
     case "Practice": return "Practices";
+    case "Course": return "Courses";
   }
 }
 
@@ -27,6 +30,7 @@ function actionFromType(type: ResourceType): string {
     case "Article": return "Open";
     case "Audio Session": return "Play";
     case "Practice": return "Start";
+    case "Course": return "Express interest";
   }
 }
 
@@ -41,6 +45,9 @@ function getTypeBadgeColor(type: string) {
     case "Practices":
     case "Practice":
       return "#013220";
+    case "Courses":
+    case "Course":
+      return Colors.light.brownLight;
     default:
       return Colors.light.accent;
   }
@@ -88,31 +95,133 @@ function ResourceRow({
   );
 }
 
+function CourseResourceRow({
+  resource,
+  isPublished,
+  onTogglePublish,
+  onDelete,
+  onSave,
+}: {
+  resource: ResourceItem;
+  isPublished: boolean;
+  onTogglePublish: () => void;
+  onDelete: () => void;
+  onSave: (patch: {
+    instructorName: string;
+    locations: string;
+    certificateNote: string;
+    price: string;
+  }) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [instructorName, setInstructorName] = useState(resource.instructorName ?? "");
+  const [locations, setLocations] = useState(resource.locations ?? "");
+  const [certificateNote, setCertificateNote] = useState(resource.certificateNote ?? "");
+  const [price, setPrice] = useState(resource.price ?? "");
+
+  return (
+    <View style={styles.resourceCard}>
+      <View style={styles.resourceInfo}>
+        <View style={styles.resourceTitleRow}>
+          <ThemedText style={styles.resourceTitle} numberOfLines={1}>{resource.title}</ThemedText>
+          <View style={[styles.statusBadge, isPublished ? styles.statusPublished : styles.statusUnpublished]}>
+            <ThemedText style={[styles.statusBadgeText, isPublished ? styles.statusPublishedText : styles.statusUnpublishedText]}>
+              {isPublished ? "Published" : "Unpublished"}
+            </ThemedText>
+          </View>
+        </View>
+        <View style={styles.resourceMeta}>
+          <View style={[styles.typeBadge, { backgroundColor: getTypeBadgeColor("Courses") }]}>
+            <ThemedText style={styles.typeBadgeText}>Course</ThemedText>
+          </View>
+        </View>
+        {editing ? (
+          <View style={styles.courseEditFields}>
+            <ThemedText style={styles.inputLabel}>Instructor</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={instructorName}
+              onChangeText={setInstructorName}
+              placeholder="Instructor name"
+              placeholderTextColor={Colors.light.textSecondary}
+            />
+            <ThemedText style={styles.inputLabel}>Locations</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={locations}
+              onChangeText={setLocations}
+              placeholder="e.g. Jaipur & Gurgaon"
+              placeholderTextColor={Colors.light.textSecondary}
+            />
+            <ThemedText style={styles.inputLabel}>Reference price label</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={price}
+              onChangeText={setPrice}
+              placeholder="e.g. ₹2,500 (interest only — no in-app payment)"
+              placeholderTextColor={Colors.light.textSecondary}
+            />
+            <ThemedText style={styles.inputLabel}>Certificate note</ThemedText>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={certificateNote}
+              onChangeText={setCertificateNote}
+              placeholder="Shown on course detail"
+              placeholderTextColor={Colors.light.textSecondary}
+              multiline
+            />
+            <Pressable
+              style={styles.saveButton}
+              onPress={() => {
+                onSave({ instructorName, locations, certificateNote, price });
+                setEditing(false);
+              }}
+              testID={`button-save-course-${resource.id}`}
+            >
+              <ThemedText style={styles.saveButtonText}>Save course details</ThemedText>
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable onPress={() => setEditing(true)} testID={`button-edit-course-${resource.id}`}>
+            <ThemedText style={styles.courseEditLink}>Edit instructor, locations & pricing</ThemedText>
+          </Pressable>
+        )}
+      </View>
+      <Pressable style={styles.togglePublishButton} onPress={onTogglePublish}>
+        <Feather name={isPublished ? "eye" : "eye-off"} size={16} color={isPublished ? Colors.light.accent : Colors.light.textSecondary} />
+      </Pressable>
+      <Pressable style={styles.deleteIconButton} onPress={onDelete}>
+        <Feather name="trash-2" size={16} color="#8B3A3A" />
+      </Pressable>
+    </View>
+  );
+}
+
 export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
-  const { resources, addResource, deleteResource } = useDataContext();
+  const { resources, addResource, deleteResource, setResourcePublished, updateResource } = useDataContext();
   const [selectedType, setSelectedType] = useState<ResourceType | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formDuration, setFormDuration] = useState("");
   const [formContent, setFormContent] = useState("");
+  const [formInstructor, setFormInstructor] = useState("");
+  const [formLocations, setFormLocations] = useState("");
+  const [formCertificate, setFormCertificate] = useState("");
+  const [formPrice, setFormPrice] = useState("");
   const [saved, setSaved] = useState(false);
-  const [publishedState, setPublishedState] = useState<Record<string, boolean>>({});
-
-  const isPublished = (id: string) => {
-    return publishedState[id] !== undefined ? publishedState[id] : true;
-  };
+  const isPublished = (resource: (typeof resources)[0]) => resource.published !== false;
 
   const togglePublish = (id: string) => {
-    setPublishedState((prev) => ({
-      ...prev,
-      [id]: prev[id] !== undefined ? !prev[id] : false,
-    }));
+    const resource = resources.find((r) => r.id === id);
+    if (!resource) return;
+    setResourcePublished(id, !isPublished(resource));
   };
 
   const articles = resources.filter((r) => r.section === "Articles");
   const audioSessions = resources.filter((r) => r.section === "Audio Sessions");
   const practices = resources.filter((r) => r.section === "Practices");
+  const courses = resources.filter((r) => r.section === "Courses");
 
-  const publishedCount = resources.filter((r) => isPublished(r.id)).length;
+  const publishedCount = resources.filter((r) => isPublished(r)).length;
   const unpublishedCount = resources.length - publishedCount;
 
   const handleTypeSelect = (type: ResourceType) => {
@@ -120,6 +229,10 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
     setFormTitle("");
     setFormDuration("");
     setFormContent("");
+    setFormInstructor("");
+    setFormLocations("");
+    setFormCertificate("");
+    setFormPrice("");
     setSaved(false);
   };
 
@@ -132,6 +245,10 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       actionLabel: actionFromType(selectedType),
       duration: selectedType === "Audio Session" ? (formDuration.trim() || "5 min") : undefined,
       body: formContent.trim() || `${formTitle.trim()} content will be available soon.`,
+      price: selectedType === "Course" ? formPrice.trim() || undefined : undefined,
+      instructorName: selectedType === "Course" ? formInstructor.trim() || undefined : undefined,
+      locations: selectedType === "Course" ? formLocations.trim() || undefined : undefined,
+      certificateNote: selectedType === "Course" ? formCertificate.trim() || undefined : undefined,
     });
     setSaved(true);
     setTimeout(() => {
@@ -140,6 +257,10 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       setFormTitle("");
       setFormDuration("");
       setFormContent("");
+      setFormInstructor("");
+      setFormLocations("");
+      setFormCertificate("");
+      setFormPrice("");
     }, 1500);
   };
 
@@ -170,10 +291,18 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
           <ThemedText style={styles.statLabel}>Unpublished</ThemedText>
         </View>
         <View style={styles.statCard}>
-          <ThemedText style={styles.statValue} testID="text-draft-resources">0</ThemedText>
-          <ThemedText style={styles.statLabel}>Drafts</ThemedText>
+          <ThemedText style={styles.statValue} testID="text-article-resources">{articles.length}</ThemedText>
+          <ThemedText style={styles.statLabel}>Articles</ThemedText>
         </View>
       </View>
+
+      {resources.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyText}>
+            No resources yet. Add an article, practice, or audio session below.
+          </ThemedText>
+        </View>
+      ) : null}
 
       <View style={styles.actionButtonsRow}>
         <Pressable
@@ -204,6 +333,16 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
           <Feather name="headphones" size={16} color={selectedType === "Audio Session" ? "#FFFFFF" : Colors.light.accent} />
           <ThemedText style={[styles.actionButtonText, selectedType === "Audio Session" ? styles.actionButtonTextActive : null]}>
             Add Audio
+          </ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.actionButton, selectedType === "Course" ? styles.actionButtonActive : null]}
+          onPress={() => handleTypeSelect("Course")}
+          testID="button-add-course"
+        >
+          <Feather name="book-open" size={16} color={selectedType === "Course" ? "#FFFFFF" : Colors.light.accent} />
+          <ThemedText style={[styles.actionButtonText, selectedType === "Course" ? styles.actionButtonTextActive : null]}>
+            Add Course
           </ThemedText>
         </Pressable>
       </View>
@@ -242,6 +381,47 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
               </>
             ) : null}
 
+            {selectedType === "Course" ? (
+              <>
+                <ThemedText style={styles.inputLabel}>Instructor</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={formInstructor}
+                  onChangeText={setFormInstructor}
+                  placeholder="Instructor name"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  testID="input-course-instructor"
+                />
+                <ThemedText style={styles.inputLabel}>Locations</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={formLocations}
+                  onChangeText={setFormLocations}
+                  placeholder="e.g. Jaipur & Gurgaon"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  testID="input-course-locations"
+                />
+                <ThemedText style={styles.inputLabel}>Reference price label</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={formPrice}
+                  onChangeText={setFormPrice}
+                  placeholder="Optional — shown as reference only"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  testID="input-course-price"
+                />
+                <ThemedText style={styles.inputLabel}>Certificate note</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={formCertificate}
+                  onChangeText={setFormCertificate}
+                  placeholder="Optional certificate messaging"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  testID="input-course-certificate"
+                />
+              </>
+            ) : null}
+
             <ThemedText style={styles.inputLabel}>Content / Description</ThemedText>
             <TextInput
               style={[styles.input, styles.textArea]}
@@ -268,13 +448,35 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
         </>
       ) : null}
 
+      <ThemedText style={styles.subSectionTitle}>Courses ({courses.length})</ThemedText>
+      {courses.length === 0 ? (
+        <ThemedText style={styles.emptyText}>No courses yet. Add a course above.</ThemedText>
+      ) : null}
+      {courses.map((resource) => (
+        <CourseResourceRow
+          key={resource.id}
+          resource={resource}
+          onDelete={() => deleteResource(resource.id)}
+          isPublished={isPublished(resource)}
+          onTogglePublish={() => togglePublish(resource.id)}
+          onSave={(patch) =>
+            void updateResource(resource.id, {
+              instructorName: patch.instructorName,
+              locations: patch.locations,
+              certificateNote: patch.certificateNote,
+              price: patch.price,
+            })
+          }
+        />
+      ))}
+
       <ThemedText style={styles.subSectionTitle}>Articles ({articles.length})</ThemedText>
       {articles.map((resource) => (
         <ResourceRow
           key={resource.id}
           resource={resource}
           onDelete={() => deleteResource(resource.id)}
-          isPublished={isPublished(resource.id)}
+          isPublished={isPublished(resource)}
           onTogglePublish={() => togglePublish(resource.id)}
         />
       ))}
@@ -285,7 +487,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
           key={resource.id}
           resource={resource}
           onDelete={() => deleteResource(resource.id)}
-          isPublished={isPublished(resource.id)}
+          isPublished={isPublished(resource)}
           onTogglePublish={() => togglePublish(resource.id)}
         />
       ))}
@@ -296,7 +498,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
           key={resource.id}
           resource={resource}
           onDelete={() => deleteResource(resource.id)}
-          isPublished={isPublished(resource.id)}
+          isPublished={isPublished(resource)}
           onTogglePublish={() => togglePublish(resource.id)}
         />
       ))}
@@ -528,5 +730,29 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Nunito_400Regular",
     color: "#013220",
+  },
+  courseEditFields: {
+    marginTop: Spacing.md,
+    gap: Spacing.xs,
+  },
+  courseEditLink: {
+    marginTop: Spacing.sm,
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+  },
+  emptyCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

@@ -6,6 +6,8 @@ import {
   Animated,
   Dimensions,
   Modal,
+  ScrollView,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -15,11 +17,17 @@ import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
+import { usePaymentMethods } from "@/context/PaymentMethodsContext";
+import { useSignOut } from "@/hooks/useSignOut";
+import { navigateAfterDrawerClose } from "@/lib/drawerNavigation";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   Placeholder: { title: string };
   Settings: undefined;
   SessionHistory: undefined;
+  OrderHistory: undefined;
   MyReviews: undefined;
   Favorites: undefined;
   PaymentMethods: undefined;
@@ -169,14 +177,46 @@ interface ProfileDrawerProps {
 export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
+  const { profile, session, refreshProfile } = useAuth();
+  const { methods } = usePaymentMethods();
+  const signOut = useSignOut();
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const navigateTo = (title: string) => {
-    onClose();
-    setTimeout(() => {
-      navigation.navigate("Placeholder", { title });
-    }, 250);
+  useEffect(() => {
+    if (!visible || !session?.user?.id) return;
+    if (!profile || profile.id !== session.user.id) {
+      void refreshProfile();
+    }
+  }, [visible, session?.user?.id, profile, refreshProfile]);
+
+  const sessionName =
+    typeof session?.user?.user_metadata?.full_name === "string"
+      ? session.user.user_metadata.full_name
+      : "";
+  const sessionEmail = session?.user?.email ?? "";
+
+  const displayName =
+    profile?.full_name?.split(" ")[0] ||
+    sessionName.split(" ")[0] ||
+    profile?.email?.split("@")[0] ||
+    sessionEmail.split("@")[0] ||
+    "Guest";
+  const displayEmail = profile?.email || sessionEmail;
+  const displayBio =
+    typeof profile?.preferences?.bio === "string" && profile.preferences.bio.trim()
+      ? profile.preferences.bio
+      : null;
+  const paymentBadge = methods.length > 0 ? String(methods.length) : undefined;
+
+  const goToHome = () => {
+    navigateAfterDrawerClose(onClose, () => {
+      (navigation as any).navigate("Main", { screen: "HomeTab" });
+    });
+  };
+
+  const goTo = (screen: string) => {
+    navigateAfterDrawerClose(onClose, () => navigation.navigate(screen as never));
   };
 
   useEffect(() => {
@@ -225,127 +265,118 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
             styles.drawer,
             {
               transform: [{ translateX: slideAnim }],
-              paddingTop: 20,
-              paddingBottom: insets.bottom + 20,
+              paddingTop: getHeaderPaddingTop(insets.top),
+              paddingBottom: getScrollBottomPadding(insets.bottom, 20),
             },
           ]}
         >
+          <View style={styles.drawerContent}>
           <View style={styles.header}>
-            <Pressable style={styles.closeButton} onPress={onClose}>
+            <Pressable
+              style={styles.backButton}
+              onPress={goToHome}
+              accessibilityRole="button"
+              accessibilityLabel="Back to home"
+              testID="drawer-back-home"
+            >
+              <Feather name="arrow-left" size={24} color={Colors.light.accent} />
+            </Pressable>
+            <Pressable style={styles.closeButton} onPress={onClose} accessibilityLabel="Close menu">
               <Feather name="x" size={24} color={Colors.light.text} />
             </Pressable>
           </View>
 
           <View style={styles.profileSection}>
             <View style={styles.avatarContainer}>
-              <View style={styles.avatar}>
-                <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
-                  <Circle cx="12" cy="8" r="4" fill={Colors.light.accent} opacity={0.8} />
-                  <Path
-                    d="M4 20C4 16 8 14 12 14C16 14 20 16 20 20"
-                    stroke={Colors.light.accent}
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    fill="none"
-                  />
-                </Svg>
+              {profile?.avatar_url ? (
+                <Image source={{ uri: profile.avatar_url }} style={styles.avatarImage} resizeMode="cover" />
+              ) : (
+                <View style={styles.avatar}>
+                  <Svg width={40} height={40} viewBox="0 0 24 24" fill="none">
+                    <Circle cx="12" cy="8" r="4" fill={Colors.light.accent} opacity={0.8} />
+                    <Path
+                      d="M4 20C4 16 8 14 12 14C16 14 20 16 20 20"
+                      stroke={Colors.light.accent}
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  </Svg>
+                </View>
+              )}
+            </View>
+            <ThemedText style={styles.userName}>{displayName}</ThemedText>
+            <ThemedText style={styles.userEmail}>{displayEmail}</ThemedText>
+            {displayBio ? (
+              <View style={styles.bioContainer}>
+                <ThemedText style={styles.userBio}>{displayBio}</ThemedText>
               </View>
+            ) : null}
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.menuScroll}>
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionTitle}>Session History</ThemedText>
+              <MenuItem
+                icon={<SessionIcon size={20} color={Colors.light.accent} />}
+                title="Session History"
+                onPress={() => goTo("SessionHistory")}
+              />
+              <MenuItem
+                icon={<Feather name="shopping-bag" size={20} color={Colors.light.accent} />}
+                title="Order History"
+                onPress={() => goTo("OrderHistory")}
+              />
+              <MenuItem
+                icon={<StarIcon size={20} color={Colors.light.accent} />}
+                title="My Reviews"
+                onPress={() => goTo("MyReviews")}
+              />
+              <MenuItem
+                icon={<HeartIcon size={20} color={Colors.light.accent} />}
+                title="Favorites"
+                onPress={() => goTo("Favorites")}
+              />
             </View>
-            <ThemedText style={styles.userName}>Limi</ThemedText>
-            <ThemedText style={styles.userEmail}>limi@email.com</ThemedText>
-            <View style={styles.bioContainer}>
-              <ThemedText style={styles.userBio}>
-                On a journey of inner peace and healing.
-              </ThemedText>
+
+            <View style={styles.section}>
+              <ThemedText style={styles.sectionTitle}>Settings</ThemedText>
+              <MenuItem
+                icon={<UserIcon size={20} color={Colors.light.accent} />}
+                title="Account Info"
+                onPress={() => goTo("Settings")}
+              />
+              <MenuItem
+                icon={<CreditCardIcon size={20} color={Colors.light.accent} />}
+                title="Payment references"
+                badge={paymentBadge}
+                onPress={() => goTo("PaymentMethods")}
+              />
+              <MenuItem
+                icon={<BellIcon size={20} color={Colors.light.accent} />}
+                title="Notifications"
+                onPress={() => goTo("Notifications")}
+              />
+              <MenuItem
+                icon={<HelpIcon size={20} color={Colors.light.accent} />}
+                title="Support"
+                onPress={() => goTo("Support")}
+              />
             </View>
-          </View>
 
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Session History</ThemedText>
-            <MenuItem
-              icon={<SessionIcon size={20} color={Colors.light.accent} />}
-              title="Session History"
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  navigation.navigate("SessionHistory" as never);
-                }, 250);
-              }}
-            />
-            <MenuItem
-              icon={<StarIcon size={20} color={Colors.light.accent} />}
-              title="My Reviews"
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  navigation.navigate("MyReviews" as never);
-                }, 250);
-              }}
-            />
-            <MenuItem
-              icon={<HeartIcon size={20} color={Colors.light.accent} />}
-              title="Favorites"
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  navigation.navigate("Favorites" as never);
-                }, 250);
-              }}
-            />
-          </View>
-
-          <View style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>Settings</ThemedText>
-            <MenuItem
-              icon={<UserIcon size={20} color={Colors.light.accent} />}
-              title="Account Info"
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  navigation.navigate("Settings" as never);
-                }, 250);
-              }}
-            />
-            <MenuItem
-              icon={<CreditCardIcon size={20} color={Colors.light.accent} />}
-              title="Payment Methods"
-              badge="2"
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  navigation.navigate("PaymentMethods" as never);
-                }, 250);
-              }}
-            />
-            <MenuItem
-              icon={<BellIcon size={20} color={Colors.light.accent} />}
-              title="Notifications"
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  navigation.navigate("Notifications" as never);
-                }, 250);
-              }}
-            />
-            <MenuItem
-              icon={<HelpIcon size={20} color={Colors.light.accent} />}
-              title="Support"
-              onPress={() => {
-                onClose();
-                setTimeout(() => {
-                  navigation.navigate("Support" as never);
-                }, 250);
-              }}
-            />
-          </View>
-
-          <View style={styles.signOutSection}>
-            <MenuItem
-              icon={<Feather name="log-out" size={20} color="#D4534A" />}
-              title="Sign Out"
-              isSignOut
-              onPress={() => navigateTo("Sign Out")}
-            />
+            <View style={styles.signOutSection}>
+              <MenuItem
+                icon={<Feather name="log-out" size={20} color="#D4534A" />}
+                title="Sign Out"
+                isSignOut
+                onPress={() => {
+                  navigateAfterDrawerClose(onClose, () => {
+                    void signOut();
+                  });
+                }}
+              />
+            </View>
+          </ScrollView>
           </View>
         </Animated.View>
       </View>
@@ -369,11 +400,25 @@ const styles = StyleSheet.create({
     width: DRAWER_WIDTH,
     backgroundColor: Colors.light.backgroundRoot,
     paddingHorizontal: Spacing.lg,
+    flexDirection: "column",
+  },
+  drawerContent: {
+    flex: 1,
+    minHeight: 0,
+  },
+  menuScroll: {
+    flex: 1,
+    minHeight: 0,
   },
   header: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 10,
+    flexShrink: 0,
+  },
+  backButton: {
+    padding: 4,
   },
   closeButton: {
     padding: 4,
@@ -384,6 +429,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.light.brownLight,
     marginBottom: 16,
+    flexShrink: 0,
   },
   avatarContainer: {
     marginBottom: 12,
@@ -395,6 +441,11 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.light.accent}15`,
     justifyContent: "center",
     alignItems: "center",
+  },
+  avatarImage: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
   },
   userName: {
     fontSize: 20,
@@ -461,7 +512,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   signOutSection: {
-    marginTop: "auto",
+    marginTop: Spacing.sm,
     borderTopWidth: 1,
     borderTopColor: Colors.light.brownLight,
     paddingTop: 12,

@@ -12,7 +12,7 @@ import GuidedReflectionScreen from "@/screens/GuidedReflectionScreen";
 
 export type MoodStackParamList = {
   MoodMain: undefined;
-  JournalEditor: { prompt?: string } | undefined;
+  JournalEditor: { prompt?: string; entryId?: string } | undefined;
   JournalEntriesList: undefined;
   JournalEntryView: { entryId: string };
   Gratitude: undefined;

@@ -1,8 +1,16 @@
 import { Platform } from "react-native";
 import { NativeStackNavigationOptions } from "@react-navigation/native-stack";
-import { isLiquidGlassAvailable } from "expo-glass-effect";
-
 import { useTheme } from "@/hooks/useTheme";
+
+function safeLiquidGlassAvailable(): boolean {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { isLiquidGlassAvailable } = require("expo-glass-effect");
+    return isLiquidGlassAvailable();
+  } catch {
+    return false;
+  }
+}
 
 interface UseScreenOptionsParams {
   transparent?: boolean;
@@ -11,12 +19,14 @@ interface UseScreenOptionsParams {
 export function useScreenOptions({
   transparent = true,
 }: UseScreenOptionsParams = {}): NativeStackNavigationOptions {
-  const { theme, isDark } = useTheme();
+  const { theme } = useTheme();
 
   return {
     headerTitleAlign: "center",
     headerTransparent: transparent,
-    headerBlurEffect: isDark ? "dark" : "light",
+    ...(Platform.OS === "ios"
+      ? { headerBlurEffect: "light" }
+      : {}),
     headerTintColor: theme.text,
     headerStyle: {
       backgroundColor: Platform.select({
@@ -27,7 +37,7 @@ export function useScreenOptions({
     },
     gestureEnabled: true,
     gestureDirection: "horizontal",
-    fullScreenGestureEnabled: isLiquidGlassAvailable() ? false : true,
+    fullScreenGestureEnabled: safeLiquidGlassAvailable() ? false : true,
     contentStyle: {
       backgroundColor: theme.backgroundRoot,
     },

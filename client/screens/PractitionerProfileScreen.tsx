@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -9,8 +9,15 @@ import Svg, { Path } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 import { useDataContext } from "@/context/DataContext";
+import { useFavorites } from "@/context/FavoritesContext";
+import { useReviews } from "@/context/ReviewsContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import VerifiedBadge, { isVerifiedPractitioner } from "@/components/VerifiedBadge";
+import TrustIndicators from "@/components/TrustIndicators";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   PractitionerProfile: { practitionerId: string };
@@ -54,14 +61,21 @@ export default function PractitionerProfileScreen() {
   const { practitionerId } = route.params;
   const [bioExpanded, setBioExpanded] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
 
+  const { session } = useAuth();
   const { practitionerCategories } = useDataContext();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { getPractitionerStats } = useReviews();
+  const [liveRating, setLiveRating] = useState<number | null>(null);
+  const [liveReviewCount, setLiveReviewCount] = useState<number | null>(null);
   const practitioner = practitionerCategories.flatMap((c) => c.practitioners).find((p) => p.id === practitionerId);
 
   if (!practitioner) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -80,18 +94,85 @@ export default function PractitionerProfileScreen() {
     ? practitioner.bio.substring(0, 150).trim() + "..." 
     : practitioner.bio;
 
+  const favorited = isFavorite("practitioner", practitionerId);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    getPractitionerStats(practitionerId).then((stats) => {
+      setLiveRating(stats.reviewCount > 0 ? stats.avgRating : null);
+      setLiveReviewCount(stats.reviewCount);
+    });
+  }, [practitionerId, getPractitionerStats]);
+
+  const displayRating =
+    liveReviewCount != null && liveReviewCount > 0
+      ? (liveRating ?? practitioner.rating)
+      : practitioner.rating;
+  const displayReviewCount =
+    liveReviewCount != null ? liveReviewCount : practitioner.reviewCount;
+
+  const handleToggleFavorite = async () => {
+    if (!isSupabaseConfigured()) {
+      setFavoriteError("Sign in with Supabase configured to save favorites.");
+      return;
+    }
+    if (!session?.user) {
+      setFavoriteError("Sign in to save favorites.");
+      return;
+    }
+    setFavoriteBusy(true);
+    setFavoriteError(null);
+    const ok = await toggleFavorite({
+      itemType: "practitioner",
+      itemId: practitionerId,
+      itemDbId: practitionerId,
+      displayName: practitioner.name,
+      displaySubtitle: practitioner.subcategory || practitioner.category,
+    });
+    if (!ok) {
+      setFavoriteError("Could not update favorite.");
+    }
+    setFavoriteBusy(false);
+  };
+
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
         <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={styles.headerIconButton}
+            onPress={handleToggleFavorite}
+            disabled={favoriteBusy}
+            testID="button-toggle-favorite"
+          >
+            {favoriteBusy ? (
+              <ActivityIndicator size="small" color={Colors.light.accent} />
+            ) : (
+              <Feather
+                name="heart"
+                size={22}
+                color={favorited ? "#D4534A" : Colors.light.accent}
+              />
+            )}
+          </Pressable>
+          <Pressable
+            style={styles.headerIconButton}
+            onPress={() => navigation.navigate("Notifications" as never)}
+            testID="button-notifications"
+          >
+            <Feather name="bell" size={22} color={Colors.light.accent} />
+          </Pressable>
+        </View>
       </View>
+
+      {favoriteError ? (
+        <ThemedText style={styles.favoriteError}>{favoriteError}</ThemedText>
+      ) : null}
 
       <ScrollView
         style={styles.scrollView}
@@ -105,19 +186,31 @@ export default function PractitionerProfileScreen() {
             resizeMode="cover"
           />
           <ThemedText style={styles.name}>{practitioner.name}</ThemedText>
+          {isVerifiedPractitioner(practitioner) ? (
+            <View style={styles.badgeWrap}>
+              <VerifiedBadge kind="practitioner" />
+            </View>
+          ) : null}
           <ThemedText style={styles.categoryLabel}>
             {getCategoryLabel(practitioner.category)}
           </ThemedText>
           <View style={styles.ratingRow}>
             <StarFilled size={14} />
             <ThemedText style={styles.ratingText}>
-              {practitioner.rating.toFixed(1)}
+              {displayRating.toFixed(1)}
             </ThemedText>
             <ThemedText style={styles.reviewCount}>
-              {practitioner.reviewCount} reviews
+              {displayReviewCount} reviews
             </ThemedText>
           </View>
         </View>
+
+        {isVerifiedPractitioner(practitioner) ? (
+          <View style={styles.section}>
+            <ThemedText style={styles.sectionLabel}>Trust & Verification</ThemedText>
+            <TrustIndicators kind="practitioner" />
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <ThemedText style={styles.sectionLabel}>About</ThemedText>
@@ -196,6 +289,17 @@ const styles = StyleSheet.create({
   headerCenter: {
     flex: 1,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  favoriteError: {
+    fontSize: 13,
+    color: "#8B3A3A",
+    textAlign: "center",
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
   titleSection: {
     alignItems: "center",
     marginBottom: Spacing.lg,
@@ -231,6 +335,9 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     marginBottom: 4,
     textAlign: "center",
+  },
+  badgeWrap: {
+    marginBottom: Spacing.sm,
   },
   categoryLabel: {
     fontSize: 14,

@@ -24,12 +24,14 @@ export default function MainTabNavigator26() {
         component={HomeStackNavigator}
         options={{
           title: "Home",
-          icon: {
-            sfSymbolName: "house",
-          },
-          selectedIcon: {
-            sfSymbolName: "house.fill",
-          },
+          ...( {
+            icon: {
+              sfSymbolName: "house",
+            },
+            selectedIcon: {
+              sfSymbolName: "house.fill",
+            },
+          } as Record<string, unknown>),
         }}
       />
       <Tab.Screen
@@ -37,12 +39,14 @@ export default function MainTabNavigator26() {
         component={ProfileStackNavigator}
         options={{
           title: "Profile",
-          icon: {
-            sfSymbolName: "person",
-          },
-          selectedIcon: {
-            sfSymbolName: "person.fill",
-          },
+          ...( {
+            icon: {
+              sfSymbolName: "person",
+            },
+            selectedIcon: {
+              sfSymbolName: "person.fill",
+            },
+          } as Record<string, unknown>),
         }}
       />
     </Tab.Navigator>

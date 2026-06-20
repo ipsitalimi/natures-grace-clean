@@ -1,17 +1,22 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useJournal } from "@/context/JournalContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import type { MoodStackParamList } from "@/navigation/MoodStackNavigator";
 
 type RouteParams = {
   JournalEntryView: { entryId: string };
 };
+
+type NavigationProp = NativeStackNavigationProp<MoodStackParamList, "JournalEntryView">;
 
 function getMoodColor(mood: string): string {
   switch (mood) {
@@ -26,17 +31,50 @@ function getMoodColor(mood: string): string {
 export default function JournalEntryViewScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProp<RouteParams, "JournalEntryView">>();
   const { entryId } = route.params;
-  const { entries } = useJournal();
+  const { entries, journalLoading, journalError } = useJournal();
 
   const entry = entries.find((e) => e.id === entryId);
+
+  if (journalLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+          <View style={styles.headerCenter} />
+        </View>
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={Colors.light.accent} />
+          <ThemedText style={styles.emptyText}>Loading entry…</ThemedText>
+        </View>
+      </View>
+    );
+  }
+
+  if (journalError) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+          <View style={styles.headerCenter} />
+        </View>
+        <View style={styles.emptyState}>
+          <ThemedText style={styles.emptyText}>{journalError}</ThemedText>
+        </View>
+      </View>
+    );
+  }
 
   if (!entry) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -55,12 +93,18 @@ export default function JournalEntryViewScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
         <View style={styles.headerCenter} />
-        <View style={styles.headerIconButton} />
+        <Pressable
+          style={styles.headerIconButton}
+          onPress={() => navigation.navigate("JournalEditor", { entryId })}
+          testID="button-edit-entry"
+        >
+          <Feather name="edit-2" size={20} color={Colors.light.accent} />
+        </Pressable>
       </View>
 
       <View style={styles.titleSection}>

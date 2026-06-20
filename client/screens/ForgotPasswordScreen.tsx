@@ -1,26 +1,55 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TextInput, Pressable, Image } from "react-native";
+import { View, StyleSheet, TextInput, Pressable, Image, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
 
 import appLogo from "../../assets/images/natures-grace-logo.png";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 export default function ForgotPasswordScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const { resetPassword, isConfigured } = useAuth();
 
-  const handleSendLink = () => {
+  const handleSendLink = async () => {
+    setError("");
+    if (!email.trim()) {
+      setError("Enter your email address.");
+      return;
+    }
+    if (!isConfigured) {
+      setError("Password reset is unavailable. Supabase is not configured.");
+      return;
+    }
+    setSubmitting(true);
+    const result = await resetPassword(email);
+    setSubmitting(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
     setSent(true);
   };
 
   return (
-    <View style={[styles.container, { paddingTop: 20, paddingBottom: insets.bottom + 20 }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: getAuthScreenPaddingTop(insets.top),
+          paddingBottom: getScrollBottomPadding(insets.bottom, 20),
+        },
+      ]}
+    >
       <View style={styles.topBar}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
@@ -54,12 +83,19 @@ export default function ForgotPasswordScreen() {
             />
           </View>
 
+          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
           <Pressable
-            style={styles.primaryButton}
+            style={[styles.primaryButton, submitting && styles.primaryButtonDisabled]}
             onPress={handleSendLink}
+            disabled={submitting}
             testID="button-send-reset"
           >
-            <ThemedText style={styles.primaryButtonText}>Send Reset Link</ThemedText>
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.primaryButtonText}>Send Reset Link</ThemedText>
+            )}
           </Pressable>
 
           {sent ? (
@@ -154,6 +190,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     marginTop: Spacing.sm,
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  primaryButtonDisabled: {
+    opacity: 0.7,
   },
   primaryButtonText: {
     fontSize: 16,
@@ -174,6 +215,11 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     fontWeight: "500",
     flex: 1,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#C0392B",
+    textAlign: "center",
   },
   bottomSection: {
     flexDirection: "row",

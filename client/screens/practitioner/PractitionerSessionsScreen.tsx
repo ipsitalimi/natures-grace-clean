@@ -1,16 +1,15 @@
-import React from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import React, { useState } from "react";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import {
-  practitionerSessions,
-  type PractitionerSession,
-} from "@/data/practitionerMockData";
+import AppHeader from "@/components/AppHeader";
+import PractitionerDrawer from "@/components/PractitionerDrawer";
+import type { PractitionerSession } from "@/data/practitionerBookings";
+import { usePractitionerContext } from "@/context/PractitionerContext";
 
 function getStatusColor(status: PractitionerSession["status"]) {
   switch (status) {
@@ -25,46 +24,46 @@ function getStatusColor(status: PractitionerSession["status"]) {
 
 export default function PractitionerSessionsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const [drawerVisible, setDrawerVisible] = useState(false);
+  const { sessions, loading } = usePractitionerContext();
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
-        <View style={styles.headerRow}>
-          <View style={styles.headerLeft} />
-          <ThemedText style={styles.screenTitle}>Sessions</ThemedText>
-          <View style={styles.headerRight}>
-            <Pressable
-              style={styles.headerIconButton}
-              onPress={() => {}}
-              testID="button-sessions-callback"
-            >
-              <Feather name="phone-call" size={20} color={Colors.light.accent} />
-            </Pressable>
-            <Pressable
-              style={styles.headerIconButton}
-              onPress={() => {}}
-              testID="button-sessions-notifications"
-            >
-              <Feather name="bell" size={20} color={Colors.light.accent} />
-            </Pressable>
-          </View>
-        </View>
-      </View>
+      <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
+
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 36 }]}
         showsVerticalScrollIndicator={false}
       >
-        {practitionerSessions.map((session) => {
+        <View style={styles.titleSection}>
+          <ThemedText style={styles.pageTitle}>Sessions</ThemedText>
+        </View>
+
+        {loading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.emptyText}>Loading sessions…</ThemedText>
+          </View>
+        ) : sessions.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Feather name="calendar" size={32} color={Colors.light.textMuted} />
+            <ThemedText style={styles.emptyTitle}>No sessions yet</ThemedText>
+            <ThemedText style={styles.emptyText}>
+              Upcoming and completed bookings will appear here.
+            </ThemedText>
+          </View>
+        ) : (
+        sessions.map((session) => {
           const sc = getStatusColor(session.status);
           return (
             <Pressable
               key={session.id}
               style={styles.sessionCard}
               onPress={() =>
-                (navigation as any).navigate("PractitionerSessionDetail", {
+                navigation.navigate("PractitionerSessionDetail", {
                   sessionId: session.id,
                 })
               }
@@ -102,7 +101,8 @@ export default function PractitionerSessionsScreen() {
               </View>
             </Pressable>
           );
-        })}
+        })
+        )}
       </ScrollView>
     </View>
   );
@@ -113,45 +113,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerBar: {
+  scrollView: { flex: 1 },
+  scrollContent: {
     paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    backgroundColor: Colors.light.backgroundRoot,
+    paddingTop: Spacing.md,
   },
-  headerRow: {
-    flexDirection: "row",
+  titleSection: {
     alignItems: "center",
-    justifyContent: "space-between",
+    marginBottom: Spacing.lg + 8,
   },
-  headerLeft: {
-    width: 72,
-  },
-  headerRight: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  screenTitle: {
-    fontSize: 28,
+  pageTitle: {
+    fontSize: 34,
     fontWeight: "600",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
+    letterSpacing: 0.5,
     textAlign: "center",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
   },
   sessionCard: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
     padding: Spacing.lg,
     marginBottom: Spacing.md,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 2,
   },
   cardTop: {
     flexDirection: "row",
@@ -173,18 +161,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: Spacing.md,
   },
-  cardInfo: {
-    flex: 1,
-  },
+  cardInfo: { flex: 1 },
   userName: {
     fontSize: 15,
     fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
   },
   serviceText: {
     fontSize: 13,
-    fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
   },
   statusBadge: {
@@ -196,7 +180,6 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 11,
     fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
   },
   cardBottom: {
     flexDirection: "row",
@@ -209,7 +192,23 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 12,
-    fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing["3xl"],
+    gap: 10,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: Colors.light.text,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    paddingHorizontal: Spacing.xl,
   },
 });

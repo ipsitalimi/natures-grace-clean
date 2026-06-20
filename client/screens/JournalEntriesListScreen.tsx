@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, Pressable, ScrollView } from "react-native";
+import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -9,6 +9,7 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useJournal } from "@/context/JournalContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   JournalEntryView: { entryId: string };
@@ -30,11 +31,11 @@ export default function JournalEntriesListScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const { entries } = useJournal();
+  const { entries, journalLoading, journalError } = useJournal();
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -48,7 +49,16 @@ export default function JournalEntriesListScreen() {
         <ThemedText style={styles.pageTitle}>Recent Entries</ThemedText>
       </View>
 
-      {entries.length > 0 ? (
+      {journalLoading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={Colors.light.accent} />
+          <ThemedText style={styles.emptyText}>Loading entries…</ThemedText>
+        </View>
+      ) : journalError ? (
+        <View style={styles.emptyState}>
+          <ThemedText style={styles.emptyText}>{journalError}</ThemedText>
+        </View>
+      ) : entries.length > 0 ? (
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}

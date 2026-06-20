@@ -11,6 +11,8 @@ import { Colors, Spacing } from "@/constants/theme";
 import PractitionerCard from "@/components/PractitionerCard";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   CategoryDetail: { categoryId: string; subcategoryName?: string };
@@ -29,12 +31,16 @@ export default function CategoryDetailScreen() {
   const [drawerVisible, setDrawerVisible] = useState(false);
 
   const { practitionerCategories, practitionersLoading } = useDataContext();
+  const { filterApprovedPractitioners } = usePlatformConfig();
   const category = practitionerCategories.find((c) => c.id === categoryId);
+  const approvedPractitioners = category
+    ? filterApprovedPractitioners(category.practitioners)
+    : [];
 
   if (!category) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -51,7 +57,7 @@ export default function CategoryDetailScreen() {
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -80,9 +86,9 @@ export default function CategoryDetailScreen() {
         ) : (
           (() => {
             const filtered = subcategoryName
-              ? category.practitioners.filter((p) => p.subcategory === subcategoryName)
-              : category.practitioners;
-            const displayList = filtered.length > 0 ? filtered : category.practitioners;
+              ? approvedPractitioners.filter((p) => p.subcategory === subcategoryName)
+              : approvedPractitioners;
+            const displayList = filtered.length > 0 ? filtered : approvedPractitioners;
             return displayList.map((practitioner) => (
               <PractitionerCard
                 key={practitioner.id}

@@ -1,3 +1,7 @@
+import { config as loadEnv } from "dotenv";
+
+loadEnv();
+
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
@@ -22,9 +26,24 @@ function setupCors(app: express.Application) {
     }
 
     if (process.env.REPLIT_DOMAINS) {
-      process.env.REPLIT_DOMAINS.split(",").forEach((d) => {
+      process.env.REPLIT_DOMAINS.split(",").forEach((d: string) => {
         origins.add(`https://${d.trim()}`);
       });
+    }
+
+    if (process.env.CORS_ALLOWED_ORIGINS) {
+      process.env.CORS_ALLOWED_ORIGINS.split(",").forEach((entry: string) => {
+        const trimmed = entry.trim();
+        if (trimmed) origins.add(trimmed);
+      });
+    }
+
+    if (process.env.EXPO_PUBLIC_DOMAIN) {
+      const domain = process.env.EXPO_PUBLIC_DOMAIN.trim().replace(/^https?:\/\//, "");
+      if (domain) {
+        origins.add(`https://${domain}`);
+        origins.add(`http://${domain}`);
+      }
     }
 
     const origin = req.header("origin");
@@ -40,7 +59,10 @@ function setupCors(app: express.Application) {
         "Access-Control-Allow-Methods",
         "GET, POST, PUT, DELETE, OPTIONS",
       );
-      res.header("Access-Control-Allow-Headers", "Content-Type");
+      res.header(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization, X-Razorpay-Signature",
+      );
       res.header("Access-Control-Allow-Credentials", "true");
     }
 
@@ -226,6 +248,9 @@ function setupErrorHandler(app: express.Application) {
 }
 
 (async () => {
+  const { assertServerProductionEnv } = await import("./lib/productionEnv");
+  assertServerProductionEnv();
+
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);

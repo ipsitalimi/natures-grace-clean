@@ -1,18 +1,34 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, FlatList } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  FlatList,
+  Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { formatInr } from "@/lib/formatCurrency";
 import {
-  sellerOrders,
   getOrderStatusColor,
   getPaymentStatusColor,
+  getNextOrderStatus,
+  getOrderAdvanceConfirmMessage,
   type OrderStatus,
   type SellerOrder,
-} from "@/data/sellerMockData";
+} from "@/data/orders";
+import { useOrdersContext } from "@/context/OrdersContext";
 
 const TABS: OrderStatus[] = ["Pending", "Packed", "Shipped", "Delivered", "Cancelled"];
 
@@ -37,12 +53,24 @@ function EmptyState({ status }: { status: OrderStatus }) {
   );
 }
 
-function OrderCard({ order }: { order: SellerOrder }) {
+function OrderCard({
+  order,
+  onAdvanceStatus,
+}: {
+  order: SellerOrder;
+  onAdvanceStatus: () => void;
+}) {
   const statusColor = getOrderStatusColor(order.status);
   const payColor = getPaymentStatusColor(order.paymentStatus);
+  const nextStatus = getNextOrderStatus(order.status);
+  const canAdvance = nextStatus !== null;
 
   return (
-    <View style={styles.orderCard} testID={`order-card-${order.id}`}>
+    <Pressable
+      style={styles.orderCard}
+      onPress={canAdvance ? onAdvanceStatus : undefined}
+      testID={`order-card-${order.id}`}
+    >
       <View style={styles.orderTopRow}>
         <View style={styles.orderProductThumb}>
           <Feather name="package" size={20} color={Colors.light.textMuted} />
@@ -79,9 +107,102 @@ function OrderCard({ order }: { order: SellerOrder }) {
             </View>
           ) : null}
         </View>
-        <ThemedText style={styles.orderPrice}>Rs. {order.price.toLocaleString()}</ThemedText>
+        <ThemedText style={styles.orderPrice}>{formatInr(order.price)}</ThemedText>
       </View>
-    </View>
+
+      {canAdvance ? (
+        <View style={styles.advanceHint}>
+          <Feather name="chevron-right" size={14} color={Colors.light.accent} />
+          <ThemedText style={styles.advanceHintText}>
+            Tap to mark as {nextStatus.toLowerCase()}
+          </ThemedText>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function ShipOrderModal({
+  order,
+  visible,
+  submitting,
+  shipError,
+  courier,
+  trackingNumber,
+  onCourierChange,
+  onTrackingChange,
+  onCancel,
+  onConfirm,
+}: {
+  order: SellerOrder | null;
+  visible: boolean;
+  submitting: boolean;
+  shipError: string;
+  courier: string;
+  trackingNumber: string;
+  onCourierChange: (v: string) => void;
+  onTrackingChange: (v: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <KeyboardAvoidingView
+        style={styles.modalOverlay}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={onCancel} />
+        <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
+          <ThemedText style={styles.modalTitle}>Mark as shipped</ThemedText>
+          <ThemedText style={styles.modalSubtitle}>
+            Order {order?.orderId} — add tracking so the buyer can follow delivery.
+          </ThemedText>
+
+          <ThemedText style={styles.fieldLabel}>Courier</ThemedText>
+          <TextInput
+            style={styles.modalInput}
+            value={courier}
+            onChangeText={onCourierChange}
+            placeholder="e.g. Delhivery, Blue Dart"
+            placeholderTextColor={Colors.light.textMuted}
+            testID="input-ship-courier"
+          />
+
+          <ThemedText style={styles.fieldLabel}>Tracking number</ThemedText>
+          <TextInput
+            style={styles.modalInput}
+            value={trackingNumber}
+            onChangeText={onTrackingChange}
+            placeholder="Required"
+            placeholderTextColor={Colors.light.textMuted}
+            autoCapitalize="characters"
+            testID="input-ship-tracking"
+          />
+
+          {shipError ? <ThemedText style={styles.modalError}>{shipError}</ThemedText> : null}
+
+          <View style={styles.modalActions}>
+            <Pressable style={styles.modalCancelBtn} onPress={onCancel} disabled={submitting}>
+              <ThemedText style={styles.modalCancelText}>Cancel</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.modalConfirmBtn, submitting && styles.modalConfirmDisabled]}
+              onPress={onConfirm}
+              disabled={submitting}
+              testID="button-confirm-ship"
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <ThemedText style={styles.modalConfirmText}>Mark shipped</ThemedText>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -89,15 +210,71 @@ export default function SellerOrdersScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState<OrderStatus>("Pending");
+  const { orders, advanceOrderStatus, ordersLoading } = useOrdersContext();
+  const [shipOrder, setShipOrder] = useState<SellerOrder | null>(null);
+  const [courier, setCourier] = useState("");
+  const [trackingNumber, setTrackingNumber] = useState("");
+  const [shipError, setShipError] = useState("");
+  const [shipSubmitting, setShipSubmitting] = useState(false);
 
-  const filteredOrders = sellerOrders.filter((o) => o.status === activeTab);
+  const filteredOrders = orders.filter((o) => o.status === activeTab);
   const counts = TABS.reduce((acc, tab) => {
-    acc[tab] = sellerOrders.filter((o) => o.status === tab).length;
+    acc[tab] = orders.filter((o) => o.status === tab).length;
     return acc;
   }, {} as Record<OrderStatus, number>);
 
+  const closeShipModal = () => {
+    setShipOrder(null);
+    setCourier("");
+    setTrackingNumber("");
+    setShipError("");
+    setShipSubmitting(false);
+  };
+
+  const handleAdvanceRequest = (order: SellerOrder) => {
+    const next = getNextOrderStatus(order.status);
+    if (!next) return;
+
+    if (next === "Shipped") {
+      setShipOrder(order);
+      setCourier("");
+      setTrackingNumber("");
+      setShipError("");
+      return;
+    }
+
+    Alert.alert(
+      "Update order",
+      getOrderAdvanceConfirmMessage(order.orderId, next),
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: () => {
+            void advanceOrderStatus(order.id);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleConfirmShip = async () => {
+    if (!shipOrder || shipSubmitting) return;
+    if (!trackingNumber.trim()) {
+      setShipError("Enter a tracking number before marking as shipped.");
+      return;
+    }
+    setShipSubmitting(true);
+    setShipError("");
+    await advanceOrderStatus(shipOrder.id, {
+      courier: courier.trim() || undefined,
+      trackingNumber: trackingNumber.trim(),
+    });
+    closeShipModal();
+  };
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
@@ -124,7 +301,9 @@ export default function SellerOrdersScreen() {
             </ThemedText>
             {counts[tab] > 0 ? (
               <View style={[styles.tabBadge, activeTab === tab && styles.tabBadgeActive]}>
-                <ThemedText style={[styles.tabBadgeText, activeTab === tab && styles.tabBadgeTextActive]}>
+                <ThemedText
+                  style={[styles.tabBadgeText, activeTab === tab && styles.tabBadgeTextActive]}
+                >
                   {counts[tab]}
                 </ThemedText>
               </View>
@@ -133,17 +312,39 @@ export default function SellerOrdersScreen() {
         ))}
       </ScrollView>
 
-      <FlatList
-        data={filteredOrders}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <OrderCard order={item} />}
-        contentContainerStyle={[
-          styles.listContent,
-          filteredOrders.length === 0 && styles.listEmpty,
-          { paddingBottom: insets.bottom + 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={<EmptyState status={activeTab} />}
+      {ordersLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading orders…</ThemedText>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredOrders}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <OrderCard order={item} onAdvanceStatus={() => handleAdvanceRequest(item)} />
+          )}
+          contentContainerStyle={[
+            styles.listContent,
+            filteredOrders.length === 0 && styles.listEmpty,
+            { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
+          ]}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={<EmptyState status={activeTab} />}
+        />
+      )}
+
+      <ShipOrderModal
+        order={shipOrder}
+        visible={shipOrder !== null}
+        submitting={shipSubmitting}
+        shipError={shipError}
+        courier={courier}
+        trackingNumber={trackingNumber}
+        onCourierChange={setCourier}
+        onTrackingChange={setTrackingNumber}
+        onCancel={closeShipModal}
+        onConfirm={() => void handleConfirmShip()}
       />
     </View>
   );
@@ -230,6 +431,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
   },
+  loadingState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingTop: Spacing["2xl"],
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.light.textMuted,
+  },
   orderCard: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
@@ -303,6 +515,19 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     marginLeft: Spacing.md,
   },
+  advanceHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: `${Colors.light.divider}40`,
+  },
+  advanceHintText: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.accent,
+  },
   emptyState: {
     alignItems: "center",
     paddingVertical: 60,
@@ -331,5 +556,86 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     textAlign: "center",
     lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.4)",
+  },
+  modalCard: {
+    backgroundColor: Colors.light.backgroundRoot,
+    borderTopLeftRadius: BorderRadius.md,
+    borderTopRightRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.text,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    lineHeight: 20,
+    marginBottom: Spacing.sm,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.text,
+    marginTop: Spacing.xs,
+  },
+  modalInput: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    fontSize: 15,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.text,
+  },
+  modalError: {
+    fontSize: 13,
+    color: "#C0392B",
+    marginTop: Spacing.xs,
+  },
+  modalActions: {
+    flexDirection: "row",
+    gap: Spacing.md,
+    marginTop: Spacing.lg,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.light.cardBackground,
+    alignItems: "center",
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.textMuted,
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.light.button,
+    alignItems: "center",
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  modalConfirmDisabled: {
+    opacity: 0.7,
+  },
+  modalConfirmText: {
+    fontSize: 15,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
   },
 });

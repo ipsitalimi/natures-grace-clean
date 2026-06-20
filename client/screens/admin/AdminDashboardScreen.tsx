@@ -1,16 +1,15 @@
 import React from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { AdminScreenName } from "./AdminLayout";
-import {
-  adminSessions,
-  adminActivities,
-  type AdminSession,
-  type AdminActivity,
-} from "@/data/adminMockData";
+import type { AdminSessionStatus } from "@/data/adminSessions";
+import type { ActivityLogActionType } from "@/data/activityLog";
+import { useAdminSessions } from "@/context/AdminSessionsContext";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 interface StatCardData {
   label: string;
@@ -20,24 +19,25 @@ interface StatCardData {
   trendColor: string;
 }
 
-
-const activityIcons: Record<AdminActivity["type"], keyof typeof Feather.glyphMap> = {
+const activityIcons: Record<ActivityLogActionType, keyof typeof Feather.glyphMap> = {
   booking: "calendar",
   user: "user-plus",
   review: "star",
   event: "map-pin",
   store: "package",
+  settings: "settings",
 };
 
-const activityColors: Record<AdminActivity["type"], string> = {
+const activityColors: Record<ActivityLogActionType, string> = {
   booking: "#013220",
   user: "#2E86C1",
   review: "#E67E22",
   event: "#8E44AD",
   store: "#16A085",
+  settings: "#6B7280",
 };
 
-function getStatusBadgeStyle(status: AdminSession["status"]) {
+function getStatusBadgeStyle(status: AdminSessionStatus) {
   switch (status) {
     case "Upcoming":
       return { backgroundColor: "#013220" };
@@ -64,16 +64,32 @@ interface AdminDashboardProps {
 }
 
 export default function AdminDashboardScreen({ onNavigate, onAddPractitioner }: AdminDashboardProps) {
-  const { events, practitionerCategories, storeCategories, resources } = useDataContext();
+  const { events, practitionerCategories, storeCategories, resources, dataLoading } = useDataContext();
+  const {
+    activityLog,
+    activityLogLoading,
+    activityLogError,
+    refreshActivityLog,
+  } = usePlatformConfig();
+  const {
+    upcomingSessions,
+    sessionsLoading,
+    sessionsError,
+    refreshUpcomingSessions,
+  } = useAdminSessions();
   const practitionerCount = practitionerCategories.flatMap((c) => c.practitioners).length;
   const productCount = storeCategories.flatMap((c) => c.products).length;
+  const activeEventCount = events.filter((e) => e.status === "Active").length;
+  const publishedResourceCount = resources.filter((r) => r.published !== false).length;
 
   const statCards: (StatCardData & { screen: AdminScreenName })[] = [
-    { label: "Events", value: events.length, icon: "calendar", trend: `${events.filter((e) => e.status === "Active").length} active`, trendColor: "#013220", screen: "Community" },
-    { label: "Practitioners", value: practitionerCount, icon: "heart", trend: `${practitionerCategories.length} categories`, trendColor: "#013220", screen: "Practitioners" },
-    { label: "Products", value: productCount, icon: "shopping-bag", trend: `${storeCategories.length} categories`, trendColor: "#013220", screen: "Store" },
-    { label: "Resources", value: resources.length, icon: "book", trend: "Articles, Audio, Practices", trendColor: "#013220", screen: "Resources" },
+    { label: "Events", value: events.length, icon: "calendar", trend: activeEventCount === 1 ? "1 active" : `${activeEventCount} active`, trendColor: "#013220", screen: "Community" },
+    { label: "Practitioners", value: practitionerCount, icon: "heart", trend: practitionerCount === 0 ? "None yet" : practitionerCount === 1 ? "1 listed" : `${practitionerCount} listed`, trendColor: "#013220", screen: "Practitioners" },
+    { label: "Products", value: productCount, icon: "shopping-bag", trend: productCount === 0 ? "None yet" : `${storeCategories.length} ${storeCategories.length === 1 ? "category" : "categories"}`, trendColor: "#013220", screen: "Store" },
+    { label: "Resources", value: resources.length, icon: "book", trend: publishedResourceCount === 0 ? "None published" : `${publishedResourceCount} published`, trendColor: "#013220", screen: "Resources" },
   ];
+
+  const recentActivity = activityLog.slice(0, 6);
 
   return (
     <ScrollView
@@ -113,6 +129,12 @@ export default function AdminDashboardScreen({ onNavigate, onAddPractitioner }: 
       </View>
 
       <ThemedText style={styles.sectionTitle}>Today's Overview</ThemedText>
+      {dataLoading && isSupabaseConfigured() ? (
+        <View style={styles.overviewLoading}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.overviewLoadingText}>Loading catalog counts…</ThemedText>
+        </View>
+      ) : null}
       <View style={styles.statsGrid}>
         {statCards.map((card) => (
           <Pressable key={card.label} style={styles.statCard} onPress={() => onNavigate?.(card.screen)}>
@@ -129,66 +151,134 @@ export default function AdminDashboardScreen({ onNavigate, onAddPractitioner }: 
       </View>
 
       <ThemedText style={styles.sectionTitle}>Upcoming Sessions</ThemedText>
-      {adminSessions.slice(0, 5).map((session) => (
-        <View key={session.id} style={styles.sessionCard}>
-          <View style={styles.sessionRow}>
-            <View style={styles.sessionAvatarCircle}>
-              <ThemedText style={styles.sessionAvatarText}>
-                {session.userName.charAt(0)}
-              </ThemedText>
-            </View>
-            <View style={styles.sessionInfo}>
-              <View style={styles.sessionNameRow}>
-                <ThemedText style={styles.sessionUser}>{session.userName}</ThemedText>
-                <View style={[styles.statusBadge, getStatusBadgeStyle(session.status)]}>
-                  <ThemedText style={styles.statusBadgeText}>{session.status}</ThemedText>
-                </View>
+
+      {sessionsLoading ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.sessionStateText}>Loading sessions…</ThemedText>
+          </View>
+        </View>
+      ) : sessionsError ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ThemedText style={styles.sessionErrorText}>{sessionsError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => refreshUpcomingSessions()}>
+              <ThemedText style={styles.retryBtnText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      ) : !isSupabaseConfigured() ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ThemedText style={styles.sessionStateText}>
+              Connect Supabase to load practitioner bookings.
+            </ThemedText>
+          </View>
+        </View>
+      ) : upcomingSessions.length === 0 ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ThemedText style={styles.sessionStateText}>
+              No upcoming sessions. Confirmed bookings will appear here.
+            </ThemedText>
+          </View>
+        </View>
+      ) : (
+        upcomingSessions.slice(0, 5).map((session) => (
+          <View key={session.id} style={styles.sessionCard}>
+            <View style={styles.sessionRow}>
+              <View style={styles.sessionAvatarCircle}>
+                <ThemedText style={styles.sessionAvatarText}>
+                  {session.userName.charAt(0)}
+                </ThemedText>
               </View>
-              <ThemedText style={styles.sessionPractitioner}>
-                with {session.practitionerName}
-              </ThemedText>
-              <View style={styles.sessionMeta}>
-                <View style={[styles.serviceChip, { backgroundColor: getServiceChipColor(session.service) + "18" }]}>
-                  <ThemedText style={[styles.serviceChipText, { color: getServiceChipColor(session.service) }]}>
-                    {session.service}
+              <View style={styles.sessionInfo}>
+                <View style={styles.sessionNameRow}>
+                  <ThemedText style={styles.sessionUser}>{session.userName}</ThemedText>
+                  <View style={[styles.statusBadge, getStatusBadgeStyle(session.status)]}>
+                    <ThemedText style={styles.statusBadgeText}>{session.status}</ThemedText>
+                  </View>
+                </View>
+                <ThemedText style={styles.sessionPractitioner}>
+                  with {session.practitionerName}
+                </ThemedText>
+                <View style={styles.sessionMeta}>
+                  <View style={[styles.serviceChip, { backgroundColor: getServiceChipColor(session.service) + "18" }]}>
+                    <ThemedText style={[styles.serviceChipText, { color: getServiceChipColor(session.service) }]}>
+                      {session.service}
+                    </ThemedText>
+                  </View>
+                </View>
+                <View style={styles.sessionDateRow}>
+                  <Feather name="clock" size={12} color={Colors.light.textMuted} />
+                  <ThemedText style={styles.sessionDateTime}>
+                    {session.date} at {session.time} ({session.duration})
                   </ThemedText>
                 </View>
               </View>
-              <View style={styles.sessionDateRow}>
-                <Feather name="clock" size={12} color={Colors.light.textMuted} />
-                <ThemedText style={styles.sessionDateTime}>
-                  {session.date} at {session.time} ({session.duration})
-                </ThemedText>
-              </View>
             </View>
           </View>
-        </View>
-      ))}
+        ))
+      )}
 
       <ThemedText style={styles.sectionTitle}>Recent Activity</ThemedText>
-      <View style={styles.activityCard}>
-        {adminActivities.slice(0, 6).map((activity, index) => (
-          <View
-            key={activity.id}
-            style={[
-              styles.activityRow,
-              index < Math.min(adminActivities.length, 6) - 1 ? styles.activityRowBorder : null,
-            ]}
-          >
-            <View style={[styles.activityIconCircle, { backgroundColor: activityColors[activity.type] + "18" }]}>
-              <Feather
-                name={activityIcons[activity.type]}
-                size={14}
-                color={activityColors[activity.type]}
-              />
-            </View>
-            <ThemedText style={styles.activityDescription} numberOfLines={2}>
-              {activity.description}
-            </ThemedText>
-            <ThemedText style={styles.activityTime}>{activity.timeAgo}</ThemedText>
+
+      {activityLogLoading ? (
+        <View style={styles.activityCard}>
+          <View style={styles.activityState}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.activityStateText}>Loading activity…</ThemedText>
           </View>
-        ))}
-      </View>
+        </View>
+      ) : activityLogError ? (
+        <View style={styles.activityCard}>
+          <View style={styles.activityState}>
+            <ThemedText style={styles.activityErrorText}>{activityLogError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => refreshActivityLog()}>
+              <ThemedText style={styles.retryBtnText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <View style={styles.activityCard}>
+          {!isSupabaseConfigured() ? (
+            <View style={styles.activityState}>
+              <ThemedText style={styles.activityStateText}>
+                Connect Supabase to persist admin activity.
+              </ThemedText>
+            </View>
+          ) : recentActivity.length === 0 ? (
+            <View style={styles.activityState}>
+              <ThemedText style={styles.activityStateText}>
+                No admin actions logged yet. Changes you make will appear here.
+              </ThemedText>
+            </View>
+          ) : (
+            recentActivity.map((activity, index) => (
+              <View
+                key={activity.id}
+                style={[
+                  styles.activityRow,
+                  index < recentActivity.length - 1 ? styles.activityRowBorder : null,
+                ]}
+              >
+                <View style={[styles.activityIconCircle, { backgroundColor: activityColors[activity.type] + "18" }]}>
+                  <Feather
+                    name={activityIcons[activity.type]}
+                    size={14}
+                    color={activityColors[activity.type]}
+                  />
+                </View>
+                <ThemedText style={styles.activityDescription} numberOfLines={2}>
+                  {activity.description}
+                </ThemedText>
+                <ThemedText style={styles.activityTime}>{activity.timeAgo}</ThemedText>
+              </View>
+            ))
+          )}
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -210,12 +300,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontFamily: "Nunito_700Bold",
     color: "#013220",
-  },
-  welcomeSubtitle: {
-    fontSize: 14,
-    fontFamily: "Nunito_400Regular",
-    color: Colors.light.textSecondary,
-    marginTop: 4,
   },
   statsGrid: {
     flexDirection: "row",
@@ -269,6 +353,17 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
     marginBottom: Spacing.md,
   },
+  overviewLoading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  overviewLoadingText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
   quickActionsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -299,6 +394,24 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 10,
     boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.06)",
+  },
+  sessionState: {
+    alignItems: "center",
+    paddingVertical: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  sessionStateText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  sessionErrorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    textAlign: "center",
   },
   sessionRow: {
     flexDirection: "row",
@@ -383,6 +496,36 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
     boxShadow: "0px 1px 3px rgba(0, 0, 0, 0.06)",
+  },
+  activityState: {
+    alignItems: "center",
+    paddingVertical: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  activityStateText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  activityErrorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    textAlign: "center",
+  },
+  retryBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.light.button,
+    borderRadius: BorderRadius.xs,
+  },
+  retryBtnText: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
   },
   activityRow: {
     flexDirection: "row",

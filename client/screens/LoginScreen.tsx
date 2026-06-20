@@ -1,46 +1,121 @@
-import React, { useState } from "react";
-import { View, StyleSheet, TextInput, Pressable, Image } from "react-native";
+import React, { useCallback, useState } from "react";
+import { View, StyleSheet, TextInput, Pressable, Image, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
+import { getAuthScreenPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import {
+  LOGIN_TAGLINE_KEY,
+  fetchSupportCopyMap,
+  getSupportCopyKey,
+} from "@/services/content/helpSupportService";
 
 import appLogo from "../../assets/images/natures-grace-logo.png";
 
-type AuthStackParamList = {
-  Login: undefined;
-  Signup: undefined;
-  ForgotPassword: undefined;
-  Main: undefined;
-  AdminDashboard: undefined;
-  PractitionerMain: undefined;
-  SellerMain: undefined;
-};
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
-type NavigationProp = NativeStackNavigationProp<AuthStackParamList>;
-
-const ADMIN_EMAIL = "naturesgrace.reiki@gmail.com";
-const ADMIN_PASS = "admins@123";
-const PRACTITIONER_EMAIL = "practitioner@naturesgrace.com";
-const PRACTITIONER_PASS = "pract@123";
-const SELLER_EMAIL = "seller@naturesgrace.com";
-const SELLER_PASS = "seller@123";
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Login">;
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
+  const { isConfigured, signIn, loading: authLoading, emailConfirmedMessage, consumeEmailConfirmedMessage } = useAuth();
+  const { syncSessionFromProfile, isAccountSuspended, refreshRemoteConfig } = usePlatformConfig();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [copyMap, setCopyMap] = useState<Record<string, string> | null>(null);
+
+  const loadLoginCopy = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setCopyMap(null);
+      return;
+    }
+    const res = await fetchSupportCopyMap();
+    if (res.ok) setCopyMap(res.map);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadLoginCopy();
+    }, [loadLoginCopy])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!emailConfirmedMessage) return;
+      const timer = setTimeout(() => consumeEmailConfirmedMessage(), 8000);
+      return () => clearTimeout(timer);
+    }, [emailConfirmedMessage, consumeEmailConfirmedMessage])
+  );
+
+  const taglineRaw = getSupportCopyKey(copyMap, LOGIN_TAGLINE_KEY);
+  const taglineDisplay = taglineRaw.trim();
+
+  const handleLogin = async () => {
+    setError("");
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail || !password) {
+      setError("Enter email and password.");
+      return;
+    }
+
+    if (isAccountSuspended(trimmedEmail)) {
+      setError("This account has been suspended. Contact support.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    if (!isConfigured || !isSupabaseConfigured()) {
+      setSubmitting(false);
+      setError("Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY to sign in.");
+      return;
+    }
+
+    const result = await signIn(trimmedEmail, password);
+    setSubmitting(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    if (result.profile) {
+      syncSessionFromProfile(result.profile);
+      if (result.profile.role === "Admin") {
+        await refreshRemoteConfig({ includeProfiles: true });
+      }
+    }
+    // RootNavigation handles post-login routing when session is restored.
+  };
+
+  const busy = submitting || authLoading;
 
   return (
-    <View style={[styles.container, { paddingTop: 40, paddingBottom: insets.bottom + 20 }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: getAuthScreenPaddingTop(insets.top),
+          paddingBottom: getScrollBottomPadding(insets.bottom, 20),
+        },
+      ]}
+    >
       <View style={styles.topSection}>
         <View style={styles.logoArea}>
           <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
-          <ThemedText style={styles.tagline}>Your calm wellness companion</ThemedText>
+          {taglineDisplay ? (
+            <ThemedText style={styles.tagline} testID="text-login-tagline">
+              {taglineDisplay}
+            </ThemedText>
+          ) : null}
         </View>
 
         <View style={styles.formArea}>
@@ -79,38 +154,38 @@ export default function LoginScreen() {
             <ThemedText style={styles.forgotText}>Forgot password?</ThemedText>
           </Pressable>
 
-          {error ? (
-            <ThemedText style={styles.errorText}>{error}</ThemedText>
+          {!isSupabaseConfigured() ? (
+            <ThemedText style={styles.configHint} testID="text-supabase-required">
+              Supabase env vars are required for sign-in.
+            </ThemedText>
           ) : null}
 
+          {emailConfirmedMessage ? (
+            <View style={styles.confirmationBox}>
+              <ThemedText style={styles.confirmationText}>{emailConfirmedMessage}</ThemedText>
+            </View>
+          ) : null}
+
+          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
           <Pressable
-            style={styles.primaryButton}
-            onPress={() => {
-              setError("");
-              const trimmedEmail = email.trim().toLowerCase();
-              if (trimmedEmail === ADMIN_EMAIL && password === ADMIN_PASS) {
-                navigation.reset({ index: 0, routes: [{ name: "AdminDashboard" }] });
-              } else if (trimmedEmail === PRACTITIONER_EMAIL && password === PRACTITIONER_PASS) {
-                navigation.reset({ index: 0, routes: [{ name: "PractitionerMain" }] });
-              } else if (trimmedEmail === SELLER_EMAIL && password === SELLER_PASS) {
-                navigation.reset({ index: 0, routes: [{ name: "SellerMain" }] });
-              } else {
-                navigation.reset({ index: 0, routes: [{ name: "Main" }] });
-              }
-            }}
+            style={[styles.primaryButton, busy && styles.primaryButtonDisabled]}
+            onPress={handleLogin}
+            disabled={busy || !isSupabaseConfigured()}
             testID="button-login"
           >
-            <ThemedText style={styles.primaryButtonText}>Login</ThemedText>
+            {busy ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.primaryButtonText}>Login</ThemedText>
+            )}
           </Pressable>
         </View>
       </View>
 
       <View style={styles.bottomSection}>
         <ThemedText style={styles.switchText}>Don't have an account? </ThemedText>
-        <Pressable
-          onPress={() => navigation.navigate("Signup")}
-          testID="link-create-account"
-        >
+        <Pressable onPress={() => navigation.navigate("Signup")} testID="link-create-account">
           <ThemedText style={styles.switchLink}>Create account</ThemedText>
         </Pressable>
       </View>
@@ -179,12 +254,35 @@ const styles = StyleSheet.create({
     color: "#C0392B",
     textAlign: "center",
   },
+  confirmationBox: {
+    backgroundColor: "#E8F5EE",
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  confirmationText: {
+    fontSize: 14,
+    color: Colors.light.accent,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  configHint: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
+    marginBottom: Spacing.xs,
+  },
   primaryButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.sm,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: Spacing.sm,
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  primaryButtonDisabled: {
+    opacity: 0.7,
   },
   primaryButtonText: {
     fontSize: 16,

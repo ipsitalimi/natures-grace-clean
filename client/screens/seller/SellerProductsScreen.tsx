@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { View, StyleSheet, ScrollView, Pressable, TextInput, FlatList } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, StyleSheet, ScrollView, Pressable, TextInput, FlatList, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -8,18 +7,24 @@ import Svg, { Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { formatInr } from "@/lib/formatCurrency";
+import ProductImageView from "@/components/ProductImageView";
 import AppHeader from "@/components/AppHeader";
 import SellerDrawer from "@/components/SellerDrawer";
 import {
-  sellerProducts,
   getStockColor,
   getCategoryShortName,
   SELLER_CATEGORIES,
   type SellerProduct,
 } from "@/data/sellerMockData";
+import { useDataContext } from "@/context/DataContext";
+import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 
 type ViewMode = "list" | "grid";
 type StatusFilter = "All" | "Active" | "Low Stock" | "Out of Stock";
+
+const STATUS_FILTER_GREEN = "#013220";
+const STATUS_FILTER_GREEN_SELECTED = "#011f17";
 
 function getCategoryColor(category: string): string {
   switch (category) {
@@ -50,7 +55,15 @@ function ProductListCard({ product, onPress, onEdit }: { product: SellerProduct;
 
   return (
     <Pressable style={styles.listCard} onPress={onPress} testID={`product-card-${product.id}`}>
-      <ImagePlaceholder size={58} />
+      {product.imageUrl ? (
+        <ProductImageView
+          product={{ id: product.id, imageUrl: product.imageUrl }}
+          containerStyle={{ width: 58, height: 58, borderRadius: 8, overflow: "hidden" }}
+          imageStyle={{ width: 58, height: 58 }}
+        />
+      ) : (
+        <ImagePlaceholder size={58} />
+      )}
       <View style={styles.listInfo}>
         <ThemedText style={styles.listName} numberOfLines={1}>{product.name}</ThemedText>
         <View style={styles.badgeRow}>
@@ -65,17 +78,7 @@ function ProductListCard({ product, onPress, onEdit }: { product: SellerProduct;
             </ThemedText>
           </View>
         </View>
-        <View style={styles.metricRow}>
-          <Feather name="eye" size={11} color={Colors.light.textMuted} />
-          <ThemedText style={styles.metricText}>{product.views}</ThemedText>
-          <Feather name="heart" size={11} color={Colors.light.textMuted} />
-          <ThemedText style={styles.metricText}>{product.saves}</ThemedText>
-          <Feather name="shopping-cart" size={11} color={Colors.light.textMuted} />
-          <ThemedText style={styles.metricText}>{product.cartAdds}</ThemedText>
-          <Feather name="check-circle" size={11} color={Colors.light.textMuted} />
-          <ThemedText style={styles.metricText}>{product.purchases}</ThemedText>
-        </View>
-        <ThemedText style={styles.listPrice}>Rs. {product.price.toLocaleString()}</ThemedText>
+        <ThemedText style={styles.listPrice}>{formatInr(product.price)}</ThemedText>
       </View>
       <Pressable style={styles.editBtn} onPress={onEdit} testID={`edit-product-${product.id}`}>
         <Feather name="edit-2" size={16} color={Colors.light.accent} />
@@ -90,7 +93,15 @@ function ProductGridCard({ product, onPress, onEdit }: { product: SellerProduct;
 
   return (
     <Pressable style={styles.gridCard} onPress={onPress} testID={`product-grid-${product.id}`}>
-      <ImagePlaceholder size={80} />
+      {product.imageUrl ? (
+        <ProductImageView
+          product={{ id: product.id, imageUrl: product.imageUrl }}
+          containerStyle={{ width: 80, height: 80, borderRadius: 8, overflow: "hidden" }}
+          imageStyle={{ width: 80, height: 80 }}
+        />
+      ) : (
+        <ImagePlaceholder size={80} />
+      )}
       {product.status !== "Active" ? (
         <View style={[styles.gridStockBadge, { backgroundColor: stockColor.bg }]}>
           <ThemedText style={[styles.gridStockText, { color: stockColor.text }]}>
@@ -104,13 +115,7 @@ function ProductGridCard({ product, onPress, onEdit }: { product: SellerProduct;
           {getCategoryShortName(product.category)}
         </ThemedText>
       </View>
-      <ThemedText style={styles.gridPrice}>Rs. {product.price.toLocaleString()}</ThemedText>
-      <View style={styles.gridMetrics}>
-        <Feather name="eye" size={11} color={Colors.light.textMuted} />
-        <ThemedText style={styles.metricText}>{product.views}</ThemedText>
-        <Feather name="check-circle" size={11} color={Colors.light.textMuted} />
-        <ThemedText style={styles.metricText}>{product.purchases}</ThemedText>
-      </View>
+      <ThemedText style={styles.gridPrice}>{formatInr(product.price)}</ThemedText>
       <Pressable style={styles.gridEditBtn} onPress={onEdit} testID={`edit-grid-${product.id}`}>
         <Feather name="edit-2" size={13} color={Colors.light.accent} />
       </Pressable>
@@ -120,6 +125,8 @@ function ProductGridCard({ product, onPress, onEdit }: { product: SellerProduct;
 
 function EmptyState() {
   const navigation = useNavigation<any>();
+  const { appNameDisplay } = useAppBrandCopy();
+  const storeLabel = appNameDisplay && appNameDisplay !== "—" ? appNameDisplay : "the store";
   return (
     <View style={styles.emptyState}>
       <View style={styles.emptyIconBg}>
@@ -129,7 +136,7 @@ function EmptyState() {
         Your wellness shelf is waiting for its first product.
       </ThemedText>
       <ThemedText style={styles.emptySub}>
-        Add your first product to start selling on Nature's Grace.
+        Add your first product to start selling on {storeLabel}.
       </ThemedText>
       <Pressable
         style={styles.emptyBtn}
@@ -144,9 +151,9 @@ function EmptyState() {
 }
 
 export default function SellerProductsScreen() {
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
+  const { sellerCatalog: sellerProducts, dataLoading } = useDataContext();
   const [drawerVisible, setDrawerVisible] = useState(false);
 
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -161,15 +168,26 @@ export default function SellerProductsScreen() {
       const matchStatus = statusFilter === "All" || p.status === statusFilter;
       return matchSearch && matchCat && matchStatus;
     });
-  }, [search, categoryFilter, statusFilter]);
+  }, [search, categoryFilter, statusFilter, sellerProducts]);
 
   const lowStockCount = sellerProducts.filter((p) => p.status === "Low Stock").length;
 
   return (
     <View style={styles.container}>
       <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <AppHeader onProfilePress={() => setDrawerVisible(true)} />
+      <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
 
+      <View style={styles.pageTitleSection}>
+        <ThemedText style={styles.pageTitle}>Products</ThemedText>
+      </View>
+
+      {dataLoading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading products…</ThemedText>
+        </View>
+      ) : (
+      <>
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
           <Feather name="search" size={16} color={Colors.light.textMuted} />
@@ -214,33 +232,48 @@ export default function SellerProductsScreen() {
         </View>
       ) : null}
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterContent}
-      >
+      <View style={styles.statusFilterRow}>
         {(["All", "Active", "Low Stock", "Out of Stock"] as StatusFilter[]).map((s) => (
           <Pressable
             key={s}
-            style={[styles.filterChip, statusFilter === s && styles.filterChipActive]}
+            style={[
+              styles.statusFilterBtn,
+              statusFilter === s && styles.statusFilterBtnSelected,
+            ]}
             onPress={() => setStatusFilter(s)}
             testID={`status-filter-${s.replace(/\s+/g, "-").toLowerCase()}`}
           >
-            <ThemedText style={[styles.filterChipText, statusFilter === s && styles.filterChipTextActive]}>
+            <ThemedText
+              style={styles.statusFilterBtnText}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.78}
+            >
               {s}
             </ThemedText>
           </Pressable>
         ))}
-        <View style={styles.filterDivider} />
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoryFilterScroll}
+        contentContainerStyle={styles.categoryFilterContent}
+      >
         {["All", ...SELLER_CATEGORIES].map((cat) => (
           <Pressable
             key={cat}
-            style={[styles.filterChip, categoryFilter === cat && styles.filterChipActive]}
+            style={[styles.categoryFilterChip, categoryFilter === cat && styles.categoryFilterChipActive]}
             onPress={() => setCategoryFilter(cat)}
             testID={`cat-filter-${cat.replace(/\s+/g, "-").toLowerCase()}`}
           >
-            <ThemedText style={[styles.filterChipText, categoryFilter === cat && styles.filterChipTextActive]}>
+            <ThemedText
+              style={[styles.categoryFilterChipText, categoryFilter === cat && styles.categoryFilterChipTextActive]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
               {cat === "All" ? "All Categories" : getCategoryShortName(cat)}
             </ThemedText>
           </Pressable>
@@ -270,7 +303,7 @@ export default function SellerProductsScreen() {
             <ProductListCard
               product={item}
               onPress={() => navigation.navigate("SellerProductDetail", { productId: item.id })}
-              onEdit={() => navigation.navigate("AddEditProductListing", { listingId: undefined, prefill: item })}
+              onEdit={() => navigation.navigate("AddEditProductListing", { listingId: item.id, prefill: item })}
             />
           )}
           contentContainerStyle={[
@@ -291,7 +324,7 @@ export default function SellerProductsScreen() {
             <ProductGridCard
               product={item}
               onPress={() => navigation.navigate("SellerProductDetail", { productId: item.id })}
-              onEdit={() => navigation.navigate("AddEditProductListing", { listingId: undefined, prefill: item })}
+              onEdit={() => navigation.navigate("AddEditProductListing", { listingId: item.id, prefill: item })}
             />
           )}
           contentContainerStyle={[
@@ -302,6 +335,9 @@ export default function SellerProductsScreen() {
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={<EmptyState />}
         />
+      )}
+
+      </>
       )}
 
       <Pressable
@@ -319,6 +355,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
+  },
+  /** Same as CommunityScreen `titleSection` + `title` */
+  pageTitleSection: {
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg + 8,
+  },
+  pageTitle: {
+    fontSize: 34,
+    fontWeight: "600",
+    color: Colors.light.accent,
+    fontFamily: "ui-serif",
+    letterSpacing: 0.5,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingTop: Spacing["2xl"],
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.light.textMuted,
   },
   searchRow: {
     flexDirection: "row",
@@ -376,36 +436,71 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: "#B8860B",
   },
-  filterScroll: {
+  categoryFilterScroll: {
     flexGrow: 0,
     marginBottom: Spacing.sm,
+    minHeight: 64,
   },
-  filterContent: {
+  statusFilterRow: {
+    flexDirection: "row",
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.sm,
-    paddingBottom: 2,
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+    alignItems: "stretch",
   },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  statusFilterBtn: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: STATUS_FILTER_GREEN,
+    borderWidth: 2,
+    borderColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  statusFilterBtnSelected: {
+    backgroundColor: STATUS_FILTER_GREEN_SELECTED,
+    borderColor: "#FFFFFF",
+  },
+  statusFilterBtnText: {
+    fontSize: 11,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
+    textAlign: "center",
+  },
+  categoryFilterContent: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 10,
+    gap: Spacing.sm,
+    flexDirection: "row",
+    alignItems: "stretch",
+  },
+  categoryFilterChip: {
+    minHeight: 40,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: BorderRadius.full,
     backgroundColor: Colors.light.cardBackground,
+    borderWidth: 2,
+    borderColor: "transparent",
+    flexShrink: 0,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  filterChipActive: {
+  categoryFilterChipActive: {
     backgroundColor: Colors.light.accent,
+    borderColor: "#FFFFFF",
   },
-  filterChipText: {
+  categoryFilterChipText: {
     fontSize: 12,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.textMuted,
+    textAlign: "center",
   },
-  filterChipTextActive: {
+  categoryFilterChipTextActive: {
     color: "#FFFFFF",
-  },
-  filterDivider: {
-    width: 1,
-    backgroundColor: `${Colors.light.divider}40`,
-    marginHorizontal: 4,
   },
   listHeader: {
     flexDirection: "row",

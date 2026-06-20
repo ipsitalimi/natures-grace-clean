@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -11,6 +11,11 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
+import { useAuth } from "@/context/AuthContext";
+import { useModeration } from "@/context/ModerationContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { publicReplies } from "@/data/discussions";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   DiscussionThread: { discussionId: string };
@@ -41,13 +46,49 @@ export default function DiscussionThreadScreen() {
   const { discussionId } = route.params;
   const [drawerVisible, setDrawerVisible] = useState(false);
 
-  const { discussions } = useDataContext();
+  const { discussions, discussionsLoading, discussionsError } = useDataContext();
+  const { session } = useAuth();
+  const { submitReport } = useModeration();
   const discussion = discussions.find((d) => d.id === discussionId);
+  const replies = discussion ? publicReplies(discussion.replies) : [];
+
+  if (discussionsLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+          <View style={styles.headerCenter} />
+        </View>
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={Colors.light.accent} />
+          <ThemedText style={styles.emptyText}>Loading discussion…</ThemedText>
+        </View>
+      </View>
+    );
+  }
+
+  if (discussionsError) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+          <View style={styles.headerCenter} />
+        </View>
+        <View style={styles.emptyState}>
+          <ThemedText style={styles.emptyText}>{discussionsError}</ThemedText>
+        </View>
+      </View>
+    );
+  }
 
   if (!discussion) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -71,14 +112,66 @@ export default function DiscussionThreadScreen() {
     navigation.navigate("AddReply", { discussionId });
   };
 
+  const handleReport = () => {
+    if (!discussion) return;
+    if (!isSupabaseConfigured()) {
+      Alert.alert("Unavailable", "Reporting requires Supabase to be configured.");
+      return;
+    }
+    if (!session?.user) {
+      Alert.alert("Sign in required", "Sign in to report content.");
+      return;
+    }
+
+    Alert.alert("Report discussion", "Why are you reporting this thread?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Spam",
+        onPress: () => void submitReport({
+          targetType: "discussion_thread",
+          targetId: discussion.id,
+          reason: "Spam",
+          contentPreview: discussion.question,
+        }).then((created) => {
+          if (created) Alert.alert("Report submitted", "Thank you. Our team will review this thread.");
+        }),
+      },
+      {
+        text: "Inappropriate",
+        onPress: () => void submitReport({
+          targetType: "discussion_thread",
+          targetId: discussion.id,
+          reason: "Inappropriate",
+          contentPreview: discussion.question,
+        }).then((created) => {
+          if (created) Alert.alert("Report submitted", "Thank you. Our team will review this thread.");
+        }),
+      },
+      {
+        text: "Other",
+        onPress: () => void submitReport({
+          targetType: "discussion_thread",
+          targetId: discussion.id,
+          reason: "Other",
+          contentPreview: discussion.question,
+        }).then((created) => {
+          if (created) Alert.alert("Report submitted", "Thank you. Our team will review this thread.");
+        }),
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
         <View style={styles.headerCenter} />
+        <Pressable style={styles.headerIconButton} onPress={handleReport} testID="button-report-discussion">
+          <Feather name="flag" size={20} color={Colors.light.accent} />
+        </Pressable>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
           <Feather name="bell" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -101,10 +194,10 @@ export default function DiscussionThreadScreen() {
 
         <View style={styles.repliesSection}>
           <ThemedText style={styles.repliesHeader}>
-            {discussion.replies.length} {discussion.replies.length === 1 ? "Reply" : "Replies"}
+            {replies.length} {replies.length === 1 ? "Reply" : "Replies"}
           </ThemedText>
 
-          {discussion.replies.map((reply) => (
+          {replies.map((reply) => (
             <View key={reply.id} style={styles.replyCard}>
               <View style={styles.replyHeader}>
                 <View style={styles.avatarContainer}>
@@ -121,7 +214,7 @@ export default function DiscussionThreadScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
         <Pressable style={styles.addReplyButton} onPress={handleAddReply}>
           <Feather name="message-circle" size={18} color="#FFFFFF" />
           <ThemedText style={styles.addReplyText}>Add Reply</ThemedText>

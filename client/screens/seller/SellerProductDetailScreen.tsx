@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -7,20 +7,24 @@ import Svg, { Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { sellerProducts, getStockColor } from "@/data/sellerMockData";
+import { getStockColor } from "@/data/sellerMockData";
+import { useDataContext } from "@/context/DataContext";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { formatInr } from "@/lib/formatCurrency";
 
 export default function SellerProductDetailScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<any>();
   const { productId } = route.params || {};
-  const [removed, setRemoved] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
-  const product = sellerProducts.find((p) => p.id === productId);
+  const { sellerCatalog, deleteProduct } = useDataContext();
+  const product = sellerCatalog.find((p) => p.id === productId);
 
   if (!product) {
     return (
-      <View style={[styles.container, { paddingTop: 20 }]}>
+      <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -35,7 +39,7 @@ export default function SellerProductDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -45,7 +49,7 @@ export default function SellerProductDetailScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.imagePlaceholder}>
@@ -60,7 +64,7 @@ export default function SellerProductDetailScreen() {
         </View>
 
         <ThemedText style={styles.productName}>{product.name}</ThemedText>
-        <ThemedText style={styles.productPrice}>Rs. {product.price.toLocaleString()}</ThemedText>
+        <ThemedText style={styles.productPrice}>{formatInr(product.price)}</ThemedText>
 
         <View style={styles.detailCard}>
           <ThemedText style={styles.detailLabel}>Description</ThemedText>
@@ -79,17 +83,15 @@ export default function SellerProductDetailScreen() {
           </View>
         </View>
 
-        {removed ? (
-          <View style={styles.confirmBanner}>
-            <Feather name="check-circle" size={16} color="#4A5A2B" />
-            <ThemedText style={styles.confirmText}>Product removed</ThemedText>
-          </View>
-        ) : null}
-
         <View style={styles.buttonRow}>
           <Pressable
             style={styles.editBtn}
-            onPress={() => (navigation as any).navigate("AddEditProductListing", { prefill: product })}
+            onPress={() =>
+              (navigation as any).navigate("AddEditProductListing", {
+                listingId: product.id,
+                prefill: product,
+              })
+            }
             testID="button-edit-product"
           >
             <Feather name="edit-2" size={16} color="#FFFFFF" />
@@ -98,9 +100,23 @@ export default function SellerProductDetailScreen() {
           <Pressable
             style={styles.removeBtn}
             onPress={() => {
-              setRemoved(true);
-              setTimeout(() => setRemoved(false), 2000);
+              Alert.alert("Remove product", "Remove this product from your store?", [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Remove",
+                  style: "destructive",
+                  onPress: () => {
+                    void (async () => {
+                      setRemoving(true);
+                      await deleteProduct(product.id);
+                      setRemoving(false);
+                      navigation.goBack();
+                    })();
+                  },
+                },
+              ]);
             }}
+            disabled={removing}
             testID="button-remove-product"
           >
             <Feather name="trash-2" size={16} color="#D4534A" />

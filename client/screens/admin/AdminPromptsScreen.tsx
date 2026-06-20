@@ -113,6 +113,14 @@ export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsSc
         </Pressable>
       )}
 
+      {dailyPrompts.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyText}>
+            No reflection prompts yet. Add a prompt for Guided Reflection.
+          </ThemedText>
+        </View>
+      ) : null}
+
       {sortedDates.map((dateISO) => (
         <View key={dateISO}>
           <View style={styles.dateHeader}>
@@ -374,5 +382,19 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
     fontFamily: "Nunito_700Bold",
+  },
+  emptyCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

@@ -1,84 +1,10 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-
-type ReviewStatus = "Approved" | "Pending" | "Flagged";
-
-interface Review {
-  id: string;
-  userName: string;
-  userInitial: string;
-  practitionerName: string;
-  rating: number;
-  text: string;
-  date: string;
-  status: ReviewStatus;
-}
-
-const initialReviews: Review[] = [
-  {
-    id: "r1",
-    userName: "Sarah M.",
-    userInitial: "S",
-    practitionerName: "Dr. Priya Sharma",
-    rating: 5,
-    text: "Amazing healing session. I felt so much better after just one visit. Highly recommend!",
-    date: "Feb 18",
-    status: "Approved",
-  },
-  {
-    id: "r2",
-    userName: "Raj K.",
-    userInitial: "R",
-    practitionerName: "Maya Devi",
-    rating: 4,
-    text: "Very calming counseling session. Maya really listens and provides thoughtful advice.",
-    date: "Feb 17",
-    status: "Approved",
-  },
-  {
-    id: "r3",
-    userName: "Anonymous",
-    userInitial: "A",
-    practitionerName: "Arjun Nair",
-    rating: 2,
-    text: "Did not meet expectations. The session felt rushed and I didn't feel heard.",
-    date: "Feb 16",
-    status: "Pending",
-  },
-  {
-    id: "r4",
-    userName: "Neha P.",
-    userInitial: "N",
-    practitionerName: "Dr. Priya Sharma",
-    rating: 1,
-    text: "Very rude behavior. Would not recommend this practitioner to anyone.",
-    date: "Feb 15",
-    status: "Flagged",
-  },
-  {
-    id: "r5",
-    userName: "Amit S.",
-    userInitial: "A",
-    practitionerName: "Ravi Kumar",
-    rating: 5,
-    text: "Life-changing therapy session! Ravi has a gift for making you feel at ease.",
-    date: "Feb 14",
-    status: "Approved",
-  },
-  {
-    id: "r6",
-    userName: "Priya L.",
-    userInitial: "P",
-    practitionerName: "Maya Devi",
-    rating: 3,
-    text: "Good but could improve. The session was helpful but felt a bit generic.",
-    date: "Feb 13",
-    status: "Pending",
-  },
-];
+import { usePlatformConfig, type ReviewStatus } from "@/context/PlatformConfigContext";
+import { useModeration } from "@/context/ModerationContext";
 
 function StarRating({ rating }: { rating: number }) {
   return (
@@ -108,7 +34,8 @@ function getStatusColor(status: ReviewStatus) {
 }
 
 export default function AdminReviewsScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
-  const [reviews, setReviews] = useState<Review[]>(initialReviews);
+  const { reviews, updateReviewStatus, configLoading } = usePlatformConfig();
+  const { flagReviewForQueue } = useModeration();
   const [activeFilter, setActiveFilter] = useState<"All" | ReviewStatus>("All");
 
   const filters: ("All" | ReviewStatus)[] = ["All", "Pending", "Flagged", "Approved"];
@@ -125,15 +52,19 @@ export default function AdminReviewsScreen({ onBackToDashboard }: { onBackToDash
       : "0";
 
   const handleApprove = (id: string) => {
-    setReviews(reviews.map((r) => (r.id === id ? { ...r, status: "Approved" as const } : r)));
+    updateReviewStatus(id, "Approved");
   };
 
-  const handleFlag = (id: string) => {
-    setReviews(reviews.map((r) => (r.id === id ? { ...r, status: "Flagged" as const } : r)));
+  const handleFlag = async (id: string) => {
+    const review = reviews.find((r) => r.id === id);
+    await updateReviewStatus(id, "Flagged");
+    if (review) {
+      await flagReviewForQueue(id, review.text);
+    }
   };
 
   const handleRemove = (id: string) => {
-    setReviews(reviews.filter((r) => r.id !== id));
+    updateReviewStatus(id, "Pending");
   };
 
   return (
@@ -188,6 +119,17 @@ export default function AdminReviewsScreen({ onBackToDashboard }: { onBackToDash
         ))}
       </View>
 
+      {configLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading reviews…</ThemedText>
+        </View>
+      ) : null}
+
+      {!configLoading && filteredReviews.length === 0 ? (
+        <ThemedText style={styles.emptyText}>No reviews yet.</ThemedText>
+      ) : null}
+
       {filteredReviews.map((review) => (
         <View key={review.id} style={styles.reviewCard}>
           <View style={styles.reviewHeader}>
@@ -236,7 +178,7 @@ export default function AdminReviewsScreen({ onBackToDashboard }: { onBackToDash
               testID={`button-remove-${review.id}`}
             >
               <Feather name="trash-2" size={14} color="#8B3A3A" />
-              <ThemedText style={styles.removeBtnText}>Remove</ThemedText>
+              <ThemedText style={styles.removeBtnText}>Reset to Pending</ThemedText>
             </Pressable>
           </View>
         </View>
@@ -325,6 +267,23 @@ const styles = StyleSheet.create({
   },
   filterTabTextActive: {
     color: "#FFFFFF",
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.lg,
   },
   reviewCard: {
     backgroundColor: Colors.light.cardBackground,

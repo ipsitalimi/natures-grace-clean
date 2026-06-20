@@ -1,91 +1,45 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-
-interface Announcement {
-  id: string;
-  title: string;
-  preview: string;
-  status: "Active" | "Expired";
-  target: string;
-  date: string;
-}
-
-const initialAnnouncements: Announcement[] = [
-  {
-    id: "a1",
-    title: "Wellness Week Special",
-    preview: "Join us for a week of guided sessions...",
-    status: "Active",
-    target: "All Users",
-    date: "Feb 15",
-  },
-  {
-    id: "a2",
-    title: "New Practitioner Onboarding",
-    preview: "Welcome our new counselors...",
-    status: "Active",
-    target: "Practitioners",
-    date: "Feb 12",
-  },
-  {
-    id: "a3",
-    title: "Store Update",
-    preview: "Check out our new collection...",
-    status: "Expired",
-    target: "All Users",
-    date: "Feb 5",
-  },
-];
-
-const scheduledNotifications = [
-  {
-    id: "s1",
-    title: "March Wellness Challenge",
-    preview: "Get ready for our monthly wellness challenge...",
-    scheduledDate: "Mar 1",
-    target: "All Users",
-  },
-  {
-    id: "s2",
-    title: "Practitioner Review Reminder",
-    preview: "Reminder to complete your monthly reviews...",
-    scheduledDate: "Feb 25",
-    target: "Practitioners",
-  },
-];
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 export default function AdminNotificationsScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
+  const { addBroadcastNotification, logActivity, notifications, configLoading } = usePlatformConfig();
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [targetAudience, setTargetAudience] = useState("All Users");
-  const [announcements, setAnnouncements] = useState<Announcement[]>(initialAnnouncements);
   const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!title.trim() || !message.trim()) return;
-    const newAnnouncement: Announcement = {
-      id: `a${Date.now()}`,
-      title: title.trim(),
-      preview: message.trim().substring(0, 40) + "...",
-      status: "Active",
-      target: targetAudience,
-      date: "Feb 19",
-    };
-    setAnnouncements([newAnnouncement, ...announcements]);
-    setTitle("");
-    setMessage("");
-    setSent(true);
-    setTimeout(() => setSent(false), 2000);
-  };
-
-  const handleDelete = (id: string) => {
-    setAnnouncements(announcements.filter((a) => a.id !== id));
+    setSendError(null);
+    setSending(true);
+    const preview = message.trim().substring(0, 80);
+    const fullMessage = `${title.trim()}: ${preview}`;
+    try {
+      await addBroadcastNotification(
+        fullMessage,
+        targetAudience as "All Users" | "Practitioners" | "Sellers"
+      );
+      logActivity(`Broadcast sent: ${title.trim()}`, "user");
+      setTitle("");
+      setMessage("");
+      setSent(true);
+      setTimeout(() => setSent(false), 2000);
+    } catch {
+      setSendError("Could not send notification. Try again.");
+    } finally {
+      setSending(false);
+    }
   };
 
   const targets = ["All Users", "Practitioners", "Sellers"];
+  const configured = isSupabaseConfigured();
 
   return (
     <ScrollView
@@ -100,6 +54,14 @@ export default function AdminNotificationsScreen({ onBackToDashboard }: { onBack
         <ThemedText style={styles.sectionTitle}>Notifications</ThemedText>
       </View>
 
+      {!configured ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyMessage}>
+            Connect Supabase to send and persist broadcast notifications.
+          </ThemedText>
+        </View>
+      ) : null}
+
       <ThemedText style={styles.subSectionTitle}>Send Notification</ThemedText>
       <View style={styles.formCard}>
         <ThemedText style={styles.inputLabel}>Title</ThemedText>
@@ -109,6 +71,7 @@ export default function AdminNotificationsScreen({ onBackToDashboard }: { onBack
           onChangeText={setTitle}
           placeholder="Notification title"
           placeholderTextColor={`${Colors.light.textSecondary}80`}
+          editable={configured}
           testID="input-notification-title"
         />
 
@@ -121,6 +84,7 @@ export default function AdminNotificationsScreen({ onBackToDashboard }: { onBack
           placeholderTextColor={`${Colors.light.textSecondary}80`}
           multiline
           numberOfLines={4}
+          editable={configured}
           testID="input-notification-message"
         />
 
@@ -131,6 +95,7 @@ export default function AdminNotificationsScreen({ onBackToDashboard }: { onBack
               key={t}
               style={[styles.targetButton, targetAudience === t ? styles.targetButtonActive : null]}
               onPress={() => setTargetAudience(t)}
+              disabled={!configured}
               testID={`button-target-${t.toLowerCase().replace(/\s/g, "-")}`}
             >
               <ThemedText
@@ -141,11 +106,31 @@ export default function AdminNotificationsScreen({ onBackToDashboard }: { onBack
             </Pressable>
           ))}
         </View>
+        {configured ? (
+          <ThemedText style={styles.audienceNote}>
+            All Users sends a broadcast. Practitioners and Sellers create targeted notifications.
+          </ThemedText>
+        ) : null}
 
-        <Pressable style={styles.sendButton} onPress={handleSend} testID="button-send-notification">
-          <Feather name="send" size={16} color="#FFFFFF" />
-          <ThemedText style={styles.sendButtonText}>Send Notification</ThemedText>
+        <Pressable
+          style={[styles.sendButton, !configured || sending ? styles.sendButtonDisabled : null]}
+          onPress={() => void handleSend()}
+          disabled={!configured || sending}
+          testID="button-send-notification"
+        >
+          {sending ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Feather name="send" size={16} color="#FFFFFF" />
+              <ThemedText style={styles.sendButtonText}>Send Notification</ThemedText>
+            </>
+          )}
         </Pressable>
+
+        {sendError ? (
+          <ThemedText style={styles.errorText}>{sendError}</ThemedText>
+        ) : null}
 
         {sent ? (
           <View style={styles.confirmationBanner}>
@@ -155,57 +140,46 @@ export default function AdminNotificationsScreen({ onBackToDashboard }: { onBack
         ) : null}
       </View>
 
-      <ThemedText style={styles.subSectionTitle}>Active Announcements</ThemedText>
-      {announcements.map((announcement) => (
-        <View key={announcement.id} style={styles.card}>
-          <View style={styles.cardHeader}>
-            <ThemedText style={styles.cardTitle} numberOfLines={1}>{announcement.title}</ThemedText>
-            <View
-              style={[
-                styles.statusBadge,
-                announcement.status === "Active" ? styles.statusActive : styles.statusExpired,
-              ]}
-            >
-              <ThemedText style={styles.statusBadgeText}>{announcement.status}</ThemedText>
-            </View>
-          </View>
-          <ThemedText style={styles.cardPreview} numberOfLines={2}>{announcement.preview}</ThemedText>
-          <View style={styles.cardFooter}>
-            <View style={styles.audienceChip}>
-              <Feather name="users" size={10} color={Colors.light.accent} />
-              <ThemedText style={styles.audienceChipText}>{announcement.target}</ThemedText>
-            </View>
-            <ThemedText style={styles.cardDate}>{announcement.date}</ThemedText>
-            <Pressable
-              style={styles.deleteBtn}
-              onPress={() => handleDelete(announcement.id)}
-              testID={`button-delete-announcement-${announcement.id}`}
-            >
-              <Feather name="trash-2" size={14} color="#8B3A3A" />
-            </Pressable>
-          </View>
+      <ThemedText style={styles.subSectionTitle}>Sent Broadcasts</ThemedText>
+      {configLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading notifications…</ThemedText>
         </View>
-      ))}
+      ) : !configured ? null : notifications.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyMessage}>
+            No broadcast notifications yet. Messages you send will appear here.
+          </ThemedText>
+        </View>
+      ) : (
+        notifications.map((notification) => (
+          <View key={notification.id} style={styles.card}>
+            <View style={styles.cardHeader}>
+              <ThemedText style={styles.cardTitle} numberOfLines={2}>
+                {notification.message}
+              </ThemedText>
+              <View style={[styles.statusBadge, styles.statusActive]}>
+                <ThemedText style={styles.statusBadgeText}>Sent</ThemedText>
+              </View>
+            </View>
+            <View style={styles.cardFooter}>
+              <View style={styles.audienceChip}>
+                <Feather name="users" size={10} color={Colors.light.accent} />
+                <ThemedText style={styles.audienceChipText}>Broadcast</ThemedText>
+              </View>
+              <ThemedText style={styles.cardDate}>{notification.time}</ThemedText>
+            </View>
+          </View>
+        ))
+      )}
 
       <ThemedText style={styles.subSectionTitle}>Scheduled</ThemedText>
-      {scheduledNotifications.map((notif) => (
-        <View key={notif.id} style={styles.card}>
-          <View style={styles.cardHeader}>
-            <ThemedText style={styles.cardTitle} numberOfLines={1}>{notif.title}</ThemedText>
-            <View style={styles.scheduledBadge}>
-              <Feather name="clock" size={10} color={Colors.light.accent} />
-              <ThemedText style={styles.scheduledBadgeText}>{notif.scheduledDate}</ThemedText>
-            </View>
-          </View>
-          <ThemedText style={styles.cardPreview} numberOfLines={2}>{notif.preview}</ThemedText>
-          <View style={styles.cardFooter}>
-            <View style={styles.audienceChip}>
-              <Feather name="users" size={10} color={Colors.light.accent} />
-              <ThemedText style={styles.audienceChipText}>{notif.target}</ThemedText>
-            </View>
-          </View>
-        </View>
-      ))}
+      <View style={styles.emptyCard}>
+        <ThemedText style={styles.emptyMessage}>
+          Scheduled notifications are not available yet.
+        </ThemedText>
+      </View>
     </ScrollView>
   );
 }
@@ -276,7 +250,14 @@ const styles = StyleSheet.create({
   targetRow: {
     flexDirection: "row",
     gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  audienceNote: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
     marginBottom: Spacing.lg,
+    lineHeight: 17,
   },
   targetButton: {
     flex: 1,
@@ -305,6 +286,10 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     paddingVertical: Spacing.md,
     gap: Spacing.sm,
+    minHeight: 48,
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
   sendButtonText: {
     fontSize: 15,
@@ -325,6 +310,36 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: "#013220",
   },
+  errorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    marginTop: Spacing.sm,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+  },
+  emptyCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing.sm,
+  },
+  emptyMessage: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+  },
   card: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
@@ -334,22 +349,16 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.xs,
+    alignItems: "flex-start",
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
   },
   cardTitle: {
-    fontSize: 15,
-    fontFamily: "Nunito_700Bold",
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
     color: Colors.light.text,
     flex: 1,
-    marginRight: Spacing.sm,
-  },
-  cardPreview: {
-    fontSize: 13,
-    fontFamily: "Nunito_400Regular",
-    color: Colors.light.textSecondary,
-    marginBottom: Spacing.sm,
-    lineHeight: 19,
+    lineHeight: 20,
   },
   cardFooter: {
     flexDirection: "row",
@@ -361,6 +370,7 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textSecondary,
     flex: 1,
+    textAlign: "right",
   },
   statusBadge: {
     paddingHorizontal: Spacing.sm,
@@ -369,9 +379,6 @@ const styles = StyleSheet.create({
   },
   statusActive: {
     backgroundColor: "#013220",
-  },
-  statusExpired: {
-    backgroundColor: "#AAB494",
   },
   statusBadgeText: {
     fontSize: 11,
@@ -392,22 +399,5 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontFamily: "Nunito_400Regular",
     color: Colors.light.accent,
-  },
-  scheduledBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: `${Colors.light.accent}15`,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  scheduledBadgeText: {
-    fontSize: 11,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-  },
-  deleteBtn: {
-    padding: Spacing.xs,
   },
 });

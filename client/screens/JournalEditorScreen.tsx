@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -8,9 +8,12 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
 import { useJournal } from "@/context/JournalContext";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type EditorRouteParams = {
-  JournalEditor: { prompt?: string } | undefined;
+  JournalEditor: { prompt?: string; entryId?: string } | undefined;
 };
 
 const moodPlaceholders: Record<string, string> = {
@@ -28,13 +31,38 @@ export default function JournalEditorScreen() {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<EditorRouteParams, "JournalEditor">>();
   const prompt = route.params?.prompt;
+  const entryId = route.params?.entryId;
 
-  const { selectedMood, setSelectedMood, addEntry } = useJournal();
+  const { selectedMood, setSelectedMood, addEntry, updateEntry, entries } = useJournal();
+  const { session } = useAuth();
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    if (session?.user) return;
+    Alert.alert("Sign in required", "Please sign in to write in your journal.", [
+      { text: "OK", onPress: () => navigation.goBack() },
+    ]);
+  }, [session?.user, navigation]);
 
   const [entryText, setEntryText] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<string | null>(null);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const editingEntry = entryId ? entries.find((e) => e.id === entryId) : undefined;
+  const isEditing = Boolean(editingEntry);
+
+  useEffect(() => {
+    if (!editingEntry) return;
+    setSelectedMood(editingEntry.mood);
+    let body = editingEntry.fullText;
+    if (editingEntry.prompt && body.startsWith(editingEntry.prompt)) {
+      body = body.slice(editingEntry.prompt.length).replace(/^\s+/, "");
+    }
+    setEntryText(body);
+  }, [editingEntry, setSelectedMood]);
 
   const todayDate = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -48,20 +76,32 @@ export default function JournalEditorScreen() {
 
   const wordCount = entryText.trim() ? entryText.trim().split(/\s+/).length : 0;
 
-  const handleTextChange = useCallback((text: string) => {
-    setEntryText(text);
-    setAutoSaveStatus(null);
+  const handleTextChange = useCallback(
+    (text: string) => {
+      setEntryText(text);
+      setAutoSaveStatus(null);
 
-    if (autoSaveTimer.current) {
-      clearTimeout(autoSaveTimer.current);
-    }
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+      }
 
-    if (text.trim().length > 10) {
+      if (!isEditing || !editingEntry || text.trim().length <= 10) return;
+
       autoSaveTimer.current = setTimeout(() => {
-        setAutoSaveStatus("Saved quietly");
+        void (async () => {
+          const fullBody = editingEntry.prompt
+            ? `${editingEntry.prompt}\n\n${text.trim()}`
+            : text.trim();
+          const ok = await updateEntry(editingEntry.id, {
+            body: fullBody,
+            mood: selectedMood,
+          });
+          setAutoSaveStatus(ok ? "Saved quietly" : null);
+        })();
       }, 2000);
-    }
-  }, []);
+    },
+    [isEditing, editingEntry, selectedMood, updateEntry]
+  );
 
   useEffect(() => {
     return () => {
@@ -71,9 +111,37 @@ export default function JournalEditorScreen() {
     };
   }, []);
 
-  const handleSave = () => {
-    if (!entryText.trim()) return;
-    addEntry(entryText.trim(), selectedMood, prompt);
+  const handleSave = async () => {
+    if (!entryText.trim() || saving) return;
+    setSaving(true);
+    setSaveError(null);
+
+    if (isEditing && editingEntry) {
+      const fullBody = editingEntry.prompt
+        ? `${editingEntry.prompt}\n\n${entryText.trim()}`
+        : entryText.trim();
+      const ok = await updateEntry(editingEntry.id, {
+        body: fullBody,
+        mood: selectedMood,
+      });
+      setSaving(false);
+      if (!ok) {
+        setSaveError("Could not update your entry. Sign in and try again.");
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => {
+        navigation.goBack();
+      }, 600);
+      return;
+    }
+
+    const ok = await addEntry(entryText.trim(), selectedMood, prompt);
+    setSaving(false);
+    if (!ok) {
+      setSaveError("Could not save your entry. Sign in and try again.");
+      return;
+    }
     setSelectedMood(null);
     setSaved(true);
     setTimeout(() => {
@@ -83,7 +151,7 @@ export default function JournalEditorScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -99,7 +167,7 @@ export default function JournalEditorScreen() {
       </View>
 
       <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>New Entry</ThemedText>
+        <ThemedText style={styles.pageTitle}>{isEditing ? "Edit Entry" : "New Entry"}</ThemedText>
       </View>
 
       <View style={styles.content}>
@@ -143,6 +211,10 @@ export default function JournalEditorScreen() {
           </ThemedText>
         </View>
 
+        {saveError ? (
+          <ThemedText style={styles.saveErrorText}>{saveError}</ThemedText>
+        ) : null}
+
         <View style={[styles.bottomArea, { paddingBottom: tabBarHeight + 16 }]}>
           {saved ? (
             <View style={styles.successMessage}>
@@ -151,12 +223,16 @@ export default function JournalEditorScreen() {
             </View>
           ) : (
             <Pressable
-              style={[styles.saveButton, !entryText.trim() && styles.saveButtonDisabled]}
+              style={[styles.saveButton, (!entryText.trim() || saving) && styles.saveButtonDisabled]}
               onPress={handleSave}
-              disabled={!entryText.trim()}
+              disabled={!entryText.trim() || saving}
               testID="button-save-entry"
             >
-              <ThemedText style={styles.saveButtonText}>Save Entry</ThemedText>
+              {saving ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <ThemedText style={styles.saveButtonText}>Save Entry</ThemedText>
+              )}
             </Pressable>
           )}
         </View>
@@ -337,5 +413,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: Colors.light.accent,
+  },
+  saveErrorText: {
+    fontSize: 13,
+    color: "#8B3A3A",
+    textAlign: "center",
+    marginBottom: Spacing.sm,
   },
 });

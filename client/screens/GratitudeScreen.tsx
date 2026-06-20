@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Pressable, ScrollView } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -10,6 +10,9 @@ import Svg, { Path } from "react-native-svg";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useGratitude, GratitudeEntry } from "@/context/GratitudeContext";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   AddGratitude: undefined;
@@ -81,8 +84,12 @@ interface CommunityGratitudeItemProps {
   isOwn: boolean;
 }
 
-function CommunityGratitudeItem({ entry, onAddToMine, isOwn }: CommunityGratitudeItemProps) {
+function CommunityGratitudeItem({ entry, onAddToMine, isOwn, resetKey }: CommunityGratitudeItemProps & { resetKey: string }) {
   const [added, setAdded] = useState(false);
+
+  useEffect(() => {
+    setAdded(false);
+  }, [resetKey, entry.id]);
 
   const handleAdd = () => {
     onAddToMine(entry);
@@ -122,12 +129,21 @@ export default function GratitudeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const { myGratitudes, communityGratitudes, toggleVisibility, addCommunityToMine } = useGratitude();
+  const {
+    myGratitudes,
+    communityGratitudes,
+    toggleVisibility,
+    addCommunityToMine,
+    gratitudeLoading,
+    gratitudeError,
+  } = useGratitude();
+  const { session } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("mine");
+  const communityResetKey = session?.user?.id ?? "guest";
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -182,7 +198,16 @@ export default function GratitudeScreen() {
             <ThemedText style={styles.countBadge}>{myGratitudes.length}</ThemedText>
           </View>
 
-          {myGratitudes.length > 0 ? (
+          {gratitudeLoading ? (
+            <View style={styles.emptyInline}>
+              <ActivityIndicator size="small" color={Colors.light.accent} />
+              <ThemedText style={styles.emptyInlineText}>Loading gratitudes…</ThemedText>
+            </View>
+          ) : gratitudeError ? (
+            <View style={styles.emptyInline}>
+              <ThemedText style={styles.emptyInlineText}>{gratitudeError}</ThemedText>
+            </View>
+          ) : myGratitudes.length > 0 ? (
             myGratitudes.map((item) => (
               <MyGratitudeItem key={item.id} entry={item} onToggleVisibility={toggleVisibility} />
             ))
@@ -194,7 +219,16 @@ export default function GratitudeScreen() {
 
           <Pressable
             style={styles.addButton}
-            onPress={() => navigation.navigate("AddGratitude")}
+            onPress={() => {
+              if (!session?.user && isSupabaseConfigured()) {
+                Alert.alert("Sign in required", "Please sign in to add a gratitude entry.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Sign in", onPress: () => navigation.navigate("Login" as never) },
+                ]);
+                return;
+              }
+              navigation.navigate("AddGratitude");
+            }}
             testID="button-add-gratitude"
           >
             <Feather name="plus" size={20} color="#FFFFFF" />
@@ -214,13 +248,23 @@ export default function GratitudeScreen() {
             </ThemedText>
           </View>
 
-          {communityGratitudes.length > 0 ? (
+          {gratitudeLoading ? (
+            <View style={styles.emptyInline}>
+              <ActivityIndicator size="small" color={Colors.light.accent} />
+              <ThemedText style={styles.emptyInlineText}>Loading community feed…</ThemedText>
+            </View>
+          ) : gratitudeError ? (
+            <View style={styles.emptyInline}>
+              <ThemedText style={styles.emptyInlineText}>{gratitudeError}</ThemedText>
+            </View>
+          ) : communityGratitudes.length > 0 ? (
             communityGratitudes.map((item) => (
               <CommunityGratitudeItem
                 key={item.id}
                 entry={item}
                 onAddToMine={addCommunityToMine}
-                isOwn={item.author === "You"}
+                isOwn={item.isOwn ?? item.author === "You"}
+                resetKey={communityResetKey}
               />
             ))
           ) : (

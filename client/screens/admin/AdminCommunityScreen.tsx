@@ -1,33 +1,24 @@
-import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput, Modal } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  TextInput,
+  Modal,
+  ActivityIndicator,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext, CommunityEvent } from "@/context/DataContext";
-
-const FLAGGED_CONTENT = [
-  {
-    id: "flag-1",
-    reporter: "Ananya Sharma",
-    contentPreview: "Buy cheap supplements at discount prices! Visit our website for...",
-    reason: "Spam" as const,
-    date: "Feb 15, 2026",
-  },
-  {
-    id: "flag-2",
-    reporter: "Ravi Mehta",
-    contentPreview: "This practitioner is a fraud and should be reported to authorities...",
-    reason: "Inappropriate" as const,
-    date: "Feb 14, 2026",
-  },
-  {
-    id: "flag-3",
-    reporter: "Priya Desai",
-    contentPreview: "Guaranteed cure for all diseases with this one simple trick that doctors...",
-    reason: "Misleading" as const,
-    date: "Feb 13, 2026",
-  },
-];
+import { useEventRegistrations } from "@/context/EventRegistrationsContext";
+import type { EventRegistration } from "@/data/eventRegistrations";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useModeration } from "@/context/ModerationContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { formatInr } from "@/lib/formatCurrency";
+import { fetchActiveCommunityMemberCount } from "@/services/profileService";
 
 function getReasonBadgeColor(reason: string) {
   switch (reason) {
@@ -62,7 +53,17 @@ function getStatusBadgeStyle(status: CommunityEvent["status"]) {
   }
 }
 
-function EventCard({ event, onDelete }: { event: CommunityEvent; onDelete: () => void }) {
+function EventCard({
+  event,
+  attendeeCount,
+  attendees,
+  onDelete,
+}: {
+  event: CommunityEvent;
+  attendeeCount: number | null;
+  attendees: EventRegistration[];
+  onDelete: () => void;
+}) {
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
@@ -81,12 +82,72 @@ function EventCard({ event, onDelete }: { event: CommunityEvent; onDelete: () =>
           <Feather name="trash-2" size={14} color="#8B3A3A" />
         </Pressable>
       </View>
+      <ThemedText style={styles.cardMeta} testID={`text-attendee-count-${event.id}`}>
+        {attendeeCount === null
+          ? "Registrations: sync event to Supabase to track attendees"
+          : `${attendeeCount} registered attendee${attendeeCount === 1 ? "" : "s"}`}
+      </ThemedText>
+      {attendees.length > 0 ? (
+        <View style={styles.attendeeList}>
+          {attendees.map((reg) => (
+            <View key={reg.id} style={styles.attendeeRow}>
+              <ThemedText style={styles.attendeeName} numberOfLines={1}>
+                {reg.attendeeName || "Attendee"}
+              </ThemedText>
+              <ThemedText style={styles.attendeeMeta} numberOfLines={1}>
+                {reg.attendeeEmail}
+              </ThemedText>
+            </View>
+          ))}
+        </View>
+      ) : attendeeCount === 0 ? (
+        <ThemedText style={styles.cardMeta}>No registrations yet</ThemedText>
+      ) : null}
     </View>
   );
 }
 
+function getModerationBadgeStyle(status: string) {
+  switch (status) {
+    case "Approved":
+      return { backgroundColor: "#013220" };
+    case "Pending":
+      return { backgroundColor: "#AAB494" };
+    case "Flagged":
+      return { backgroundColor: "#8B3A3A" };
+    default:
+      return { backgroundColor: Colors.light.brownDark };
+  }
+}
+
 export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
-  const { events, addEvent, deleteEvent, discussions } = useDataContext();
+  const {
+    events,
+    addEvent,
+    deleteEvent,
+    setEventVisibility,
+    moderationDiscussions,
+    discussionsLoading,
+    setDiscussionModeration,
+    refreshContent,
+  } = useDataContext();
+  const {
+    registrations,
+    registrationsLoading,
+    registrationsError,
+    getAttendeeCount,
+  } = useEventRegistrations();
+  const { logActivity, refreshRemoteConfig } = usePlatformConfig();
+  const {
+    flaggedItems,
+    openFlaggedCount,
+    moderationLoading,
+    moderationError,
+    refreshModerationQueue,
+    dismissReport,
+    removeReportedContent,
+    banFromReport,
+  } = useModeration();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -95,7 +156,45 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [saved, setSaved] = useState(false);
-  const [flaggedItems, setFlaggedItems] = useState(FLAGGED_CONTENT);
+  const [activeMembersCount, setActiveMembersCount] = useState<number | null>(null);
+  const [activeMembersLoading, setActiveMembersLoading] = useState(() => isSupabaseConfigured());
+  const [activeMembersError, setActiveMembersError] = useState<string | null>(null);
+  const openFlagged = flaggedItems.filter((f) => !f.resolved);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActiveMembers() {
+      if (!isSupabaseConfigured()) {
+        setActiveMembersCount(null);
+        setActiveMembersError(null);
+        setActiveMembersLoading(false);
+        return;
+      }
+      setActiveMembersLoading(true);
+      setActiveMembersError(null);
+      const result = await fetchActiveCommunityMemberCount();
+      if (cancelled) return;
+      setActiveMembersLoading(false);
+      if (result.ok) {
+        setActiveMembersCount(result.count);
+        setActiveMembersError(null);
+      } else {
+        setActiveMembersCount(null);
+        setActiveMembersError(result.error);
+      }
+    }
+
+    void loadActiveMembers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const afterModerationAction = async (ok: boolean) => {
+    if (!ok) return;
+    await Promise.all([refreshContent(), refreshRemoteConfig()]);
+  };
 
   const resetForm = () => {
     setTitle("");
@@ -119,7 +218,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
       ctaText: "Join Event",
       bottomNote: "",
       status: "Active",
-      price: price.trim() ? `Rs. ${price.trim()}` : "Free",
+      price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
     });
     setSaved(true);
     setTimeout(() => {
@@ -129,16 +228,27 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     }, 1500);
   };
 
-  const handleDismissFlag = (id: string) => {
-    setFlaggedItems((prev) => prev.filter((item) => item.id !== id));
+  const handleDismissFlag = async (id: string) => {
+    const ok = await dismissReport(id);
+    await afterModerationAction(ok);
+    if (ok) logActivity(`Flagged item ${id} dismissed`, "event");
   };
 
-  const handleRemoveFlag = (id: string) => {
-    setFlaggedItems((prev) => prev.filter((item) => item.id !== id));
+  const handleRemoveFlag = async (id: string) => {
+    const ok = await removeReportedContent(id);
+    await afterModerationAction(ok);
+    if (ok) logActivity(`Flagged content ${id} removed`, "event");
   };
 
-  const handleBanUser = (id: string) => {
-    setFlaggedItems((prev) => prev.filter((item) => item.id !== id));
+  const handleBanUser = async (id: string) => {
+    const ok = await banFromReport(id);
+    await afterModerationAction(ok);
+    if (ok) logActivity(`User banned from flagged report ${id}`, "user");
+  };
+
+  const handleHideEvent = (eventId: string) => {
+    setEventVisibility(eventId, false);
+    logActivity(`Event ${eventId} hidden from community`, "event");
   };
 
   return (
@@ -162,20 +272,32 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
         </View>
         <View style={styles.statCard}>
           <Feather name="message-circle" size={16} color={Colors.light.accent} />
-          <ThemedText style={styles.statValue} testID="text-total-discussions">{discussions.length}</ThemedText>
+          <ThemedText style={styles.statValue} testID="text-total-discussions">{moderationDiscussions.length}</ThemedText>
           <ThemedText style={styles.statLabel}>Total Discussions</ThemedText>
         </View>
         <View style={styles.statCard}>
           <Feather name="flag" size={16} color="#8B3A3A" />
-          <ThemedText style={styles.statValue} testID="text-flagged-content">{flaggedItems.length}</ThemedText>
+          <ThemedText style={styles.statValue} testID="text-flagged-content">
+            {moderationLoading ? "…" : openFlaggedCount}
+          </ThemedText>
           <ThemedText style={styles.statLabel}>Flagged Content</ThemedText>
         </View>
         <View style={styles.statCard}>
           <Feather name="users" size={16} color={Colors.light.accent} />
-          <ThemedText style={styles.statValue} testID="text-active-members">456</ThemedText>
+          <ThemedText style={styles.statValue} testID="text-active-members">
+            {activeMembersLoading
+              ? "…"
+              : !isSupabaseConfigured() || activeMembersError || activeMembersCount === null
+                ? "—"
+                : String(activeMembersCount)}
+          </ThemedText>
           <ThemedText style={styles.statLabel}>Active Members</ThemedText>
         </View>
       </View>
+
+      {activeMembersError && isSupabaseConfigured() ? (
+        <ThemedText style={styles.cardMeta}>Active members count could not be loaded.</ThemedText>
+      ) : null}
 
       <View style={styles.subHeaderRow}>
         <ThemedText style={styles.subSectionTitle}>Events ({events.length})</ThemedText>
@@ -185,13 +307,63 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
         </Pressable>
       </View>
 
+      {registrationsLoading ? (
+        <ThemedText style={styles.cardMeta}>Loading event registrations…</ThemedText>
+      ) : null}
+      {registrationsError ? (
+        <ThemedText style={styles.errorText}>{registrationsError}</ThemedText>
+      ) : null}
+
       {events.map((event) => (
-        <EventCard key={event.id} event={event} onDelete={() => deleteEvent(event.id)} />
+        <EventCard
+          key={event.id}
+          event={event}
+          attendeeCount={event.dbId ? getAttendeeCount(event.dbId) : null}
+          attendees={
+            event.dbId
+              ? registrations.filter(
+                  (r) => r.eventId === event.dbId && r.status === "Registered"
+                )
+              : []
+          }
+          onDelete={() => {
+            handleHideEvent(event.id);
+            deleteEvent(event.id);
+          }}
+        />
       ))}
 
-      <ThemedText style={styles.subSectionTitle}>Flagged Content ({flaggedItems.length})</ThemedText>
+      <ThemedText style={styles.subSectionTitle}>
+        Flagged Content ({moderationLoading ? "…" : openFlagged.length})
+      </ThemedText>
 
-      {flaggedItems.map((item) => (
+      {moderationLoading ? (
+        <View style={styles.moderationLoading}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.cardMeta}>Loading moderation queue…</ThemedText>
+        </View>
+      ) : null}
+
+      {moderationError ? (
+        <View style={styles.moderationErrorBlock}>
+          <ThemedText style={styles.errorText}>{moderationError}</ThemedText>
+          <Pressable style={styles.retryBtn} onPress={() => refreshModerationQueue()}>
+            <ThemedText style={styles.retryBtnText}>Try again</ThemedText>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {!moderationLoading && !moderationError && !isSupabaseConfigured() ? (
+        <ThemedText style={styles.cardMeta}>
+          Connect Supabase to persist the moderation queue.
+        </ThemedText>
+      ) : null}
+
+      {!moderationLoading && !moderationError && isSupabaseConfigured() && openFlagged.length === 0 ? (
+        <ThemedText style={styles.cardMeta}>No open reports in the queue.</ThemedText>
+      ) : null}
+
+      {openFlagged.map((item) => (
         <View key={item.id} style={styles.card} testID={`card-flagged-${item.id}`}>
           <View style={styles.cardHeader}>
             <View style={styles.flaggedHeaderLeft}>
@@ -233,21 +405,74 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
         </View>
       ))}
 
-      <ThemedText style={styles.subSectionTitle}>Discussion Moderation</ThemedText>
+      <ThemedText style={styles.subSectionTitle}>
+        Discussion Moderation ({moderationDiscussions.length})
+      </ThemedText>
 
-      {discussions.map((discussion) => (
-        <View key={discussion.id} style={styles.card}>
+      {discussionsLoading ? (
+        <ThemedText style={styles.cardMeta}>Loading discussions…</ThemedText>
+      ) : null}
+
+      {moderationDiscussions.map((discussion) => (
+        <View key={discussion.id} style={styles.card} testID={`card-discussion-${discussion.id}`}>
           <View style={styles.cardHeader}>
             <ThemedText style={styles.cardTitle} numberOfLines={1}>{discussion.title}</ThemedText>
+            <View style={[styles.badge, getModerationBadgeStyle(discussion.moderationStatus)]}>
+              <ThemedText style={styles.badgeText}>{discussion.moderationStatus}</ThemedText>
+            </View>
           </View>
-          <ThemedText style={styles.cardMeta}>{discussion.date}</ThemedText>
+          <ThemedText style={styles.cardMeta}>{discussion.date} · {discussion.visibility}</ThemedText>
+          <ThemedText style={styles.flaggedPreview} numberOfLines={2}>{discussion.question}</ThemedText>
           <View style={styles.cardRow}>
             <ThemedText style={styles.cardMeta}>
               {discussion.replies.length} {discussion.replies.length === 1 ? "reply" : "replies"}
             </ThemedText>
           </View>
+          <View style={styles.flaggedActions}>
+            {discussion.moderationStatus !== "Approved" ? (
+              <Pressable
+                style={styles.flagActionButton}
+                onPress={() => setDiscussionModeration(discussion.id, { moderationStatus: "Approved" })}
+                testID={`button-approve-discussion-${discussion.id}`}
+              >
+                <Feather name="check-circle" size={14} color={Colors.light.accent} />
+                <ThemedText style={styles.flagActionText}>Approve</ThemedText>
+              </Pressable>
+            ) : null}
+            {discussion.visibility !== "Hidden" ? (
+              <Pressable
+                style={styles.flagActionButton}
+                onPress={() => setDiscussionModeration(discussion.id, { visibility: "Hidden" })}
+                testID={`button-hide-discussion-${discussion.id}`}
+              >
+                <Feather name="eye-off" size={14} color={Colors.light.accent} />
+                <ThemedText style={styles.flagActionText}>Hide</ThemedText>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={styles.flagActionButton}
+                onPress={() => setDiscussionModeration(discussion.id, { visibility: "Visible" })}
+                testID={`button-show-discussion-${discussion.id}`}
+              >
+                <Feather name="eye" size={14} color={Colors.light.accent} />
+                <ThemedText style={styles.flagActionText}>Show</ThemedText>
+              </Pressable>
+            )}
+            <Pressable
+              style={[styles.flagActionButton, styles.flagActionRemove]}
+              onPress={() => setDiscussionModeration(discussion.id, { moderationStatus: "Removed" })}
+              testID={`button-remove-discussion-${discussion.id}`}
+            >
+              <Feather name="trash-2" size={14} color="#8B3A3A" />
+              <ThemedText style={[styles.flagActionText, { color: "#8B3A3A" }]}>Remove</ThemedText>
+            </Pressable>
+          </View>
         </View>
       ))}
+
+      {!discussionsLoading && moderationDiscussions.length === 0 ? (
+        <ThemedText style={styles.cardMeta}>No discussion threads yet.</ThemedText>
+      ) : null}
 
       <Modal visible={showForm} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
@@ -456,6 +681,53 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textSecondary,
     marginBottom: Spacing.xs,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    marginBottom: Spacing.md,
+  },
+  moderationLoading: {
+    alignItems: "center",
+    paddingVertical: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  moderationErrorBlock: {
+    alignItems: "center",
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  retryBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.light.button,
+    borderRadius: BorderRadius.xs,
+  },
+  retryBtnText: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
+  },
+  attendeeList: {
+    marginTop: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  attendeeRow: {
+    paddingVertical: 4,
+    borderTopWidth: 1,
+    borderTopColor: Colors.light.divider,
+  },
+  attendeeName: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.text,
+  },
+  attendeeMeta: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
   },
   cardMeta: {
     fontSize: 13,

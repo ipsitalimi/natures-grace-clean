@@ -1,5 +1,5 @@
-import React, { useState, useRef } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, LayoutChangeEvent, Image } from "react-native";
+import React, { useState, useRef, useCallback } from "react";
+import { View, StyleSheet, ScrollView, Pressable, Modal, LayoutChangeEvent, ActivityIndicator, RefreshControl } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -10,9 +10,13 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { StoreCategory, StoreProduct, productImages } from "@/data/storeProducts";
+import ProductImageView from "@/components/ProductImageView";
+import { StoreCategory, StoreProduct } from "@/data/storeProducts";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useCart } from "@/context/CartContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { formatInr } from "@/lib/formatCurrency";
 
 type StoreStackParamList = {
   StoreProductDetail: { productId: string };
@@ -64,16 +68,17 @@ function ProductCard({ product, onPress }: ProductCardProps) {
       testID={`card-product-${product.id}`}
     >
       <View style={styles.productImagePlaceholder}>
-        {productImages[product.id] ? (
-          <Image source={productImages[product.id]} style={styles.productImage} resizeMode="cover" />
-        ) : (
-          <View style={styles.placeholderCircle} />
-        )}
+        <ProductImageView
+          product={product}
+          containerStyle={styles.productImage}
+          imageStyle={styles.productImage}
+          iconSize={20}
+        />
       </View>
       <View style={styles.productInfo}>
         <ThemedText style={styles.productName} numberOfLines={2}>{product.name}</ThemedText>
         <ThemedText style={styles.productPrice}>
-          ${product.price.toFixed(2)}
+          {formatInr(product.price)}
         </ThemedText>
       </View>
     </Pressable>
@@ -87,7 +92,27 @@ export default function NGStoreScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const [menuVisible, setMenuVisible] = useState(false);
   const [sectionOffsets, setSectionOffsets] = useState<Record<string, number>>({});
-  const { storeCategories } = useDataContext();
+  const { storeCategories, dataLoading, dataError, refreshContent } = useDataContext();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refreshContent({ silent: true });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshContent]);
+  const { homeContent } = usePlatformConfig();
+  const visibleCategories = storeCategories
+    .map((cat) => ({
+      ...cat,
+      products: cat.products.filter(
+        (p) => !p.approvalStatus || p.approvalStatus === "Approved"
+      ),
+    }))
+    .filter((cat) => cat.products.length > 0);
+  const featuredIds = homeContent.featuredProductIds;
   const { getItemCount } = useCart();
   const cartCount = getItemCount();
 
@@ -110,7 +135,7 @@ export default function NGStoreScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -152,7 +177,7 @@ export default function NGStoreScreen() {
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
           <View style={[styles.menuDropdown, { marginTop: insets.top + 90 }]}>
             <ThemedText style={styles.menuTitle}>Jump to Category</ThemedText>
-            {storeCategories.map((category) => (
+            {visibleCategories.map((category) => (
               <Pressable
                 key={category.id}
                 style={({ pressed }) => [
@@ -180,7 +205,31 @@ export default function NGStoreScreen() {
           { paddingBottom: tabBarHeight + 20 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          !dataLoading && !dataError ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor={Colors.light.accent}
+            />
+          ) : undefined
+        }
       >
+        {dataLoading ? (
+          <View style={styles.centeredState}>
+            <ActivityIndicator color={Colors.light.accent} size="large" />
+            <ThemedText style={styles.stateHint}>Loading store…</ThemedText>
+          </View>
+        ) : dataError ? (
+          <View style={styles.centeredState}>
+            <Feather name="alert-circle" size={36} color={Colors.light.textSecondary} />
+            <ThemedText style={styles.stateHint}>{dataError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => void refreshContent()}>
+              <ThemedText style={styles.retryText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        ) : (
+          <>
         <ThemedText style={styles.subtitle}>
           Your Holistic Sanctuary, All in One App
         </ThemedText>
@@ -192,7 +241,7 @@ export default function NGStoreScreen() {
 
         <View style={styles.divider} />
 
-        {storeCategories.map((category) => (
+        {visibleCategories.map((category) => (
           <View
             key={category.id}
             style={styles.categorySection}
@@ -235,6 +284,8 @@ export default function NGStoreScreen() {
           <Feather name="shopping-bag" size={16} color={Colors.light.accent} />
           <ThemedText style={styles.becomeSellerText}>Become a Seller</ThemedText>
         </Pressable>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -466,5 +517,29 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
+  },
+  centeredState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.xl * 2,
+    gap: 12,
+  },
+  stateHint: {
+    fontSize: 15,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
+    paddingHorizontal: Spacing.lg,
+  },
+  retryBtn: {
+    marginTop: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.light.accent,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

@@ -12,14 +12,19 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 
 const DRAWER_WIDTH = 260;
 
 export type AdminScreenName =
   | "Dashboard"
   | "Users"
+  | "Applications"
+  | "Sellers"
   | "Practitioners"
   | "Store"
+  | "Featured"
   | "Community"
   | "Resources"
   | "Prompts"
@@ -28,6 +33,10 @@ export type AdminScreenName =
   | "PromoCodes"
   | "Reviews"
   | "Support"
+  | "Legal"
+  | "Payouts"
+  | "Refunds"
+  | "AuditLog"
   | "Settings";
 
 interface DrawerItem {
@@ -39,8 +48,11 @@ interface DrawerItem {
 const drawerItems: DrawerItem[] = [
   { name: "Dashboard", icon: "grid", label: "Dashboard" },
   { name: "Users", icon: "users", label: "Users" },
+  { name: "Applications", icon: "inbox", label: "Applications" },
+  { name: "Sellers", icon: "briefcase", label: "Sellers" },
   { name: "Practitioners", icon: "heart", label: "Practitioners" },
-  { name: "Store", icon: "shopping-bag", label: "Store Management" },
+  { name: "Store", icon: "shopping-bag", label: "Products" },
+  { name: "Featured", icon: "star", label: "Featured / Home" },
   { name: "Community", icon: "message-circle", label: "Community" },
   { name: "Resources", icon: "book-open", label: "Resources" },
   { name: "Prompts", icon: "edit-3", label: "Daily Prompts" },
@@ -49,6 +61,10 @@ const drawerItems: DrawerItem[] = [
   { name: "PromoCodes", icon: "tag", label: "Promo Codes" },
   { name: "Reviews", icon: "star", label: "Reviews" },
   { name: "Support", icon: "help-circle", label: "Support" },
+  { name: "Payouts", icon: "credit-card", label: "Withdrawals" },
+  { name: "Refunds", icon: "rotate-ccw", label: "Refunds" },
+  { name: "AuditLog", icon: "clipboard", label: "Audit Log" },
+  { name: "Legal", icon: "file-text", label: "Legal" },
   { name: "Settings", icon: "settings", label: "Settings" },
 ];
 
@@ -66,6 +82,7 @@ export default function AdminLayout({
   children,
 }: AdminLayoutProps) {
   const insets = useSafeAreaInsets();
+  const { appNameDisplay, appNameMuted, loading: brandLoading } = useAppBrandCopy();
   const headerHeight = 56 + insets.top;
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -108,7 +125,7 @@ export default function AdminLayout({
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { height: headerHeight, paddingTop: insets.top }]}>
+      <View style={[styles.header, { height: headerHeight, paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <View style={styles.headerLeft}>
           <Pressable
             style={styles.hamburgerBtn}
@@ -120,11 +137,8 @@ export default function AdminLayout({
           <ThemedText style={styles.headerTitle}>Admin Panel</ThemedText>
         </View>
         <View style={styles.headerRight}>
-          <Pressable style={styles.headerIconBtn} testID="button-admin-notifications">
-            <View style={styles.bellContainer}>
-              <Feather name="bell" size={20} color={Colors.light.cardBackground} />
-              <View style={styles.notificationDot} />
-            </View>
+          <Pressable style={styles.headerIconBtn} onPress={() => onNavigate("Notifications")} testID="button-admin-notifications">
+            <Feather name="bell" size={20} color={Colors.light.cardBackground} />
           </Pressable>
           <View style={styles.avatarCircle}>
             <ThemedText style={styles.avatarText}>A</ThemedText>
@@ -165,7 +179,11 @@ export default function AdminLayout({
             <ThemedText style={styles.drawerAvatarText}>NG</ThemedText>
           </View>
           <View style={styles.drawerHeaderInfo}>
-            <ThemedText style={styles.drawerName}>Nature's Grace</ThemedText>
+            <ThemedText
+              style={[styles.drawerName, appNameMuted ? styles.drawerNameMuted : undefined]}
+            >
+              {brandLoading ? "…" : appNameDisplay || "—"}
+            </ThemedText>
             <ThemedText style={styles.drawerEmail}>Admin Panel</ThemedText>
           </View>
         </View>
@@ -250,18 +268,6 @@ const styles = StyleSheet.create({
   headerIconBtn: {
     padding: 6,
   },
-  bellContainer: {
-    position: "relative",
-  },
-  notificationDot: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#E67E22",
-  },
   avatarCircle: {
     width: 34,
     height: 34,
@@ -325,6 +331,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
     fontFamily: "Nunito_700Bold",
+  },
+  drawerNameMuted: {
+    fontStyle: "italic",
+    opacity: 0.85,
   },
   drawerEmail: {
     fontSize: 12,

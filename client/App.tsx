@@ -1,48 +1,138 @@
-import React from "react";
-import { StyleSheet } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import React, { useEffect, useRef } from "react";
+import { StyleSheet, View } from "react-native";
+import { DefaultTheme, NavigationContainer, NavigationContainerRef } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
+import * as SplashScreen from "expo-splash-screen";
 
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/query-client";
 
-import RootStackNavigator from "@/navigation/RootStackNavigator";
+import RootNavigation from "@/navigation/RootNavigation";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import { AuthProvider } from "@/context/AuthContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Colors } from "@/constants/theme";
 import { BookingProvider } from "@/context/BookingContext";
 import { DataProvider } from "@/context/DataContext";
+import { OrdersProvider } from "@/context/OrdersContext";
+import { SellerAnalyticsProvider } from "@/context/SellerAnalyticsContext";
+import { WalletProvider } from "@/context/WalletContext";
+import { PractitionerProvider } from "@/context/PractitionerContext";
 import { CartProvider } from "@/context/CartContext";
 import { JournalProvider } from "@/context/JournalContext";
 import { GratitudeProvider } from "@/context/GratitudeContext";
+import { EventRegistrationsProvider } from "@/context/EventRegistrationsContext";
+import { ResourceEnrollmentsProvider } from "@/context/ResourceEnrollmentsContext";
+import { SupportTicketsProvider } from "@/context/SupportTicketsContext";
+import { FavoritesProvider } from "@/context/FavoritesContext";
+import { PaymentMethodsProvider } from "@/context/PaymentMethodsContext";
+import { ReviewsProvider } from "@/context/ReviewsContext";
+import { ModerationProvider } from "@/context/ModerationContext";
+import { AdminSessionsProvider } from "@/context/AdminSessionsContext";
+import { PlatformConfigProvider } from "@/context/PlatformConfigContext";
+import MaintenanceOverlay from "@/components/MaintenanceOverlay";
+import { getProductionConfigError } from "@/lib/productionConfig";
+import { ThemedText } from "@/components/ThemedText";
+
+const navigationTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    primary: Colors.light.accent,
+    background: Colors.light.backgroundRoot,
+    card: Colors.light.cardBackground,
+    text: Colors.light.text,
+    border: Colors.light.divider,
+    notification: Colors.light.accent,
+  },
+};
+
+function AppShell() {
+  const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+
+  return (
+    <SafeAreaProvider>
+      <GestureHandlerRootView style={styles.root}>
+        <KeyboardProvider>
+          <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+            <SafeAreaView style={styles.root} edges={["top", "left", "right"]}>
+              <RootNavigation navigationRef={navigationRef} />
+              <MaintenanceOverlay />
+            </SafeAreaView>
+          </NavigationContainer>
+          <StatusBar style="dark" />
+        </KeyboardProvider>
+      </GestureHandlerRootView>
+    </SafeAreaProvider>
+  );
+}
 
 export default function App() {
+  useEffect(() => {
+    SplashScreen.hideAsync().catch(() => {});
+  }, []);
+
+  const configError = getProductionConfigError();
+  if (configError) {
+    return (
+      <View style={configStyles.container}>
+        <ThemedText style={configStyles.title}>Configuration required</ThemedText>
+        <ThemedText style={configStyles.message}>{configError}</ThemedText>
+      </View>
+    );
+  }
+
   return (
-    <ErrorBoundary>
+    <ErrorBoundary
+      onError={(error, stack) => {
+        if (__DEV__) {
+          console.error("[App] Render error:", error.message, stack);
+        }
+      }}
+    >
       <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+        <PlatformConfigProvider>
         <DataProvider>
+        <ModerationProvider>
+        <AdminSessionsProvider>
+        <EventRegistrationsProvider>
+        <ResourceEnrollmentsProvider>
+        <SupportTicketsProvider>
+        <FavoritesProvider>
+        <PaymentMethodsProvider>
+        <ReviewsProvider>
+        <OrdersProvider>
+        <WalletProvider>
+        <SellerAnalyticsProvider>
+        <PractitionerProvider>
         <CartProvider>
         <JournalProvider>
         <GratitudeProvider>
         <BookingProvider>
-          <SafeAreaProvider>
-            <GestureHandlerRootView style={styles.root}>
-              <KeyboardProvider>
-                <NavigationContainer>
-                  <SafeAreaView style={styles.root} edges={['top', 'left', 'right']}>
-                    <RootStackNavigator />
-                  </SafeAreaView>
-                </NavigationContainer>
-                <StatusBar style="auto" />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
-          </SafeAreaProvider>
+          <AppShell />
         </BookingProvider>
         </GratitudeProvider>
         </JournalProvider>
         </CartProvider>
+        </PractitionerProvider>
+        </SellerAnalyticsProvider>
+        </WalletProvider>
+        </OrdersProvider>
+        </ReviewsProvider>
+        </PaymentMethodsProvider>
+        </FavoritesProvider>
+        </SupportTicketsProvider>
+        </ResourceEnrollmentsProvider>
+        </EventRegistrationsProvider>
+        </AdminSessionsProvider>
+        </ModerationProvider>
         </DataProvider>
+        </PlatformConfigProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );
@@ -51,5 +141,27 @@ export default function App() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: Colors.light.backgroundRoot,
+  },
+});
+
+const configStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    backgroundColor: Colors.light.backgroundRoot,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: "600",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  message: {
+    fontSize: 15,
+    textAlign: "center",
+    color: Colors.light.textSecondary,
   },
 });

@@ -1,23 +1,51 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { practitionerSessions } from "@/data/practitionerMockData";
+import { usePractitionerContext } from "@/context/PractitionerContext";
+import { getScrollBottomPadding } from "@/lib/layoutInsets";
+import { openMeetingLink } from "@/lib/meetingLink";
 
 export default function PractitionerSessionDetailScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<any>();
   const sessionId = route.params?.sessionId;
-  const session = practitionerSessions.find((s) => s.id === sessionId);
+  const { sessions, completeSession, cancelSession } = usePractitionerContext();
+  const session = sessions.find((s) => s.id === sessionId);
   const [actionDone, setActionDone] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleAction = (action: string) => {
-    setActionDone(action);
+  const handleJoinSession = () => {
+    if (!session) return;
+    openMeetingLink(session.meetingLink);
+  };
+
+  const handleAction = async (action: "complete" | "cancel") => {
+    if (!sessionId || submitting) return;
+    setSubmitting(true);
+    setActionError("");
+    setActionDone("");
+
+    const updated =
+      action === "complete"
+        ? await completeSession(sessionId, session?.notes)
+        : await cancelSession(sessionId, session?.notes);
+
+    setSubmitting(false);
+
+    if (!updated) {
+      setActionError("Could not update this session. Please try again.");
+      return;
+    }
+
+    const label = action === "complete" ? "Marked as Completed" : "Session Cancelled";
+    setActionDone(label);
     setTimeout(() => setActionDone(""), 2500);
   };
 
@@ -40,7 +68,7 @@ export default function PractitionerSessionDetailScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
@@ -102,7 +130,7 @@ export default function PractitionerSessionDetailScreen() {
           <View style={styles.actionButtons}>
             <Pressable
               style={styles.joinButton}
-              onPress={() => handleAction("Joined")}
+              onPress={handleJoinSession}
               testID="button-join-session"
             >
               <Feather name="video" size={16} color="#FFFFFF" />
@@ -110,16 +138,18 @@ export default function PractitionerSessionDetailScreen() {
             </Pressable>
             <View style={styles.secondaryButtonsRow}>
               <Pressable
-                style={styles.completeButton}
-                onPress={() => handleAction("Marked as Completed")}
+                style={[styles.completeButton, submitting && styles.buttonDisabled]}
+                onPress={() => void handleAction("complete")}
+                disabled={submitting}
                 testID="button-mark-completed"
               >
                 <Feather name="check-circle" size={16} color={Colors.light.accent} />
                 <ThemedText style={styles.completeButtonText}>Mark Completed</ThemedText>
               </Pressable>
               <Pressable
-                style={styles.cancelButton}
-                onPress={() => handleAction("Session Cancelled")}
+                style={[styles.cancelButton, submitting && styles.buttonDisabled]}
+                onPress={() => void handleAction("cancel")}
+                disabled={submitting}
                 testID="button-cancel-session"
               >
                 <Feather name="x-circle" size={16} color="#8B3A3A" />
@@ -127,6 +157,10 @@ export default function PractitionerSessionDetailScreen() {
               </Pressable>
             </View>
           </View>
+        ) : null}
+
+        {actionError ? (
+          <ThemedText style={styles.errorText}>{actionError}</ThemedText>
         ) : null}
 
         {actionDone ? (
@@ -309,6 +343,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Nunito_700Bold",
     color: "#8B3A3A",
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#C0392B",
+    textAlign: "center",
+    marginTop: Spacing.md,
   },
   confirmationBanner: {
     flexDirection: "row",

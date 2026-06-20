@@ -5,9 +5,10 @@ import { useNavigation } from "@react-navigation/native";
 import { collection, getDocs } from "firebase/firestore";
 import { Feather } from "@expo/vector-icons";
 
-import { db } from "@/lib/firebase";
+import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 interface CategoryDoc {
   id: string;
@@ -22,6 +23,12 @@ export default function FirebaseDebugScreen() {
   const [errorMsg, setErrorMsg] = useState("");
 
   function fetchCategories() {
+    if (!isFirebaseConfigured() || !db) {
+      setErrorMsg("Firebase is not configured. Add EXPO_PUBLIC_FIREBASE_* to .env.");
+      setStatus("error");
+      return;
+    }
+
     setStatus("loading");
     setErrorMsg("");
     setCategories([]);
@@ -85,7 +92,7 @@ export default function FirebaseDebugScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.header, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-debug-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -95,7 +102,7 @@ export default function FirebaseDebugScreen() {
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 20) }]}
       >
         <View style={styles.statusCard}>
           <ThemedText style={styles.label}>Connection Status</ThemedText>

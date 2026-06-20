@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { View, ScrollView, StyleSheet, TextInput, Pressable, Switch } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -7,7 +7,10 @@ import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { offeringsStore, type SessionOffering } from "@/data/sessionOfferingsStore";
+import type { SessionOffering } from "@/data/practitionerBookings";
+import { usePractitionerContext } from "@/context/PractitionerContext";
+import { fetchAvailabilityForOffering } from "@/services/content/practitionerAvailabilityService";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 const SESSION_TYPES = [
   "Healing",
@@ -721,9 +724,10 @@ export default function AddEditOfferingScreen() {
   const navigation = useNavigation();
   const route = useRoute<any>();
 
+  const { offerings, upsertOffering } = usePractitionerContext();
   const offeringId: string | null = route.params?.offeringId ?? null;
   const existingOffering = offeringId
-    ? offeringsStore.getOfferings().find((o) => o.id === offeringId) ?? null
+    ? offerings.find((o) => o.id === offeringId) ?? null
     : null;
   const isEdit = !!existingOffering;
 
@@ -732,6 +736,8 @@ export default function AddEditOfferingScreen() {
   const [price, setPrice] = useState<number>(existingOffering?.price ?? 1000);
   const [notes, setNotes] = useState<string>(existingOffering?.notes ?? "");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [alwaysAvailable, setAlwaysAvailable] = useState(true);
@@ -739,6 +745,25 @@ export default function AddEditOfferingScreen() {
   const [timingMode, setTimingMode] = useState<TimingMode>("same");
   const [globalTiming, setGlobalTiming] = useState<TimeSlot>({ start: DEFAULT_START, end: DEFAULT_END });
   const [dateTimings, setDateTimings] = useState<Record<string, TimeSlot>>({});
+  const [availabilityLoaded, setAvailabilityLoaded] = useState(!isEdit);
+
+  useEffect(() => {
+    if (!existingOffering?.id || !isEdit) return;
+    let cancelled = false;
+    (async () => {
+      const avail = await fetchAvailabilityForOffering(existingOffering.id);
+      if (cancelled) return;
+      setAlwaysAvailable(avail.alwaysAvailable);
+      setSelectedDates(avail.selectedDates);
+      setTimingMode(avail.timingMode);
+      setGlobalTiming(avail.globalTiming);
+      setDateTimings(avail.dateTimings);
+      setAvailabilityLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [existingOffering?.id, isEdit]);
 
   const toggleDate = (key: string) => {
     setSelectedDates((prev) => {
@@ -758,8 +783,10 @@ export default function AddEditOfferingScreen() {
 
   const canSave = selectedType !== "" && selectedDuration !== null;
 
-  const handleSave = () => {
-    if (!canSave) return;
+  const handleSave = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    setSaveError("");
     const offering: SessionOffering = {
       id: existingOffering?.id ?? `off-${Date.now()}`,
       sessionType: selectedType,
@@ -767,10 +794,17 @@ export default function AddEditOfferingScreen() {
       price,
       notes,
     };
-    if (isEdit) {
-      offeringsStore.updateOffering(offering);
-    } else {
-      offeringsStore.addOffering(offering);
+    const saved = await upsertOffering(offering, {
+      alwaysAvailable,
+      selectedDates,
+      timingMode,
+      globalTiming,
+      dateTimings,
+    });
+    setSaving(false);
+    if (!saved) {
+      setSaveError("Could not save this offering. Please try again.");
+      return;
     }
     setSaved(true);
     setTimeout(() => navigation.goBack(), 1200);
@@ -781,7 +815,7 @@ export default function AddEditOfferingScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 4 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={20} color={Colors.light.accent} />
         </Pressable>
@@ -792,7 +826,7 @@ export default function AddEditOfferingScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.section}>
@@ -960,15 +994,21 @@ export default function AddEditOfferingScreen() {
         ) : null}
 
         <Pressable
-          style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
-          onPress={canSave ? handleSave : undefined}
-          disabled={!canSave}
+          style={[styles.saveButton, (!canSave || saving) && styles.saveButtonDisabled]}
+          onPress={canSave && !saving ? handleSave : undefined}
+          disabled={!canSave || saving}
           testID="button-save-offering"
         >
-          <ThemedText style={[styles.saveButtonText, !canSave && styles.saveButtonTextDisabled]}>
-            {canSave ? "Save Offering" : "Select Type & Duration"}
+          <ThemedText style={[styles.saveButtonText, (!canSave || saving) && styles.saveButtonTextDisabled]}>
+            {saving ? "Saving…" : canSave ? "Save Offering" : "Select Type & Duration"}
           </ThemedText>
         </Pressable>
+
+        {saveError ? (
+          <ThemedText style={{ color: "#8B3A3A", marginTop: 8, textAlign: "center" }}>
+            {saveError}
+          </ThemedText>
+        ) : null}
 
         {saved ? (
           <View style={styles.confirmationBanner}>

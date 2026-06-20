@@ -1,14 +1,19 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, TextInput, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, TextInput, Pressable, Image, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { productListingsStore, type ProductListing } from "@/data/productListingsStore";
 import { SELLER_CATEGORIES } from "@/data/sellerMockData";
+import { useDataContext } from "@/context/DataContext";
+import { useAuth } from "@/context/AuthContext";
+import type { LocalFile } from "@/lib/storageUpload";
+import { uploadProductImage } from "@/lib/storageUpload";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 const MIN_PRICE = 200;
 const MAX_PRICE = 5000;
@@ -55,13 +60,15 @@ export default function AddEditProductListingScreen() {
   const navigation = useNavigation();
   const route = useRoute<any>();
 
-  const listingId: string | null = route.params?.listingId ?? null;
+  const listingId: string | null = route.params?.listingId ?? route.params?.prefill?.id ?? null;
   const prefill = route.params?.prefill ?? null;
+  const { sellerCatalog, addProduct, updateProduct } = useDataContext();
+  const { session } = useAuth();
 
   const existingListing = listingId
-    ? productListingsStore.getListingById(listingId) ?? null
+    ? sellerCatalog.find((p) => p.id === listingId) ?? (prefill?.id === listingId ? prefill : null)
     : null;
-  const isEdit = !!existingListing;
+  const isEdit = Boolean(existingListing && listingId);
 
   const initial = existingListing || prefill;
 
@@ -71,35 +78,91 @@ export default function AddEditProductListingScreen() {
   const [stock, setStock] = useState<string>(initial?.stock?.toString() ?? "10");
   const [description, setDescription] = useState<string>(initial?.description ?? "");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [imageFile, setImageFile] = useState<LocalFile | null>(null);
+  const [imagePreviewUri, setImagePreviewUri] = useState<string | null>(initial?.imageUrl ?? null);
 
   const canSave = name.trim() !== "" && selectedCategory !== "";
 
-  const handleSave = () => {
-    if (!canSave) return;
-    const listing: ProductListing = {
-      id: existingListing?.id ?? `pl-${Date.now()}`,
+  const handlePickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to upload a product image.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const file: LocalFile = {
+      uri: asset.uri,
+      name: asset.fileName ?? `product-${Date.now()}.jpg`,
+      mimeType: asset.mimeType ?? "image/jpeg",
+    };
+    setImageFile(file);
+    setImagePreviewUri(asset.uri);
+  };
+
+  const uploadImageForProduct = async (productId: string): Promise<boolean> => {
+    if (!imageFile || !session?.user?.id) return true;
+    const uploaded = await uploadProductImage(session.user.id, productId, imageFile);
+    if (uploaded.error || !uploaded.url) {
+      setSaveError(uploaded.error ?? "Image upload failed. Product was saved without a new image.");
+      return false;
+    }
+    await updateProduct(productId, { imageUrl: uploaded.url });
+    return true;
+  };
+
+  const handleSave = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    setSaveError("");
+    const stockNum = parseInt(stock, 10) || 0;
+    const payload = {
       name: name.trim(),
       category: selectedCategory,
       price,
-      stock: parseInt(stock, 10) || 0,
-      description: description.trim(),
+      stock: stockNum,
+      description: description.trim() || "A wellness product from Nature's Grace.",
+      status: stockNum === 0 ? ("Out of Stock" as const) : stockNum <= 5 ? ("Low Stock" as const) : ("Active" as const),
     };
-    if (isEdit) {
-      productListingsStore.updateListing(listing);
-    } else {
-      productListingsStore.addListing(listing);
+    try {
+      if (isEdit && listingId) {
+        await updateProduct(listingId, payload);
+        if (imageFile) {
+          await uploadImageForProduct(listingId);
+        }
+        setSaved(true);
+      } else {
+        const created = await addProduct(payload);
+        if (!created) {
+          setSaveError("Could not save this product. Please try again.");
+          return;
+        }
+        if (imageFile) {
+          await uploadImageForProduct(created.id);
+        }
+        setSaved(true);
+      }
+      setTimeout(() => {
+        navigation.goBack();
+      }, 1200);
+    } catch {
+      setSaveError("Could not save this product. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaved(true);
-    setTimeout(() => {
-      navigation.goBack();
-    }, 1200);
   };
 
   const incrementPrice = () => setPrice((p) => Math.min(p + PRICE_STEP, MAX_PRICE));
   const decrementPrice = () => setPrice((p) => Math.max(p - PRICE_STEP, MIN_PRICE));
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={20} color={Colors.light.accent} />
@@ -111,7 +174,7 @@ export default function AddEditProductListingScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.section}>
@@ -243,12 +306,18 @@ export default function AddEditProductListingScreen() {
             <Feather name="image" size={18} color={Colors.light.accent} />
             <ThemedText style={styles.sectionTitle}>Product Image</ThemedText>
           </View>
-          <Pressable style={styles.imageUploader} testID="button-upload-image">
-            <Svg width={36} height={36} viewBox="0 0 24 24" fill="none">
-              <Rect x="3" y="3" width="18" height="18" rx="3" stroke={Colors.light.textMuted} strokeWidth="1.5" />
-              <Path d="M12 8V16M8 12H16" stroke={Colors.light.textMuted} strokeWidth="1.5" strokeLinecap="round" />
-            </Svg>
-            <ThemedText style={styles.uploaderText}>Tap to upload image</ThemedText>
+          <Pressable style={styles.imageUploader} onPress={() => void handlePickImage()} testID="button-upload-image">
+            {imagePreviewUri ? (
+              <Image source={{ uri: imagePreviewUri }} style={styles.imagePreview} resizeMode="cover" />
+            ) : (
+              <>
+                <Svg width={36} height={36} viewBox="0 0 24 24" fill="none">
+                  <Rect x="3" y="3" width="18" height="18" rx="3" stroke={Colors.light.textMuted} strokeWidth="1.5" />
+                  <Path d="M12 8V16M8 12H16" stroke={Colors.light.textMuted} strokeWidth="1.5" strokeLinecap="round" />
+                </Svg>
+                <ThemedText style={styles.uploaderText}>Tap to upload image</ThemedText>
+              </>
+            )}
           </Pressable>
         </View>
 
@@ -262,14 +331,16 @@ export default function AddEditProductListingScreen() {
           </View>
         ) : null}
 
+        {saveError ? <ThemedText style={styles.errorText}>{saveError}</ThemedText> : null}
+
         <Pressable
-          style={[styles.saveButton, !canSave ? styles.saveButtonDisabled : null]}
-          onPress={canSave ? handleSave : undefined}
-          disabled={!canSave}
+          style={[styles.saveButton, (!canSave || saving) ? styles.saveButtonDisabled : null]}
+          onPress={() => void handleSave()}
+          disabled={!canSave || saving}
           testID="button-save-listing"
         >
           <ThemedText style={[styles.saveButtonText, !canSave ? styles.saveButtonTextDisabled : null]}>
-            {canSave ? "Save Product" : "Enter Name & Category"}
+            {saving ? "Saving…" : canSave ? "Save Product" : "Enter Name & Category"}
           </ThemedText>
         </Pressable>
 
@@ -458,6 +529,13 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     marginTop: Spacing.sm,
     gap: Spacing.sm,
+    overflow: "hidden",
+    minHeight: 140,
+  },
+  imagePreview: {
+    width: "100%",
+    height: 180,
+    borderRadius: BorderRadius.sm,
   },
   uploaderText: {
     fontSize: 13,
@@ -536,5 +614,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Nunito_700Bold",
     color: "#013220",
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#C0392B",
+    textAlign: "center",
+    marginBottom: Spacing.md,
   },
 });

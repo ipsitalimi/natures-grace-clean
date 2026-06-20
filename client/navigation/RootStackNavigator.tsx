@@ -1,5 +1,6 @@
 import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import type { LegalDocumentKey } from "@/types/legal";
 import MainTabNavigator from "@/navigation/MainTabNavigator";
 import ModalScreen from "@/screens/ModalScreen";
 import PlaceholderScreen from "@/screens/PlaceholderScreen";
@@ -9,6 +10,8 @@ import ForgotPasswordScreen from "@/screens/ForgotPasswordScreen";
 import NotificationsScreen from "@/screens/NotificationsScreen";
 import SettingsScreen from "@/screens/SettingsScreen";
 import SessionHistoryScreen from "@/screens/SessionHistoryScreen";
+import OrderHistoryScreen from "@/screens/OrderHistoryScreen";
+import OrderDetailScreen from "@/screens/OrderDetailScreen";
 import SessionDetailScreen from "@/screens/SessionDetailScreen";
 import ResourcesScreen from "@/screens/ResourcesScreen";
 import ResourceDetailScreen from "@/screens/ResourceDetailScreen";
@@ -22,6 +25,10 @@ import PaymentMethodsScreen from "@/screens/PaymentMethodsScreen";
 import HelpScreen from "@/screens/HelpScreen";
 import ContactScreen from "@/screens/ContactScreen";
 import AboutScreen from "@/screens/AboutScreen";
+import LegalDocumentScreen from "@/screens/LegalDocumentScreen";
+import SignupLegalScreen from "@/screens/SignupLegalScreen";
+import LegalReacceptanceScreen from "@/screens/LegalReacceptanceScreen";
+import UserLegalSettingsScreen from "@/screens/UserLegalSettingsScreen";
 import SupportScreen from "@/screens/SupportScreen";
 import AdminScreen from "@/screens/admin/AdminScreen";
 import PractitionerTabNavigator from "@/navigation/PractitionerTabNavigator";
@@ -29,6 +36,8 @@ import PractitionerSessionDetailScreen from "@/screens/practitioner/Practitioner
 import PractitionerProfileScreen from "@/screens/practitioner/PractitionerProfileScreen";
 import SessionOfferingsScreen from "@/screens/practitioner/SessionOfferingsScreen";
 import AddEditOfferingScreen from "@/screens/practitioner/AddEditOfferingScreen";
+import PractitionerWalletScreen from "@/screens/practitioner/PractitionerWalletScreen";
+import PractitionerAnalyticsScreen from "@/screens/practitioner/PractitionerAnalyticsScreen";
 import SellerTabNavigator from "@/navigation/SellerTabNavigator";
 import SellerProductDetailScreen from "@/screens/seller/SellerProductDetailScreen";
 import ProductListingsScreen from "@/screens/seller/ProductListingsScreen";
@@ -39,21 +48,51 @@ import SellerWalletScreen from "@/screens/seller/SellerWalletScreen";
 import SellerPromotionsScreen from "@/screens/seller/SellerPromotionsScreen";
 import SellerReviewsScreen from "@/screens/seller/SellerReviewsScreen";
 import SellerStoreCustomizationScreen from "@/screens/seller/SellerStoreCustomizationScreen";
+import SellerOnboardingScreen from "@/screens/seller/SellerOnboardingScreen";
 import KnowYourAdminScreen from "@/screens/KnowYourAdminScreen";
 import FirebaseDebugScreen from "@/screens/FirebaseDebugScreen";
 import NGBuddyScreen from "@/screens/NGBuddyScreen";
+import TrustSafetyScreen from "@/screens/TrustSafetyScreen";
+import ApplicationStatusScreen from "@/screens/ApplicationStatusScreen";
+import NotificationPreferencesScreen from "@/screens/NotificationPreferencesScreen";
+import RefundRequestScreen from "@/screens/RefundRequestScreen";
 import CartScreen from "@/screens/CartScreen";
 import OrderConfirmationScreen from "@/screens/OrderConfirmationScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
+import { withRequireRole } from "@/components/RequireRole";
+
+const GuardedAdminDashboard = withRequireRole(AdminScreen, "Admin");
+const GuardedPractitionerMain = withRequireRole(PractitionerTabNavigator, "Practitioner");
+const GuardedSellerMain = withRequireRole(SellerTabNavigator, "Seller");
+const GuardedPractitionerSessionDetail = withRequireRole(PractitionerSessionDetailScreen, "Practitioner");
+const GuardedPractitionerProfile = withRequireRole(PractitionerProfileScreen, "Practitioner");
+const GuardedSessionOfferings = withRequireRole(SessionOfferingsScreen, "Practitioner");
+const GuardedAddEditOffering = withRequireRole(AddEditOfferingScreen, "Practitioner");
+const GuardedPractitionerWallet = withRequireRole(PractitionerWalletScreen, "Practitioner");
+const GuardedPractitionerAnalytics = withRequireRole(PractitionerAnalyticsScreen, "Practitioner");
+const GuardedSellerProductDetail = withRequireRole(SellerProductDetailScreen, "Seller");
+const GuardedProductListings = withRequireRole(ProductListingsScreen, "Seller");
+const GuardedAddEditProductListing = withRequireRole(AddEditProductListingScreen, "Seller");
+const GuardedSellerOrders = withRequireRole(SellerOrdersScreen, "Seller");
+const GuardedSellerAnalytics = withRequireRole(SellerAnalyticsScreen, "Seller");
+const GuardedSellerWallet = withRequireRole(SellerWalletScreen, "Seller");
+const GuardedSellerPromotions = withRequireRole(SellerPromotionsScreen, "Seller");
+const GuardedSellerReviews = withRequireRole(SellerReviewsScreen, "Seller");
+const GuardedSellerStoreCustomization = withRequireRole(SellerStoreCustomizationScreen, "Seller");
+const GuardedSellerOnboarding = withRequireRole(SellerOnboardingScreen, "Seller");
 
 export type RootStackParamList = {
   Login: undefined;
   Signup: undefined;
+  SignupLegal: { name: string; email: string; password: string };
+  LegalReacceptance: undefined;
   ForgotPassword: undefined;
   Main: undefined;
   Notifications: undefined;
   Settings: undefined;
   SessionHistory: undefined;
+  OrderHistory: undefined;
+  OrderDetail: { orderId: string };
   SessionDetail: { sessionId: string };
   Resources: undefined;
   ResourceDetail: { resourceId: string };
@@ -61,8 +100,16 @@ export type RootStackParamList = {
   StoreProductDetail: { productId: string };
   Cart: undefined;
   OrderConfirmation: {
+    orderNumber: string;
     deliveryOption: string;
     totalPrice: number;
+    items: {
+      productId: string;
+      productName: string;
+      productCategory: string;
+      quantity: number;
+      unitPrice: number;
+    }[];
   };
   EditProfile: undefined;
   ChangePassword: undefined;
@@ -72,6 +119,12 @@ export type RootStackParamList = {
   Help: undefined;
   Contact: undefined;
   About: undefined;
+  LegalDocument: { docKey: LegalDocumentKey };
+  UserLegalPolicies: undefined;
+  TrustSafety: undefined;
+  ApplicationStatus: undefined;
+  NotificationPreferences: undefined;
+  RefundRequest: { orderId?: string; bookingId?: string };
   Support: undefined;
   AdminDashboard: undefined;
   PractitionerMain: undefined;
@@ -79,7 +132,10 @@ export type RootStackParamList = {
   PractitionerProfile: undefined;
   SessionOfferings: undefined;
   AddEditOffering: { offeringId: string | null };
+  PractitionerWallet: undefined;
+  PractitionerAnalytics: undefined;
   SellerMain: undefined;
+  SellerOnboarding: undefined;
   SellerProductDetail: { productId: string };
   ProductListings: undefined;
   AddEditProductListing: { listingId?: string | null; prefill?: any };
@@ -114,6 +170,16 @@ export default function RootStackNavigator() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="SignupLegal"
+        component={SignupLegalScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="LegalReacceptance"
+        component={LegalReacceptanceScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
         name="ForgotPassword"
         component={ForgotPasswordScreen}
         options={{ headerShown: false }}
@@ -136,6 +202,16 @@ export default function RootStackNavigator() {
       <Stack.Screen
         name="SessionHistory"
         component={SessionHistoryScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="OrderHistory"
+        component={OrderHistoryScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="OrderDetail"
+        component={OrderDetailScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -214,6 +290,36 @@ export default function RootStackNavigator() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="LegalDocument"
+        component={LegalDocumentScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="UserLegalPolicies"
+        component={UserLegalSettingsScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="TrustSafety"
+        component={TrustSafetyScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="ApplicationStatus"
+        component={ApplicationStatusScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="NotificationPreferences"
+        component={NotificationPreferencesScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="RefundRequest"
+        component={RefundRequestScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
         name="Support"
         component={SupportScreen}
         options={{ headerShown: false }}
@@ -228,82 +334,97 @@ export default function RootStackNavigator() {
       />
       <Stack.Screen
         name="AdminDashboard"
-        component={AdminScreen}
+        component={GuardedAdminDashboard}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="PractitionerMain"
-        component={PractitionerTabNavigator}
+        component={GuardedPractitionerMain}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="PractitionerSessionDetail"
-        component={PractitionerSessionDetailScreen}
+        component={GuardedPractitionerSessionDetail}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="PractitionerProfile"
-        component={PractitionerProfileScreen}
+        component={GuardedPractitionerProfile}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SessionOfferings"
-        component={SessionOfferingsScreen}
+        component={GuardedSessionOfferings}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="AddEditOffering"
-        component={AddEditOfferingScreen}
+        component={GuardedAddEditOffering}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="PractitionerWallet"
+        component={GuardedPractitionerWallet}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="PractitionerAnalytics"
+        component={GuardedPractitionerAnalytics}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SellerMain"
-        component={SellerTabNavigator}
+        component={GuardedSellerMain}
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="SellerOnboarding"
+        component={GuardedSellerOnboarding}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
         name="SellerProductDetail"
-        component={SellerProductDetailScreen}
+        component={GuardedSellerProductDetail}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="ProductListings"
-        component={ProductListingsScreen}
+        component={GuardedProductListings}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="AddEditProductListing"
-        component={AddEditProductListingScreen}
+        component={GuardedAddEditProductListing}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SellerOrders"
-        component={SellerOrdersScreen}
+        component={GuardedSellerOrders}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SellerAnalytics"
-        component={SellerAnalyticsScreen}
+        component={GuardedSellerAnalytics}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SellerWallet"
-        component={SellerWalletScreen}
+        component={GuardedSellerWallet}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SellerPromotions"
-        component={SellerPromotionsScreen}
+        component={GuardedSellerPromotions}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SellerReviews"
-        component={SellerReviewsScreen}
+        component={GuardedSellerReviews}
         options={{ headerShown: false }}
       />
       <Stack.Screen
         name="SellerStoreCustomization"
-        component={SellerStoreCustomizationScreen}
+        component={GuardedSellerStoreCustomization}
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -311,11 +432,13 @@ export default function RootStackNavigator() {
         component={KnowYourAdminScreen}
         options={{ headerShown: false }}
       />
-      <Stack.Screen
-        name="FirebaseDebug"
-        component={FirebaseDebugScreen}
-        options={{ headerShown: false }}
-      />
+      {__DEV__ ? (
+        <Stack.Screen
+          name="FirebaseDebug"
+          component={FirebaseDebugScreen}
+          options={{ headerShown: false }}
+        />
+      ) : null}
       <Stack.Screen
         name="NGBuddy"
         component={NGBuddyScreen}

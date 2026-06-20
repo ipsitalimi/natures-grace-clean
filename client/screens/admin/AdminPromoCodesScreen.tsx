@@ -1,60 +1,59 @@
-import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
+
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { formatInr, formatInrOff } from "@/lib/formatCurrency";
+import {
+  createPlatformPromoCode,
+  deletePlatformPromoCode,
+  listPlatformPromoCodes,
+  rowToAdminPromoCode,
+  updatePlatformPromoCode,
+  type AdminPromoDisplay,
+} from "@/services/commerce/platformPromosService";
 
-interface PromoCode {
-  id: string;
-  code: string;
-  discountType: "percentage" | "fixed";
-  discountValue: number;
-  minOrder: number | null;
-  usedCount: number;
-  usageLimit: number | null;
-  validUntil: string;
-  status: "Active" | "Expired";
+function badgeStyles(displayStatus: AdminPromoDisplay["displayStatus"]) {
+  switch (displayStatus) {
+    case "Active":
+      return styles.statusActive;
+    case "Paused":
+      return styles.statusPaused;
+    default:
+      return styles.statusExpired;
+  }
 }
 
-const initialPromoCodes: PromoCode[] = [
-  {
-    id: "p1",
-    code: "WELCOME20",
-    discountType: "percentage",
-    discountValue: 20,
-    minOrder: 500,
-    usedCount: 89,
-    usageLimit: 100,
-    validUntil: "Mar 31",
-    status: "Active",
-  },
-  {
-    id: "p2",
-    code: "HEAL50",
-    discountType: "fixed",
-    discountValue: 50,
-    minOrder: null,
-    usedCount: 45,
-    usageLimit: null,
-    validUntil: "Feb 28",
-    status: "Active",
-  },
-  {
-    id: "p3",
-    code: "NEWUSER",
-    discountType: "percentage",
-    discountValue: 15,
-    minOrder: 300,
-    usedCount: 100,
-    usageLimit: 100,
-    validUntil: "Jan 31",
-    status: "Expired",
-  },
-];
+/** Parse optional YYYY-MM-DD to ISO boundaries (UTC). */
+function parseStartsAt(trimmed: string): string | null {
+  if (!trimmed || !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  return `${trimmed}T00:00:00.000Z`;
+}
+
+function parseExpiresAt(trimmed: string): string | null {
+  if (!trimmed || !/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  return `${trimmed}T23:59:59.999Z`;
+}
 
 export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
-  const [promoCodes, setPromoCodes] = useState<PromoCode[]>(initialPromoCodes);
+  const { logActivity } = usePlatformConfig();
+  const [promoCodes, setPromoCodes] = useState<AdminPromoDisplay[]>([]);
+  const [loading, setLoading] = useState(isSupabaseConfigured());
+  const [listError, setListError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [codeInput, setCodeInput] = useState("");
   const [discountType, setDiscountType] = useState<"percentage" | "fixed">("percentage");
   const [discountValue, setDiscountValue] = useState("");
@@ -64,23 +63,72 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
   const [usageLimit, setUsageLimit] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const activeCodes = promoCodes.filter((p) => p.status === "Active").length;
-  const totalRedeemed = promoCodes.reduce((sum, p) => sum + p.usedCount, 0);
+  const load = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setPromoCodes([]);
+      setListError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setListError(null);
+    const res = await listPlatformPromoCodes();
+    setLoading(false);
+    if (!res.ok) {
+      setListError(res.error);
+      setPromoCodes([]);
+      return;
+    }
+    setPromoCodes(res.rows.map(rowToAdminPromoCode));
+  }, []);
 
-  const handleCreate = () => {
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const activeCodes = promoCodes.filter((p) => p.displayStatus === "Active").length;
+  const pausedCodes = promoCodes.filter((p) => p.displayStatus === "Paused").length;
+  const totalRedeemed = promoCodes.reduce((sum, p) => sum + p.usedCount, 0);
+  const estFixedSavings = promoCodes.reduce(
+    (s, p) => (p.discountType === "fixed" ? s + p.usedCount * p.discountValue : s),
+    0
+  );
+
+  const handleCreate = async () => {
     if (!codeInput.trim() || !discountValue.trim()) return;
-    const newCode: PromoCode = {
-      id: `p${Date.now()}`,
-      code: codeInput.trim().toUpperCase(),
+    setCreateError(null);
+    const vf = validFrom.trim();
+    const vu = validUntil.trim();
+
+    if ((vf && !/^\d{4}-\d{2}-\d{2}$/.test(vf)) || (vu && !/^\d{4}-\d{2}-\d{2}$/.test(vu))) {
+      setCreateError("Use Valid From / Until as YYYY-MM-DD or leave empty.");
+      return;
+    }
+
+    const limitTrim = usageLimit.trim();
+    const usageLimitNum = limitTrim === "" ? null : parseInt(limitTrim, 10);
+    if (limitTrim !== "" && (Number.isNaN(usageLimitNum) || usageLimitNum! <= 0)) {
+      setCreateError("Usage limit must be a positive integer or blank for unlimited.");
+      return;
+    }
+
+    setCreateBusy(true);
+    const res = await createPlatformPromoCode({
+      code: codeInput.trim(),
       discountType,
       discountValue: parseFloat(discountValue) || 0,
       minOrder: minOrder.trim() ? parseFloat(minOrder) : null,
-      usedCount: 0,
-      usageLimit: usageLimit.trim() ? parseInt(usageLimit) : null,
-      validUntil: validUntil.trim() || "Mar 31",
-      status: "Active",
-    };
-    setPromoCodes([newCode, ...promoCodes]);
+      usageLimit: usageLimitNum,
+      startsAtIso: parseStartsAt(vf),
+      expiresAtIso: parseExpiresAt(vu),
+    });
+    setCreateBusy(false);
+    if (!res.ok) {
+      setCreateError(res.error);
+      return;
+    }
+
+    logActivity(`Global promo ${res.row.code} created`, "store");
     setCodeInput("");
     setDiscountValue("");
     setMinOrder("");
@@ -88,20 +136,35 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
     setValidUntil("");
     setUsageLimit("");
     setShowForm(false);
+    await load();
   };
 
-  const handleToggleStatus = (id: string) => {
-    setPromoCodes(
-      promoCodes.map((p) =>
-        p.id === id ? { ...p, status: p.status === "Active" ? "Expired" as const : "Active" as const } : p
-      )
-    );
+  const handleToggleStatus = async (id: string) => {
+    const promo = promoCodes.find((p) => p.id === id);
+    if (!promo || !promo.canToggle) return;
+    const next: "Active" | "Paused" = promo.dbStatus === "Active" ? "Paused" : "Active";
+    const res = await updatePlatformPromoCode(id, { status: next });
+    if (!res.ok) {
+      Alert.alert("Promo", res.error);
+      return;
+    }
+    logActivity(`Global promo ${promo.code} set ${next}`, "store");
+    await load();
   };
 
   const handleDelete = (id: string) => {
     if (confirmDeleteId === id) {
-      setPromoCodes(promoCodes.filter((p) => p.id !== id));
-      setConfirmDeleteId(null);
+      const code = promoCodes.find((p) => p.id === id)?.code ?? id;
+      void (async () => {
+        const res = await deletePlatformPromoCode(id);
+        setConfirmDeleteId(null);
+        if (!res.ok) {
+          Alert.alert("Promo", res.error);
+          return;
+        }
+        logActivity(`Global promo ${code} deleted`, "store");
+        await load();
+      })();
     } else {
       setConfirmDeleteId(id);
       setTimeout(() => setConfirmDeleteId(null), 3000);
@@ -121,6 +184,19 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
         <ThemedText style={styles.sectionTitle}>Promo Codes</ThemedText>
       </View>
 
+      {!isSupabaseConfigured() ? (
+        <ThemedText style={styles.hint}>Connect Supabase to manage global promo codes.</ThemedText>
+      ) : null}
+
+      {listError ? <ThemedText style={styles.errorBanner}>{listError}</ThemedText> : null}
+
+      {loading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.hint}>Loading promo codes…</ThemedText>
+        </View>
+      ) : null}
+
       <View style={styles.statsRow}>
         <View style={styles.statChip}>
           <ThemedText style={styles.statValue}>{activeCodes}</ThemedText>
@@ -128,17 +204,23 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
         </View>
         <View style={styles.statChip}>
           <ThemedText style={styles.statValue}>{totalRedeemed}</ThemedText>
-          <ThemedText style={styles.statLabel}>Total Redeemed</ThemedText>
+          <ThemedText style={styles.statLabel}>Total Redemptions</ThemedText>
         </View>
         <View style={styles.statChip}>
-          <ThemedText style={styles.statValue}>Rs. 18,500</ThemedText>
-          <ThemedText style={styles.statLabel}>Revenue Saved</ThemedText>
+          <ThemedText style={styles.statValue}>{formatInr(Math.round(estFixedSavings))}+</ThemedText>
+          <ThemedText style={styles.statLabel}>Est. Fixed Off</ThemedText>
         </View>
+      </View>
+
+      <View style={styles.statRowSecond}>
+        <ThemedText style={styles.hint}>Paused: {pausedCodes}</ThemedText>
       </View>
 
       {showForm ? (
         <View style={styles.formCard}>
           <ThemedText style={styles.formTitle}>Create Promo Code</ThemedText>
+
+          {createError ? <ThemedText style={styles.errorBanner}>{createError}</ThemedText> : null}
 
           <ThemedText style={styles.inputLabel}>Code</ThemedText>
           <TextInput
@@ -188,7 +270,7 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
             testID="input-discount-value"
           />
 
-          <ThemedText style={styles.inputLabel}>Minimum Order (Rs.)</ThemedText>
+          <ThemedText style={styles.inputLabel}>Minimum Order (₹)</ThemedText>
           <TextInput
             style={styles.input}
             value={minOrder}
@@ -206,7 +288,7 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
                 style={styles.input}
                 value={validFrom}
                 onChangeText={setValidFrom}
-                placeholder="e.g., Feb 19"
+                placeholder="YYYY-MM-DD"
                 placeholderTextColor={`${Colors.light.textSecondary}80`}
                 testID="input-valid-from"
               />
@@ -217,7 +299,7 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
                 style={styles.input}
                 value={validUntil}
                 onChangeText={setValidUntil}
-                placeholder="e.g., Mar 31"
+                placeholder="YYYY-MM-DD"
                 placeholderTextColor={`${Colors.light.textSecondary}80`}
                 testID="input-valid-until"
               />
@@ -238,14 +320,28 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
           <View style={styles.formActions}>
             <Pressable
               style={styles.cancelBtn}
-              onPress={() => setShowForm(false)}
+              onPress={() => {
+                setShowForm(false);
+                setCreateError(null);
+              }}
               testID="button-cancel-promo"
             >
               <ThemedText style={styles.cancelBtnText}>Cancel</ThemedText>
             </Pressable>
-            <Pressable style={styles.createBtn} onPress={handleCreate} testID="button-create-promo">
-              <Feather name="plus" size={16} color="#FFFFFF" />
-              <ThemedText style={styles.createBtnText}>Create</ThemedText>
+            <Pressable
+              style={[styles.createBtn, createBusy && styles.createBtnDisabled]}
+              onPress={() => void handleCreate()}
+              disabled={createBusy}
+              testID="button-create-promo"
+            >
+              {createBusy ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Feather name="plus" size={16} color="#FFFFFF" />
+                  <ThemedText style={styles.createBtnText}>Create</ThemedText>
+                </>
+              )}
             </Pressable>
           </View>
         </View>
@@ -261,37 +357,40 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
       )}
 
       <ThemedText style={styles.subSectionTitle}>Existing Codes</ThemedText>
+      {!loading && promoCodes.length === 0 ? (
+        <ThemedText style={styles.hint}>No global promo codes yet. Create one above.</ThemedText>
+      ) : null}
       {promoCodes.map((promo) => {
-        const usagePercent = promo.usageLimit
-          ? Math.min((promo.usedCount / promo.usageLimit) * 100, 100)
-          : 30;
+        const usagePercent =
+          promo.usageLimit != null
+            ? Math.min((promo.usedCount / promo.usageLimit) * 100, 100)
+            : promo.usedCount > 0
+              ? 100
+              : 10;
         const discountLabel =
           promo.discountType === "percentage"
             ? `${promo.discountValue}% off`
-            : `Rs. ${promo.discountValue} off`;
-        const usageLabel = promo.usageLimit
-          ? `${promo.usedCount}/${promo.usageLimit}`
-          : `${promo.usedCount}/unlimited`;
+            : formatInrOff(promo.discountValue);
+        const usageLabel =
+          promo.usageLimit != null
+            ? `${promo.usedCount}/${promo.usageLimit}`
+            : `${promo.usedCount}/unlimited`;
 
         return (
           <View key={promo.id} style={styles.promoCard}>
             <View style={styles.promoHeader}>
               <ThemedText style={styles.promoCode}>{promo.code}</ThemedText>
-              <View
-                style={[
-                  styles.statusBadge,
-                  promo.status === "Active" ? styles.statusActive : styles.statusExpired,
-                ]}
-              >
-                <ThemedText style={styles.statusBadgeText}>{promo.status}</ThemedText>
+              <View style={[styles.statusBadge, badgeStyles(promo.displayStatus)]}>
+                <ThemedText style={styles.statusBadgeText}>{promo.displayStatus}</ThemedText>
               </View>
             </View>
             <ThemedText style={styles.promoDiscount}>{discountLabel}</ThemedText>
             {promo.minOrder ? (
-              <ThemedText style={styles.promoMeta}>Min order: Rs. {promo.minOrder}</ThemedText>
+              <ThemedText style={styles.promoMeta}>Min order: {formatInr(promo.minOrder)}</ThemedText>
             ) : (
               <ThemedText style={styles.promoMeta}>No minimum order</ThemedText>
             )}
+            <ThemedText style={styles.promoMeta}>Valid from {promo.validFrom}</ThemedText>
             <ThemedText style={styles.promoMeta}>Valid until {promo.validUntil}</ThemedText>
 
             <View style={styles.usageSection}>
@@ -302,35 +401,35 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
             </View>
 
             <View style={styles.promoActions}>
-              <Pressable
-                style={[styles.toggleStatusBtn, promo.status === "Active" ? styles.deactivateBtn : styles.activateBtn]}
-                onPress={() => handleToggleStatus(promo.id)}
-                testID={`button-toggle-promo-${promo.id}`}
-              >
-                <Feather
-                  name={promo.status === "Active" ? "pause-circle" : "play-circle"}
-                  size={14}
-                  color={promo.status === "Active" ? "#8B3A3A" : Colors.light.accent}
-                />
-                <ThemedText
-                  style={[
-                    styles.toggleStatusText,
-                    promo.status === "Active" ? styles.deactivateText : styles.activateText,
-                  ]}
+              {promo.canToggle ? (
+                <Pressable
+                  style={[styles.toggleStatusBtn, promo.displayStatus === "Active" ? styles.deactivateBtn : styles.activateBtn]}
+                  onPress={() => void handleToggleStatus(promo.id)}
+                  testID={`button-toggle-promo-${promo.id}`}
                 >
-                  {promo.status === "Active" ? "Deactivate" : "Activate"}
-                </ThemedText>
-              </Pressable>
+                  <Feather
+                    name={promo.displayStatus === "Active" ? "pause-circle" : "play-circle"}
+                    size={14}
+                    color={promo.displayStatus === "Active" ? "#8B3A3A" : Colors.light.accent}
+                  />
+                  <ThemedText
+                    style={[
+                      styles.toggleStatusText,
+                      promo.displayStatus === "Active" ? styles.deactivateText : styles.activateText,
+                    ]}
+                  >
+                    {promo.displayStatus === "Active" ? "Deactivate" : "Activate"}
+                  </ThemedText>
+                </Pressable>
+              ) : (
+                <View />
+              )}
               <Pressable
                 style={[styles.deleteBtn, confirmDeleteId === promo.id ? styles.deleteBtnConfirm : null]}
                 onPress={() => handleDelete(promo.id)}
                 testID={`button-delete-promo-${promo.id}`}
               >
-                <Feather
-                  name="trash-2"
-                  size={14}
-                  color={confirmDeleteId === promo.id ? "#FFFFFF" : "#8B3A3A"}
-                />
+                <Feather name="trash-2" size={14} color={confirmDeleteId === promo.id ? "#FFFFFF" : "#8B3A3A"} />
                 {confirmDeleteId === promo.id ? (
                   <ThemedText style={styles.deleteBtnConfirmText}>Confirm</ThemedText>
                 ) : null}
@@ -344,6 +443,26 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
 }
 
 const styles = StyleSheet.create({
+  hint: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  errorBanner: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: "#8B3A3A",
+    marginBottom: Spacing.md,
+  },
+  statRowSecond: {
+    marginBottom: Spacing.md,
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
@@ -383,7 +502,7 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: "row",
     gap: 10,
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   statChip: {
     flex: 1,
@@ -507,6 +626,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     borderRadius: 10,
     gap: 6,
+    minWidth: 110,
+    justifyContent: "center",
+  },
+  createBtnDisabled: {
+    opacity: 0.65,
   },
   createBtnText: {
     fontSize: 14,
@@ -540,6 +664,9 @@ const styles = StyleSheet.create({
   },
   statusActive: {
     backgroundColor: "#013220",
+  },
+  statusPaused: {
+    backgroundColor: "#D4943A",
   },
   statusExpired: {
     backgroundColor: "#AAB494",

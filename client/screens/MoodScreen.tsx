@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -11,8 +11,15 @@ import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
+import AppHeader from "@/components/AppHeader";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import SellerDrawer from "@/components/SellerDrawer";
+import PractitionerDrawer from "@/components/PractitionerDrawer";
+import { useIsSellerTabContext } from "@/hooks/useIsSellerTabContext";
+import { useIsPractitionerTabContext } from "@/hooks/useIsPractitionerTabContext";
 import { useJournal } from "@/context/JournalContext";
+import { useGratitude } from "@/context/GratitudeContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type MoodStackParamList = {
   JournalEditor: { prompt?: string } | undefined;
@@ -144,7 +151,12 @@ export default function MoodScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const { entries, selectedMood, setSelectedMood, getStreak } = useJournal();
+  const isSellerTab = useIsSellerTabContext();
+  const isPractitionerTab = useIsPractitionerTabContext();
+  const isRoleTab = isSellerTab || isPractitionerTab;
+  const { entries, selectedMood, setSelectedMood, getStreak, journalLoading, journalError } =
+    useJournal();
+  const { myGratitudes } = useGratitude();
 
   const streak = getStreak();
   const recentEntries = entries.slice(0, 3);
@@ -171,17 +183,27 @@ export default function MoodScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
-        <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
-      
+      {isSellerTab ? (
+        <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      ) : isPractitionerTab ? (
+        <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      ) : (
+        <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      )}
+      {isRoleTab ? (
+        <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
+      ) : (
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+          <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+          <View style={styles.headerCenter} />
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+            <Feather name="bell" size={22} color={Colors.light.accent} />
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.topContent}>
         <View style={styles.titleSection}>
           <ThemedText style={styles.title}>Journal</ThemedText>
@@ -259,7 +281,18 @@ export default function MoodScreen() {
           ) : null}
         </View>
 
-        {recentEntries.length > 0 ? (
+        {journalLoading ? (
+          <View style={styles.loadingSection}>
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+            <ThemedText style={styles.loadingText}>Loading journal…</ThemedText>
+          </View>
+        ) : journalError ? (
+          <View style={styles.loadingSection}>
+            <ThemedText style={styles.loadingText}>{journalError}</ThemedText>
+          </View>
+        ) : null}
+
+        {!journalLoading && recentEntries.length > 0 ? (
           <View style={styles.recentSection}>
             <View style={styles.recentHeader}>
               <ThemedText style={styles.sectionTitle}>Recent Entries</ThemedText>
@@ -304,7 +337,7 @@ export default function MoodScreen() {
           icon={<HeartIcon size={22} color={Colors.light.accent} />}
           title="Gratitude Log"
           subtitle="Things you're thankful for"
-          badge="3"
+          badge={myGratitudes.length > 0 ? String(myGratitudes.length) : undefined}
           onPress={() => navigation.navigate("Gratitude")}
         />
 
@@ -367,6 +400,16 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     fontWeight: "500",
     opacity: 0.7,
+  },
+  loadingSection: {
+    alignItems: "center",
+    paddingVertical: Spacing.lg,
+    gap: 8,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
   },
   promptCard: {
     backgroundColor: Colors.light.accent,

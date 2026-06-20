@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, Alert, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { offeringsStore, type SessionOffering } from "@/data/sessionOfferingsStore";
+import type { SessionOffering } from "@/data/practitionerBookings";
+import { usePractitionerContext } from "@/context/PractitionerContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 function getDurationLabel(minutes: number): string {
   if (minutes === 60) return "1 hour";
@@ -37,26 +39,30 @@ export default function SessionOfferingsScreen() {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
 
-  const [offerings, setOfferings] = useState<SessionOffering[]>(offeringsStore.getOfferings());
+  const { offerings, deleteOffering, refresh, loading } = usePractitionerContext();
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isFocused) {
-      setOfferings(offeringsStore.getOfferings());
-    }
-  }, [isFocused]);
-
-  useEffect(() => {
-    const unsub = offeringsStore.subscribe(() => {
-      setOfferings(offeringsStore.getOfferings());
-    });
-    return unsub;
-  }, []);
+    if (isFocused) refresh();
+  }, [isFocused, refresh]);
 
   const handleDelete = (id: string) => {
-    offeringsStore.deleteOffering(id);
-    setDeleteConfirm(id);
-    setTimeout(() => setDeleteConfirm(null), 2000);
+    Alert.alert(
+      "Delete offering",
+      "Remove this session offering? Existing bookings are not affected.",
+      [
+        { text: "Keep", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            await deleteOffering(id);
+            setDeleteConfirm(id);
+            setTimeout(() => setDeleteConfirm(null), 2000);
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -70,9 +76,16 @@ export default function SessionOfferingsScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.loadingText}>Loading offerings…</ThemedText>
+          </View>
+        ) : null}
+
         <Pressable
           style={styles.addButton}
           onPress={() => (navigation as any).navigate("AddEditOffering", { offeringId: null })}
@@ -224,6 +237,16 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     marginBottom: Spacing.xl,
     lineHeight: 18,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: Spacing.md,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.light.textMuted,
   },
   emptyCard: {
     backgroundColor: Colors.light.cardBackground,

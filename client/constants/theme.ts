@@ -26,26 +26,6 @@ export const Colors = {
     navBar: "#E8EDDF",
     navBarText: "#013220",
   },
-  dark: {
-    text: "#EDE5BE",
-    textSecondary: "#B8AF6F",
-    buttonText: "#FFFFFF",
-    tabIconDefault: "#9C974F",
-    tabIconSelected: "#D3CA96",
-    link: "#B8AF6F",
-    primary: "#80853B",
-    accent: "#B8AF6F",
-    backgroundRoot: "#1A1D1A",
-    backgroundDefault: "#232823",
-    backgroundSecondary: "#2D322D",
-    backgroundTertiary: "#373C37",
-    cardBackground: "#232823",
-    divider: "#3A3F3A",
-    button: "#80853B",
-    buttonPressed: "#64722F",
-    navBar: "#013220",
-    navBarText: "#EDE5BE",
-  },
 };
 
 export const Spacing = {

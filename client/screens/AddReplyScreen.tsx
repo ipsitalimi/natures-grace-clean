@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TextInput, Pressable, KeyboardAvoidingView, Platform } from "react-native";
+import { View, StyleSheet, TextInput, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -9,6 +9,10 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { useAuth } from "@/context/AuthContext";
+import { useDataContext } from "@/context/DataContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 type RootStackParamList = {
   AddReply: { discussionId: string };
@@ -25,12 +29,46 @@ export default function AddReplyScreen() {
   const { discussionId } = route.params;
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [replyText, setReplyText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { session, profile } = useAuth();
+  const { addDiscussionReply } = useDataContext();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    const body = replyText.trim();
+    if (!body || submitting) return;
+
+    if (!isSupabaseConfigured()) {
+      setSubmitError("Discussions are unavailable until Supabase is configured.");
+      return;
+    }
+    if (!session?.user) {
+      setSubmitError("Sign in to post a reply.");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+    const authorName =
+      profile?.full_name?.trim() ||
+      profile?.email?.split("@")[0] ||
+      "Community member";
+    const created = await addDiscussionReply(
+      discussionId,
+      body,
+      authorName,
+      session.user.id
+    );
+    setSubmitting(false);
+
+    if (!created) {
+      setSubmitError("Could not save your reply. Please try again.");
+      return;
+    }
     navigation.goBack();
   };
 
-  const canSubmit = replyText.trim().length > 0;
+  const canSubmit = replyText.trim().length > 0 && !submitting;
 
   return (
     <KeyboardAvoidingView 
@@ -38,7 +76,7 @@ export default function AddReplyScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -68,17 +106,24 @@ export default function AddReplyScreen() {
         <ThemedText style={styles.hint}>
           Be kind and respectful. Your reply will be visible to everyone.
         </ThemedText>
+        {submitError ? (
+          <ThemedText style={styles.errorText}>{submitError}</ThemedText>
+        ) : null}
       </View>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
         <Pressable
           style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
           onPress={canSubmit ? handleSubmit : undefined}
           disabled={!canSubmit}
         >
-          <ThemedText style={styles.submitButtonText}>
-            {canSubmit ? "Submit Reply" : "Write something..."}
-          </ThemedText>
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.submitButtonText}>
+              {replyText.trim().length > 0 ? "Submit Reply" : "Write something..."}
+            </ThemedText>
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -163,5 +208,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  errorText: {
+    fontSize: 13,
+    color: "#8B3A3A",
+    marginTop: Spacing.md,
+    textAlign: "center",
   },
 });

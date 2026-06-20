@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import { useNavigation } from "@react-navigation/native";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import React, { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSignOut } from "@/hooks/useSignOut";
 
 import AdminLayout, { AdminScreenName } from "./AdminLayout";
 import AdminDashboardScreen from "./AdminDashboardScreen";
@@ -18,28 +18,74 @@ import AdminNotificationsScreen from "./AdminNotificationsScreen";
 import AdminPromoCodesScreen from "./AdminPromoCodesScreen";
 import AdminReviewsScreen from "./AdminReviewsScreen";
 import AdminSupportScreen from "./AdminSupportScreen";
+import AdminFeaturedScreen from "./AdminFeaturedScreen";
+import AdminSellersScreen from "./AdminSellersScreen";
+import AdminApplicationsScreen from "./AdminApplicationsScreen";
+import AdminLegalScreen from "./AdminLegalScreen";
+import AdminPayoutQueueScreen from "./AdminPayoutQueueScreen";
+import AdminRefundQueueScreen from "./AdminRefundQueueScreen";
+import AdminAuditLogScreen from "./AdminAuditLogScreen";
+
+const ADMIN_NAV_KEY = "admin_nav_state_v1";
 
 type SubScreen =
   | { type: "main" }
   | { type: "userDetail"; userId: string }
   | { type: "addPractitioner" };
 
+type PersistedAdminNav = {
+  activeScreen: AdminScreenName;
+  subScreen: SubScreen;
+};
+
 export default function AdminScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<any>>();
+  const signOut = useSignOut();
   const [activeScreen, setActiveScreen] = useState<AdminScreenName>("Dashboard");
   const [subScreen, setSubScreen] = useState<SubScreen>({ type: "main" });
+  const [navReady, setNavReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(ADMIN_NAV_KEY);
+        if (!raw || cancelled) return;
+        const parsed = JSON.parse(raw) as PersistedAdminNav;
+        if (parsed.activeScreen) setActiveScreen(parsed.activeScreen);
+        if (parsed.subScreen) setSubScreen(parsed.subScreen);
+      } catch {
+        // ignore invalid persisted nav
+      } finally {
+        if (!cancelled) setNavReady(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!navReady) return;
+    const payload: PersistedAdminNav = { activeScreen, subScreen };
+    void AsyncStorage.setItem(ADMIN_NAV_KEY, JSON.stringify(payload));
+  }, [activeScreen, subScreen, navReady]);
 
   const handleNavigate = (screen: AdminScreenName) => {
     setActiveScreen(screen);
     setSubScreen({ type: "main" });
   };
 
-  const handleBack = () => {
-    navigation.reset({ index: 0, routes: [{ name: "Login" }] });
+  const handleBack = async () => {
+    await signOut();
   };
 
   const handleBackToDashboard = () => {
     setActiveScreen("Dashboard");
+    setSubScreen({ type: "main" });
+  };
+
+  const handleBackFromUserDetail = () => {
+    setActiveScreen("Users");
     setSubScreen({ type: "main" });
   };
 
@@ -48,7 +94,7 @@ export default function AdminScreen() {
       return (
         <AdminUserDetailScreen
           userId={subScreen.userId}
-          onBack={handleBackToDashboard}
+          onBack={handleBackFromUserDetail}
         />
       );
     }
@@ -72,10 +118,17 @@ export default function AdminScreen() {
       case "Users":
         return (
           <AdminUsersScreen
-            onViewUser={(userId) => setSubScreen({ type: "userDetail", userId })}
+            onViewUser={(userId) => {
+              setActiveScreen("Users");
+              setSubScreen({ type: "userDetail", userId });
+            }}
             onBackToDashboard={handleBackToDashboard}
           />
         );
+      case "Applications":
+        return <AdminApplicationsScreen onBackToDashboard={handleBackToDashboard} />;
+      case "Sellers":
+        return <AdminSellersScreen onBackToDashboard={handleBackToDashboard} />;
       case "Practitioners":
         return (
           <AdminPractitionersScreen
@@ -85,6 +138,8 @@ export default function AdminScreen() {
         );
       case "Store":
         return <AdminStoreScreen onBackToDashboard={handleBackToDashboard} />;
+      case "Featured":
+        return <AdminFeaturedScreen onBackToDashboard={handleBackToDashboard} />;
       case "Community":
         return <AdminCommunityScreen onBackToDashboard={handleBackToDashboard} />;
       case "Resources":
@@ -101,6 +156,14 @@ export default function AdminScreen() {
         return <AdminReviewsScreen onBackToDashboard={handleBackToDashboard} />;
       case "Support":
         return <AdminSupportScreen onBackToDashboard={handleBackToDashboard} />;
+      case "Payouts":
+        return <AdminPayoutQueueScreen onBackToDashboard={handleBackToDashboard} />;
+      case "Refunds":
+        return <AdminRefundQueueScreen onBackToDashboard={handleBackToDashboard} />;
+      case "AuditLog":
+        return <AdminAuditLogScreen onBackToDashboard={handleBackToDashboard} />;
+      case "Legal":
+        return <AdminLegalScreen onBackToDashboard={handleBackToDashboard} />;
       case "Settings":
         return <AdminSettingsScreen onBackToDashboard={handleBackToDashboard} />;
       default:

@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, Pressable, TextInput } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -9,6 +9,9 @@ import Svg, { Path } from "react-native-svg";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing } from "@/constants/theme";
 import { useGratitude } from "@/context/GratitudeContext";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 function HeartIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -34,13 +37,31 @@ export default function AddGratitudeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { addGratitude } = useGratitude();
+  const { session } = useAuth();
   const [gratitudeText, setGratitudeText] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
-    if (!gratitudeText.trim()) return;
-    addGratitude(gratitudeText.trim(), isPublic);
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    if (session?.user) return;
+    Alert.alert("Sign in required", "Please sign in to add a gratitude entry.", [
+      { text: "OK", onPress: () => navigation.goBack() },
+    ]);
+  }, [session?.user, navigation]);
+
+  const handleSubmit = async () => {
+    if (!gratitudeText.trim() || submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    const ok = await addGratitude(gratitudeText.trim(), isPublic);
+    setSubmitting(false);
+    if (!ok) {
+      setSubmitError("Could not save gratitude. Sign in and try again.");
+      return;
+    }
     setSaved(true);
     setTimeout(() => {
       navigation.goBack();
@@ -49,7 +70,7 @@ export default function AddGratitudeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -112,6 +133,10 @@ export default function AddGratitudeScreen() {
           </ThemedText>
         </View>
 
+        {submitError ? (
+          <ThemedText style={styles.submitErrorText}>{submitError}</ThemedText>
+        ) : null}
+
         {saved ? (
           <View style={styles.successMessage}>
             <Feather name="check-circle" size={20} color={Colors.light.accent} />
@@ -119,12 +144,16 @@ export default function AddGratitudeScreen() {
           </View>
         ) : (
           <Pressable
-            style={[styles.submitButton, !gratitudeText.trim() && styles.submitButtonDisabled]}
+            style={[styles.submitButton, (!gratitudeText.trim() || submitting) && styles.submitButtonDisabled]}
             onPress={handleSubmit}
-            disabled={!gratitudeText.trim()}
+            disabled={!gratitudeText.trim() || submitting}
             testID="button-save-gratitude"
           >
-            <ThemedText style={styles.submitButtonText}>Save Gratitude</ThemedText>
+            {submitting ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.submitButtonText}>Save Gratitude</ThemedText>
+            )}
           </Pressable>
         )}
       </View>
@@ -258,5 +287,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: Colors.light.accent,
+  },
+  submitErrorText: {
+    fontSize: 13,
+    color: "#8B3A3A",
+    textAlign: "center",
+    marginTop: Spacing.md,
   },
 });

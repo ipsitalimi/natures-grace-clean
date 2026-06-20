@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { View, StyleSheet, Pressable, Image, ActivityIndicator, ImageSourcePropType } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
@@ -7,13 +7,12 @@ import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
+import { getHeaderPaddingTop } from "@/lib/layoutInsets";
 
 import healingsIcon from "../../assets/images/icons/healings-icon.png";
 import therapiesIcon from "../../assets/images/icons/therapies-icon.png";
@@ -63,12 +62,9 @@ const BUTTON_TEXT_MAP: Record<string, string> = {
   "animal-healing": "Explore",
 };
 
-interface FirestoreCategory {
+interface WellnessCategory {
   id: string;
   name: string;
-  subtitle?: string;
-  description?: string;
-  order?: number;
 }
 
 type WellnessStackParamList = {
@@ -97,10 +93,10 @@ interface CategoryCardProps {
 function CategoryCard({ icon, title, buttonText, onPress }: CategoryCardProps) {
   return (
     <View style={styles.categoryCard}>
-      <View style={styles.categoryIconContainer}>
-        {icon}
-      </View>
-      <ThemedText style={styles.categoryTitle} numberOfLines={2}>{title}</ThemedText>
+      <View style={styles.categoryIconContainer}>{icon}</View>
+      <ThemedText style={styles.categoryTitle} numberOfLines={2}>
+        {title}
+      </ThemedText>
       <Pressable style={styles.categoryButton} onPress={onPress}>
         <ThemedText style={styles.categoryButtonText}>{buttonText}</ThemedText>
         <Feather name="chevron-right" size={10} color="#FFFFFF" />
@@ -114,40 +110,13 @@ export default function WellnessScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<WellnessNavigationProp>();
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [firestoreCategories, setFirestoreCategories] = useState<FirestoreCategory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { practitionerCategories } = useDataContext();
+  const { practitionerCategories, practitionersLoading, dataError, refreshContent } = useDataContext();
 
-  useEffect(() => {
-    getDocs(collection(db, "categories"))
-      .then((snapshot) => {
-        const docs: FirestoreCategory[] = [];
-        snapshot.forEach((doc) => {
-          docs.push({ id: doc.id, ...doc.data() } as FirestoreCategory);
-        });
-        docs.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
-        setFirestoreCategories(docs);
-      })
-      .catch((err) => {
-        console.error("[Wellness] Failed to fetch categories:", err?.message || err);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  const categories: FirestoreCategory[] = React.useMemo(() => {
-    const firestoreIds = new Set(firestoreCategories.map((c) => c.id));
-    const localOnly = practitionerCategories
-      .filter((c) => !firestoreIds.has(c.id))
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        subtitle: c.subtitle,
-        description: c.description,
-        order: 99,
-      }));
-    const merged = [...firestoreCategories, ...localOnly];
-    return merged.sort((a, b) => getCategoryOrder(a.id) - getCategoryOrder(b.id));
-  }, [firestoreCategories, practitionerCategories]);
+  const categories = useMemo<WellnessCategory[]>(() => {
+    return [...practitionerCategories]
+      .map((c) => ({ id: c.id, name: c.name }))
+      .sort((a, b) => getCategoryOrder(a.id) - getCategoryOrder(b.id));
+  }, [practitionerCategories]);
 
   const navigateToCategory = (categoryId: string) => {
     navigation.navigate("Subcategory", { categoryId });
@@ -158,7 +127,7 @@ export default function WellnessScreen() {
   };
 
   const renderCategoryRows = () => {
-    const rows: FirestoreCategory[][] = [];
+    const rows: WellnessCategory[][] = [];
     for (let i = 0; i < categories.length; i += 2) {
       rows.push(categories.slice(i, i + 2));
     }
@@ -187,12 +156,16 @@ export default function WellnessScreen() {
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
         <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+        <Pressable
+          style={styles.headerIconButton}
+          onPress={() => navigation.navigate("Notifications" as never)}
+          testID="button-notifications"
+        >
           <Feather name="bell" size={22} color={Colors.light.accent} />
         </Pressable>
       </View>
@@ -203,14 +176,24 @@ export default function WellnessScreen() {
           <ThemedText style={styles.subtitle}>What kind of support feels right for you today?</ThemedText>
         </View>
 
-        {loading ? (
+        {practitionersLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.light.accent} />
           </View>
-        ) : (
-          <View style={styles.categoriesGrid}>
-            {renderCategoryRows()}
+        ) : dataError ? (
+          <View style={styles.loadingContainer}>
+            <Feather name="alert-circle" size={36} color={Colors.light.textSecondary} />
+            <ThemedText style={styles.errorText}>{dataError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => void refreshContent()}>
+              <ThemedText style={styles.retryText}>Try again</ThemedText>
+            </Pressable>
           </View>
+        ) : categories.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <ThemedText style={styles.errorText}>No wellness categories available yet.</ThemedText>
+          </View>
+        ) : (
+          <View style={styles.categoriesGrid}>{renderCategoryRows()}</View>
         )}
 
         <Pressable
@@ -257,6 +240,25 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    gap: 12,
+    paddingHorizontal: Spacing.lg,
+  },
+  errorText: {
+    fontSize: 15,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
+  },
+  retryBtn: {
+    marginTop: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.light.accent,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   title: {
     fontSize: 28,

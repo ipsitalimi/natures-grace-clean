@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, TextInput, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
+import { fetchProfileByEmail } from "@/services/profileService";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 export default function AdminAddPractitionerScreen({
   onBack,
@@ -11,19 +13,43 @@ export default function AdminAddPractitionerScreen({
   onBack: () => void;
 }) {
   const { addPractitioner } = useDataContext();
+  const [profileEmail, setProfileEmail] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
+  const [subcategory, setSubcategory] = useState("");
   const [experience, setExperience] = useState("");
   const [certifications, setCertifications] = useState("");
   const [price, setPrice] = useState("");
   const [bio, setBio] = useState("");
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
-    if (!name.trim() || !category.trim()) return;
-    addPractitioner({
+  const handleSave = async () => {
+    if (saving) return;
+    setError("");
+    if (!profileEmail.trim() || !name.trim() || !category.trim()) {
+      setError("User email, name, and category are required.");
+      return;
+    }
+    if (!isSupabaseConfigured()) {
+      setError("Connect Supabase to add practitioners.");
+      return;
+    }
+
+    setSaving(true);
+    const profile = await fetchProfileByEmail(profileEmail);
+    if (!profile) {
+      setSaving(false);
+      setError("No user profile found for that email. The person must sign up first.");
+      return;
+    }
+
+    await addPractitioner({
+      profileId: profile.id,
       name: name.trim(),
       category: category.trim(),
+      subcategory: subcategory.trim() || category.trim(),
       bio: bio.trim() || `${name.trim()} is a dedicated wellness practitioner specializing in ${category.trim()}.`,
       experience: experience.trim() || "1+ years",
       certifications: certifications
@@ -33,6 +59,7 @@ export default function AdminAddPractitionerScreen({
       rating: 5.0,
       pricePerSession: parseInt(price, 10) || 1000,
     });
+    setSaving(false);
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -58,6 +85,23 @@ export default function AdminAddPractitionerScreen({
       </View>
 
       <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>User email *</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={profileEmail}
+          onChangeText={setProfileEmail}
+          placeholder="existing-user@email.com"
+          placeholderTextColor={Colors.light.textSecondary}
+          autoCapitalize="none"
+          keyboardType="email-address"
+          testID="input-profile-email"
+        />
+        <ThemedText style={styles.hint}>
+          Links this listing to an existing account. Orphans without a profile are not created.
+        </ThemedText>
+      </View>
+
+      <View style={styles.formGroup}>
         <ThemedText style={styles.label}>Name *</ThemedText>
         <TextInput
           style={styles.input}
@@ -78,6 +122,18 @@ export default function AdminAddPractitionerScreen({
           placeholder="e.g., Healings, Counseling..."
           placeholderTextColor={Colors.light.textSecondary}
           testID="input-category"
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <ThemedText style={styles.label}>Subcategory</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={subcategory}
+          onChangeText={setSubcategory}
+          placeholder="e.g., Reiki, Yoga..."
+          placeholderTextColor={Colors.light.textSecondary}
+          testID="input-subcategory"
         />
       </View>
 
@@ -132,6 +188,8 @@ export default function AdminAddPractitionerScreen({
         />
       </View>
 
+      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
       {saved ? (
         <View style={styles.confirmationBanner}>
           <Feather name="check-circle" size={18} color="#013220" />
@@ -140,11 +198,16 @@ export default function AdminAddPractitionerScreen({
       ) : null}
 
       <Pressable
-        style={styles.saveButton}
-        onPress={handleSave}
+        style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+        onPress={() => void handleSave()}
+        disabled={saving}
         testID="button-save-practitioner"
       >
-        <ThemedText style={styles.saveButtonText}>Save Practitioner</ThemedText>
+        {saving ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <ThemedText style={styles.saveButtonText}>Save Practitioner</ThemedText>
+        )}
       </Pressable>
     </ScrollView>
   );
@@ -183,6 +246,12 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     marginBottom: Spacing.xs,
   },
+  hint: {
+    fontSize: 12,
+    color: Colors.light.textMuted,
+    marginTop: 6,
+    lineHeight: 16,
+  },
   input: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.xs,
@@ -196,6 +265,11 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 80,
     textAlignVertical: "top",
+  },
+  errorText: {
+    color: "#D4534A",
+    marginBottom: Spacing.md,
+    fontSize: 14,
   },
   confirmationBanner: {
     flexDirection: "row",
@@ -217,6 +291,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.lg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   saveButtonText: {
     fontSize: 16,

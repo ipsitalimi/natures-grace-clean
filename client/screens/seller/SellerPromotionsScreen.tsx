@@ -1,22 +1,71 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, TextInput } from "react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { sellerPromos, type SellerPromo } from "@/data/sellerMockData";
+import type { SellerPromo } from "@/data/sellerMockData";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { formatInr, formatInrOff } from "@/lib/formatCurrency";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { useAuth } from "@/context/AuthContext";
+import { resolveSellerIdByProfileId } from "@/services/commerce/sellerId";
+import {
+  createSellerPromo,
+  deleteSellerPromo,
+  generateCampaignCode,
+  listSellerPromos,
+  toSellerPromoDisplay,
+  updateSellerPromo,
+  type SellerPromoKind,
+  type SellerPromoRow,
+} from "@/services/commerce/sellerPromosService";
 
-function PromoCard({ promo }: { promo: SellerPromo }) {
+type SellerPromoView = SellerPromo & {
+  dbStatus: SellerPromoRow["status"];
+  promoKind: SellerPromoKind;
+  startsAt: string | null;
+  expiresAtIso: string | null;
+};
+
+function pickLiveCampaign(rows: SellerPromoView[], kind: Exclude<SellerPromoKind, "standard">): SellerPromoView | null {
+  return rows.find((r) => r.promoKind === kind && (r.status === "Active" || r.status === "Paused")) ?? null;
+}
+
+function campaignDiscountLabel(promo: SellerPromoView): string {
+  return promo.type === "Percentage" ? `${promo.value}% OFF` : formatInrOff(promo.value);
+}
+
+function PromoCard({
+  promo,
+  onTogglePause,
+  onDelete,
+}: {
+  promo: SellerPromoView;
+  onTogglePause: (p: SellerPromoView) => void;
+  onDelete: (p: SellerPromoView) => void;
+}) {
   const statusColor =
     promo.status === "Active"
       ? { bg: "rgba(1,50,32,0.08)", text: "#013220" }
       : promo.status === "Paused"
-      ? { bg: "rgba(212,148,58,0.12)", text: "#B8860B" }
-      : { bg: "rgba(139,58,58,0.08)", text: "#8B3A3A" };
+        ? { bg: "rgba(212,148,58,0.12)", text: "#B8860B" }
+        : { bg: "rgba(139,58,58,0.08)", text: "#8B3A3A" };
 
-  const usagePct = (promo.usageCount / promo.usageLimit) * 100;
+  const usagePct =
+    promo.usageLimit != null && promo.usageLimit > 0
+      ? Math.min((promo.usageCount / promo.usageLimit) * 100, 100)
+      : 0;
 
   return (
     <View style={styles.promoCard} testID={`promo-card-${promo.id}`}>
@@ -26,9 +75,7 @@ function PromoCard({ promo }: { promo: SellerPromo }) {
           <ThemedText style={styles.promoCode}>{promo.code}</ThemedText>
         </View>
         <View style={[styles.statusBadge, { backgroundColor: statusColor.bg }]}>
-          <ThemedText style={[styles.statusText, { color: statusColor.text }]}>
-            {promo.status}
-          </ThemedText>
+          <ThemedText style={[styles.statusText, { color: statusColor.text }]}>{promo.status}</ThemedText>
         </View>
       </View>
 
@@ -36,36 +83,390 @@ function PromoCard({ promo }: { promo: SellerPromo }) {
 
       <View style={styles.promoValueRow}>
         <ThemedText style={styles.promoValue}>
-          {promo.type === "Percentage" ? `${promo.value}% OFF` : `Rs. ${promo.value} OFF`}
+          {promo.type === "Percentage" ? `${promo.value}% OFF` : formatInrOff(promo.value)}
         </ThemedText>
         <ThemedText style={styles.promoExpiry}>Expires {promo.expiry}</ThemedText>
       </View>
 
       <View style={styles.usageRow}>
         <ThemedText style={styles.usageLabel}>
-          {promo.usageCount}/{promo.usageLimit} used
+          {promo.usageLimit == null ? `${promo.usageCount}/∞ used` : `${promo.usageCount}/${promo.usageLimit} used`}
         </ThemedText>
-        <View style={styles.usageBarTrack}>
-          <View style={[styles.usageBar, { width: `${usagePct}%` }]} />
-        </View>
+        {promo.usageLimit != null ? (
+          <View style={styles.usageBarTrack}>
+            <View style={[styles.usageBar, { width: `${usagePct}%` }]} />
+          </View>
+        ) : null}
+      </View>
+
+      <View style={styles.promoActions}>
+        {promo.status !== "Expired" ? (
+          <Pressable style={styles.actionBtn} onPress={() => onTogglePause(promo)} testID={`button-toggle-${promo.id}`}>
+            <Feather name={promo.dbStatus === "Paused" ? "play-circle" : "pause-circle"} size={14} color={Colors.light.accent} />
+            <ThemedText style={styles.actionBtnText}>{promo.dbStatus === "Paused" ? "Resume" : "Pause"}</ThemedText>
+          </Pressable>
+        ) : null}
+        <Pressable style={styles.actionBtnDanger} onPress={() => onDelete(promo)} testID={`button-delete-${promo.id}`}>
+          <Feather name="trash-2" size={14} color="#8B3A3A" />
+          <ThemedText style={styles.actionBtnDangerText}>Delete</ThemedText>
+        </Pressable>
       </View>
     </View>
   );
 }
 
-function CreatePromoForm({ onClose }: { onClose: () => void }) {
+function FlashCampaignSetup({
+  sellerId,
+  existing,
+  onClose,
+  onSaved,
+}: {
+  sellerId: string | null;
+  existing: SellerPromoView | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [value, setValue] = useState(existing ? String(existing.value) : "");
+  const [usageLimit, setUsageLimit] = useState(
+    existing?.usageLimit != null ? String(existing.usageLimit) : ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!sellerId || !value.trim()) return;
+    const discountValue = parseFloat(value);
+    if (Number.isNaN(discountValue) || discountValue <= 0) {
+      setError("Enter a valid discount percentage.");
+      return;
+    }
+    const limitTrim = usageLimit.trim();
+    const usageLimitNum = limitTrim === "" ? null : parseInt(limitTrim, 10);
+    if (limitTrim !== "" && (Number.isNaN(usageLimitNum) || usageLimitNum! <= 0)) {
+      setError("Usage limit must be a positive integer or blank for unlimited.");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    if (existing) {
+      const res = await updateSellerPromo(existing.id, {
+        discount_type: "percentage",
+        discount_value: discountValue,
+        usage_limit: usageLimitNum,
+      });
+      setSaving(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+    } else {
+      const now = new Date();
+      const ends = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const res = await createSellerPromo({
+        sellerId,
+        code: generateCampaignCode("FLASH"),
+        description: "24-hour flash sale",
+        discountType: "percentage",
+        discountValue,
+        usageLimit: usageLimitNum,
+        startsAtIso: now.toISOString(),
+        expiresAtIso: ends.toISOString(),
+        promoKind: "flash_sale",
+      });
+      setSaving(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+    }
+
+    await onSaved();
+    onClose();
+  };
+
+  return (
+    <View style={styles.campaignSetup}>
+      <ThemedText style={styles.formLabel}>Flash discount (%)</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={value}
+        onChangeText={setValue}
+        placeholder="e.g. 15"
+        placeholderTextColor={Colors.light.textMuted}
+        keyboardType="decimal-pad"
+        testID="input-flash-discount"
+      />
+      <ThemedText style={styles.formLabel}>Max uses (blank = unlimited)</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={usageLimit}
+        onChangeText={setUsageLimit}
+        placeholder="e.g. 50"
+        placeholderTextColor={Colors.light.textMuted}
+        keyboardType="number-pad"
+        testID="input-flash-usage-limit"
+      />
+      {!existing ? (
+        <ThemedText style={styles.campaignHint}>Starts immediately and runs for 24 hours.</ThemedText>
+      ) : null}
+      {error ? <ThemedText style={styles.inlineError}>{error}</ThemedText> : null}
+      <View style={styles.campaignSetupActions}>
+        <Pressable style={styles.campaignCancelBtn} onPress={onClose} testID="button-flash-cancel">
+          <ThemedText style={styles.campaignCancelText}>Cancel</ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.flashBtn, (!value.trim() || saving || !sellerId) && styles.saveBtnDisabled]}
+          onPress={() => void handleSave()}
+          disabled={!value.trim() || saving || !sellerId}
+          testID="button-flash-save"
+        >
+          {saving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.flashBtnText}>{existing ? "Save" : "Launch"}</ThemedText>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function BundleCampaignSetup({
+  sellerId,
+  existing,
+  onClose,
+  onSaved,
+}: {
+  sellerId: string | null;
+  existing: SellerPromoView | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const [description, setDescription] = useState(existing?.description ?? "");
+  const [type, setType] = useState<"Percentage" | "Fixed">(existing?.type ?? "Percentage");
+  const [value, setValue] = useState(existing ? String(existing.value) : "");
+  const [usageLimit, setUsageLimit] = useState(
+    existing?.usageLimit != null ? String(existing.usageLimit) : ""
+  );
+  const [expiryInput, setExpiryInput] = useState(
+    existing?.expiresAtIso ? existing.expiresAtIso.slice(0, 10) : ""
+  );
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!sellerId || !value.trim()) return;
+    const discountValue = parseFloat(value);
+    if (Number.isNaN(discountValue) || discountValue <= 0) {
+      setError("Enter a valid discount value.");
+      return;
+    }
+    const limitTrim = usageLimit.trim();
+    const usageLimitNum = limitTrim === "" ? null : parseInt(limitTrim, 10);
+    if (limitTrim !== "" && (Number.isNaN(usageLimitNum) || usageLimitNum! <= 0)) {
+      setError("Usage limit must be a positive integer or blank for unlimited.");
+      return;
+    }
+    const expTrim = expiryInput.trim();
+    let expiresAtIso: string | null = null;
+    if (expTrim) {
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(expTrim)
+        ? new Date(`${expTrim}T23:59:59.999Z`)
+        : new Date(expTrim);
+      if (Number.isNaN(d.getTime())) {
+        setError("Use expiry as YYYY-MM-DD or leave blank.");
+        return;
+      }
+      expiresAtIso = d.toISOString();
+    }
+
+    setSaving(true);
+    setError(null);
+
+    if (existing) {
+      const res = await updateSellerPromo(existing.id, {
+        description: description.trim() || "Bundle offer",
+        discount_type: type === "Percentage" ? "percentage" : "fixed",
+        discount_value: discountValue,
+        usage_limit: usageLimitNum,
+        expires_at: expiresAtIso,
+        metadata: { bundleLabel: description.trim() || "Bundle offer" },
+      });
+      setSaving(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+    } else {
+      const label = description.trim() || "Bundle offer";
+      const res = await createSellerPromo({
+        sellerId,
+        code: generateCampaignCode("BUNDLE"),
+        description: label,
+        discountType: type === "Percentage" ? "percentage" : "fixed",
+        discountValue,
+        usageLimit: usageLimitNum,
+        expiresAtIso,
+        promoKind: "bundle",
+        metadata: { bundleLabel: label },
+      });
+      setSaving(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+    }
+
+    await onSaved();
+    onClose();
+  };
+
+  return (
+    <View style={styles.campaignSetup}>
+      <ThemedText style={styles.formLabel}>Bundle label</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={description}
+        onChangeText={setDescription}
+        placeholder="e.g. Wellness starter bundle"
+        placeholderTextColor={Colors.light.textMuted}
+        testID="input-bundle-label"
+      />
+      <ThemedText style={styles.formLabel}>Discount type</ThemedText>
+      <View style={styles.typeToggle}>
+        {(["Percentage", "Fixed"] as const).map((t) => (
+          <Pressable
+            key={t}
+            style={[styles.typeBtn, type === t && styles.typeBtnActive]}
+            onPress={() => setType(t)}
+            testID={`bundle-type-${t.toLowerCase()}`}
+          >
+            <ThemedText style={[styles.typeBtnText, type === t && styles.typeBtnTextActive]}>
+              {t === "Percentage" ? "% Off" : "₹ Off"}
+            </ThemedText>
+          </Pressable>
+        ))}
+      </View>
+      <ThemedText style={styles.formLabel}>
+        {type === "Percentage" ? "Discount %" : "Discount amount (₹)"}
+      </ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={value}
+        onChangeText={setValue}
+        placeholder={type === "Percentage" ? "e.g. 10" : "e.g. 200"}
+        placeholderTextColor={Colors.light.textMuted}
+        keyboardType="decimal-pad"
+        testID="input-bundle-discount"
+      />
+      <ThemedText style={styles.formLabel}>Max uses (blank = unlimited)</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={usageLimit}
+        onChangeText={setUsageLimit}
+        placeholder="e.g. 100"
+        placeholderTextColor={Colors.light.textMuted}
+        keyboardType="number-pad"
+        testID="input-bundle-usage-limit"
+      />
+      <ThemedText style={styles.formLabel}>Expiry (optional, YYYY-MM-DD)</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={expiryInput}
+        onChangeText={setExpiryInput}
+        placeholder="e.g. 2026-12-31"
+        placeholderTextColor={Colors.light.textMuted}
+        testID="input-bundle-expiry"
+      />
+      {error ? <ThemedText style={styles.inlineError}>{error}</ThemedText> : null}
+      <View style={styles.campaignSetupActions}>
+        <Pressable style={styles.campaignCancelBtn} onPress={onClose} testID="button-bundle-cancel">
+          <ThemedText style={styles.campaignCancelText}>Cancel</ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.bundleBtn, (!value.trim() || saving || !sellerId) && styles.saveBtnDisabled]}
+          onPress={() => void handleSave()}
+          disabled={!value.trim() || saving || !sellerId}
+          testID="button-bundle-save"
+        >
+          {saving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.bundleBtnText}>{existing ? "Save" : "Create"}</ThemedText>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function CreatePromoForm({
+  sellerId,
+  onClose,
+  onCreated,
+}: {
+  sellerId: string | null;
+  onClose: () => void;
+  onCreated: () => Promise<void>;
+}) {
   const [code, setCode] = useState("");
   const [type, setType] = useState<"Percentage" | "Fixed">("Percentage");
   const [value, setValue] = useState("");
+  const [description, setDescription] = useState("");
+  const [usageLimit, setUsageLimit] = useState("100");
+  const [expiryInput, setExpiryInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  const handleSave = () => {
-    if (!code || !value) return;
+  const handleSave = async () => {
+    if (!sellerId || !code.trim() || !value.trim()) return;
+    setSaving(true);
+    setError(null);
+    const limitTrim = usageLimit.trim();
+    const usageLimitNum = limitTrim === "" ? null : parseInt(limitTrim, 10);
+    if (limitTrim !== "" && (Number.isNaN(usageLimitNum) || usageLimitNum! <= 0)) {
+      setError("Usage limit must be a positive integer or blank for unlimited.");
+      setSaving(false);
+      return;
+    }
+    const expTrim = expiryInput.trim();
+    let expiresAtIso: string | null = null;
+    if (expTrim) {
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(expTrim)
+        ? new Date(`${expTrim}T23:59:59.999Z`)
+        : new Date(expTrim);
+      if (Number.isNaN(d.getTime())) {
+        setError("Use expiry as YYYY-MM-DD or leave blank.");
+        setSaving(false);
+        return;
+      }
+      expiresAtIso = d.toISOString();
+    }
+
+    const result = await createSellerPromo({
+      sellerId,
+      code: code.trim(),
+      description: description.trim() || undefined,
+      discountType: type === "Percentage" ? "percentage" : "fixed",
+      discountValue: parseFloat(value) || 0,
+      usageLimit: usageLimitNum,
+      expiresAtIso,
+    });
+
+    setSaving(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
     setSaved(true);
+    await onCreated();
     setTimeout(() => {
       setSaved(false);
       onClose();
-    }, 1500);
+    }, 900);
   };
 
   return (
@@ -76,6 +477,8 @@ function CreatePromoForm({ onClose }: { onClose: () => void }) {
           <Feather name="x" size={20} color={Colors.light.textMuted} />
         </Pressable>
       </View>
+
+      {error ? <ThemedText style={styles.inlineError}>{error}</ThemedText> : null}
 
       <ThemedText style={styles.formLabel}>Code</ThemedText>
       <TextInput
@@ -88,6 +491,15 @@ function CreatePromoForm({ onClose }: { onClose: () => void }) {
         testID="input-promo-code"
       />
 
+      <ThemedText style={styles.formLabel}>Description (optional)</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={description}
+        onChangeText={setDescription}
+        placeholder="What this offer applies to"
+        placeholderTextColor={Colors.light.textMuted}
+      />
+
       <ThemedText style={styles.formLabel}>Discount Type</ThemedText>
       <View style={styles.typeToggle}>
         {(["Percentage", "Fixed"] as const).map((t) => (
@@ -98,14 +510,14 @@ function CreatePromoForm({ onClose }: { onClose: () => void }) {
             testID={`type-${t.toLowerCase()}`}
           >
             <ThemedText style={[styles.typeBtnText, type === t && styles.typeBtnTextActive]}>
-              {t === "Percentage" ? "% Off" : "Rs. Off"}
+              {t === "Percentage" ? "% Off" : "₹ Off"}
             </ThemedText>
           </Pressable>
         ))}
       </View>
 
       <ThemedText style={styles.formLabel}>
-        {type === "Percentage" ? "Discount %" : "Discount Amount (Rs.)"}
+        {type === "Percentage" ? "Discount %" : "Discount Amount (₹)"}
       </ThemedText>
       <TextInput
         style={styles.formInput}
@@ -113,8 +525,29 @@ function CreatePromoForm({ onClose }: { onClose: () => void }) {
         onChangeText={setValue}
         placeholder={type === "Percentage" ? "e.g. 20" : "e.g. 500"}
         placeholderTextColor={Colors.light.textMuted}
-        keyboardType="number-pad"
+        keyboardType="decimal-pad"
         testID="input-promo-value"
+      />
+
+      <ThemedText style={styles.formLabel}>Max uses (blank = unlimited)</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={usageLimit}
+        onChangeText={setUsageLimit}
+        placeholder="e.g. 100"
+        placeholderTextColor={Colors.light.textMuted}
+        keyboardType="number-pad"
+        testID="input-usage-limit"
+      />
+
+      <ThemedText style={styles.formLabel}>Expiry (optional, YYYY-MM-DD)</ThemedText>
+      <TextInput
+        style={styles.formInput}
+        value={expiryInput}
+        onChangeText={setExpiryInput}
+        placeholder="e.g. 2026-12-31"
+        placeholderTextColor={Colors.light.textMuted}
+        testID="input-expiry"
       />
 
       {saved ? (
@@ -125,12 +558,16 @@ function CreatePromoForm({ onClose }: { onClose: () => void }) {
       ) : null}
 
       <Pressable
-        style={[styles.saveBtn, (!code || !value) && styles.saveBtnDisabled]}
-        onPress={handleSave}
-        disabled={!code || !value}
+        style={[styles.saveBtn, (!code || !value || saving || !sellerId) && styles.saveBtnDisabled]}
+        onPress={() => void handleSave()}
+        disabled={!code || !value || saving || !sellerId}
         testID="button-save-promo"
       >
-        <ThemedText style={styles.saveBtnText}>Save Promo Code</ThemedText>
+        {saving ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <ThemedText style={styles.saveBtnText}>Save Promo Code</ThemedText>
+        )}
       </Pressable>
     </View>
   );
@@ -139,14 +576,84 @@ function CreatePromoForm({ onClose }: { onClose: () => void }) {
 export default function SellerPromotionsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { session } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
+  const [showFlashSetup, setShowFlashSetup] = useState(false);
+  const [showBundleSetup, setShowBundleSetup] = useState(false);
   const [activeFilter, setActiveFilter] = useState<"All" | "Active" | "Expired" | "Paused">("All");
+  const [sellerId, setSellerId] = useState<string | null>(null);
+  const [rows, setRows] = useState<SellerPromoView[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback(async () => {
+    if (!session?.user?.id || !isSupabaseConfigured()) {
+      setSellerId(null);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    const sid = await resolveSellerIdByProfileId(session.user.id);
+    setSellerId(sid);
+    if (!sid) {
+      setRows([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const res = await listSellerPromos(sid);
+    setLoading(false);
+    if (!res.ok) {
+      setError(res.error);
+      setRows([]);
+      return;
+    }
+    setRows(res.rows.map((r) => toSellerPromoDisplay(r)));
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const flashCampaign = pickLiveCampaign(rows, "flash_sale");
+  const bundleCampaign = pickLiveCampaign(rows, "bundle");
+  const standardRows = rows.filter((p) => p.promoKind === "standard");
   const filtered =
-    activeFilter === "All" ? sellerPromos : sellerPromos.filter((p) => p.status === activeFilter);
+    activeFilter === "All" ? standardRows : standardRows.filter((p) => p.status === activeFilter);
+
+  const togglePause = async (p: SellerPromoView) => {
+    if (p.dbStatus === "Expired") return;
+    const next: SellerPromoRow["status"] = p.dbStatus === "Paused" ? "Active" : "Paused";
+    const res = await updateSellerPromo(p.id, { status: next });
+    if (!res.ok) {
+      Alert.alert("Promo", res.error);
+      return;
+    }
+    await load();
+  };
+
+  const remove = async (p: SellerPromoView) => {
+    Alert.alert("Delete promo", `Remove ${p.code}? This cannot be undone.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const res = await deleteSellerPromo(p.id);
+          if (!res.ok) {
+            Alert.alert("Promo", res.error);
+            return;
+          }
+          await load();
+        },
+      },
+    ]);
+  };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
@@ -163,36 +670,147 @@ export default function SellerPromotionsScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
       >
+        {!isSupabaseConfigured() ? (
+          <ThemedText style={styles.hintText}>Connect Supabase to manage promo codes.</ThemedText>
+        ) : null}
+
+        {isSupabaseConfigured() && session?.user && !sellerId && !loading ? (
+          <ThemedText style={styles.hintText}>
+            No seller profile is linked to this account. Complete seller onboarding so promos can be saved.
+          </ThemedText>
+        ) : null}
+
+        {error ? <ThemedText style={styles.inlineError}>{error}</ThemedText> : null}
+
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.hintText}>Loading promotions…</ThemedText>
+          </View>
+        ) : null}
+
         {showCreate ? (
-          <CreatePromoForm onClose={() => setShowCreate(false)} />
+          <CreatePromoForm sellerId={sellerId} onClose={() => setShowCreate(false)} onCreated={load} />
         ) : null}
 
         <View style={styles.flashSaleCard}>
           <View style={styles.flashSaleLeft}>
             <Feather name="zap" size={20} color="#D4943A" />
-            <View>
+            <View style={styles.campaignTextCol}>
               <ThemedText style={styles.flashTitle}>Flash Sale</ThemedText>
-              <ThemedText style={styles.flashSub}>Run a 24-hour limited offer</ThemedText>
+              {flashCampaign ? (
+                <>
+                  <ThemedText style={styles.flashSub}>
+                    {campaignDiscountLabel(flashCampaign)} · {flashCampaign.status} · Code {flashCampaign.code}
+                  </ThemedText>
+                  <ThemedText style={styles.flashSub}>Ends {flashCampaign.expiry}</ThemedText>
+                </>
+              ) : (
+                <ThemedText style={styles.flashSub}>Run a 24-hour limited offer</ThemedText>
+              )}
             </View>
           </View>
-          <Pressable style={styles.flashBtn} testID="button-flash-sale">
-            <ThemedText style={styles.flashBtnText}>Set Up</ThemedText>
+          <Pressable
+            style={styles.flashBtn}
+            testID="button-flash-sale"
+            onPress={() => {
+              setShowBundleSetup(false);
+              setShowFlashSetup((v) => !v);
+            }}
+          >
+            <ThemedText style={styles.flashBtnText}>
+              {flashCampaign ? (showFlashSetup ? "Close" : "Manage") : showFlashSetup ? "Close" : "Set Up"}
+            </ThemedText>
           </Pressable>
+          {flashCampaign && !showFlashSetup ? (
+            <View style={styles.campaignInlineActions}>
+              {flashCampaign.status !== "Expired" ? (
+                <Pressable style={styles.actionBtn} onPress={() => void togglePause(flashCampaign)}>
+                  <Feather
+                    name={flashCampaign.dbStatus === "Paused" ? "play-circle" : "pause-circle"}
+                    size={14}
+                    color={Colors.light.accent}
+                  />
+                  <ThemedText style={styles.actionBtnText}>
+                    {flashCampaign.dbStatus === "Paused" ? "Resume" : "Pause"}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.actionBtnDanger} onPress={() => void remove(flashCampaign)}>
+                <Feather name="trash-2" size={14} color="#8B3A3A" />
+                <ThemedText style={styles.actionBtnDangerText}>Delete</ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+          {showFlashSetup ? (
+            <FlashCampaignSetup
+              sellerId={sellerId}
+              existing={flashCampaign}
+              onClose={() => setShowFlashSetup(false)}
+              onSaved={load}
+            />
+          ) : null}
         </View>
 
         <View style={styles.bundleCard}>
           <View style={styles.flashSaleLeft}>
             <Feather name="gift" size={20} color="#7B68EE" />
-            <View>
+            <View style={styles.campaignTextCol}>
               <ThemedText style={styles.flashTitle}>Bundle Offer</ThemedText>
-              <ThemedText style={styles.flashSub}>Group products at a special price</ThemedText>
+              {bundleCampaign ? (
+                <>
+                  <ThemedText style={styles.flashSub}>
+                    {campaignDiscountLabel(bundleCampaign)} · {bundleCampaign.status} · Code {bundleCampaign.code}
+                  </ThemedText>
+                  <ThemedText style={styles.flashSub}>Expires {bundleCampaign.expiry}</ThemedText>
+                </>
+              ) : (
+                <ThemedText style={styles.flashSub}>Group products at a special price</ThemedText>
+              )}
             </View>
           </View>
-          <Pressable style={styles.bundleBtn} testID="button-bundle">
-            <ThemedText style={styles.bundleBtnText}>Set Up</ThemedText>
+          <Pressable
+            style={styles.bundleBtn}
+            testID="button-bundle"
+            onPress={() => {
+              setShowFlashSetup(false);
+              setShowBundleSetup((v) => !v);
+            }}
+          >
+            <ThemedText style={styles.bundleBtnText}>
+              {bundleCampaign ? (showBundleSetup ? "Close" : "Manage") : showBundleSetup ? "Close" : "Set Up"}
+            </ThemedText>
           </Pressable>
+          {bundleCampaign && !showBundleSetup ? (
+            <View style={styles.campaignInlineActions}>
+              {bundleCampaign.status !== "Expired" ? (
+                <Pressable style={styles.actionBtn} onPress={() => void togglePause(bundleCampaign)}>
+                  <Feather
+                    name={bundleCampaign.dbStatus === "Paused" ? "play-circle" : "pause-circle"}
+                    size={14}
+                    color={Colors.light.accent}
+                  />
+                  <ThemedText style={styles.actionBtnText}>
+                    {bundleCampaign.dbStatus === "Paused" ? "Resume" : "Pause"}
+                  </ThemedText>
+                </Pressable>
+              ) : null}
+              <Pressable style={styles.actionBtnDanger} onPress={() => void remove(bundleCampaign)}>
+                <Feather name="trash-2" size={14} color="#8B3A3A" />
+                <ThemedText style={styles.actionBtnDangerText}>Delete</ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
+          {showBundleSetup ? (
+            <BundleCampaignSetup
+              sellerId={sellerId}
+              existing={bundleCampaign}
+              onClose={() => setShowBundleSetup(false)}
+              onSaved={load}
+            />
+          ) : null}
         </View>
 
         <View style={styles.filterRow}>
@@ -212,7 +830,7 @@ export default function SellerPromotionsScreen() {
           ))}
         </View>
 
-        {filtered.length === 0 ? (
+        {!loading && filtered.length === 0 ? (
           <View style={styles.emptyState}>
             <Feather name="tag" size={28} color={Colors.light.textMuted} />
             <ThemedText style={styles.emptyTitle}>No promo codes here</ThemedText>
@@ -221,7 +839,7 @@ export default function SellerPromotionsScreen() {
         ) : null}
 
         {filtered.map((promo) => (
-          <PromoCard key={promo.id} promo={promo} />
+          <PromoCard key={promo.id} promo={promo} onTogglePause={togglePause} onDelete={remove} />
         ))}
       </ScrollView>
     </View>
@@ -229,6 +847,21 @@ export default function SellerPromotionsScreen() {
 }
 
 const styles = StyleSheet.create({
+  hintText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
+  inlineError: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: "#8B3A3A",
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
   header: {
     flexDirection: "row",
@@ -352,6 +985,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderWidth: 1,
     borderColor: "rgba(212,148,58,0.2)",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
   },
   flashSaleLeft: {
     flexDirection: "row",
@@ -367,6 +1002,45 @@ const styles = StyleSheet.create({
   flashSub: {
     fontSize: 12,
     fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
+  campaignTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  campaignInlineActions: {
+    width: "100%",
+    flexDirection: "row",
+    gap: Spacing.sm,
+    flexWrap: "wrap",
+    marginTop: Spacing.xs,
+  },
+  campaignSetup: {
+    width: "100%",
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(212,148,58,0.15)",
+  },
+  campaignHint: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
+  campaignSetupActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  campaignCancelBtn: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+  },
+  campaignCancelText: {
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
     color: Colors.light.textMuted,
   },
   flashBtn: {
@@ -389,6 +1063,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderWidth: 1,
     borderColor: "rgba(123,104,238,0.15)",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
   },
   bundleBtn: {
     backgroundColor: "#7B68EE",
@@ -487,7 +1163,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
-    width: 80,
+    width: 100,
   },
   usageBarTrack: {
     flex: 1,
@@ -500,6 +1176,39 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: Colors.light.accent,
     borderRadius: 2,
+  },
+  promoActions: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    flexWrap: "wrap",
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.xs,
+    backgroundColor: `${Colors.light.accent}14`,
+  },
+  actionBtnText: {
+    fontSize: 12,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+  },
+  actionBtnDanger: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: BorderRadius.xs,
+    backgroundColor: "rgba(139,58,58,0.1)",
+  },
+  actionBtnDangerText: {
+    fontSize: 12,
+    fontFamily: "Nunito_700Bold",
+    color: "#8B3A3A",
   },
   emptyState: {
     alignItems: "center",

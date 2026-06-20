@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Linking } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -8,6 +8,11 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
+import { useAuth } from "@/context/AuthContext";
+import { useFavorites } from "@/context/FavoritesContext";
+import { useResourceEnrollments } from "@/context/ResourceEnrollmentsContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type ParamList = {
   ResourceDetail: { resourceId: string };
@@ -19,15 +24,53 @@ export default function ResourceDetailScreen() {
   const route = useRoute<RouteProp<ParamList, "ResourceDetail">>();
   const { resourceId } = route.params;
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [enrolled, setEnrolled] = useState(false);
+  const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [enrollBusy, setEnrollBusy] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
   const { resources } = useDataContext();
+  const { session } = useAuth();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const {
+    isEnrolledForResource,
+    enrollmentsLoading,
+    enrollmentsError,
+    toggleEnrollment,
+  } = useResourceEnrollments();
 
   const resource = resources.find((r) => r.id === resourceId);
+  const favorited = resource ? isFavorite("resource", resourceId) : false;
+  const enrolled = isEnrolledForResource(resourceId);
+  const canEnroll = isSupabaseConfigured() && Boolean(session?.user);
+
+  const handleToggleFavorite = async () => {
+    if (!resource || !isSupabaseConfigured() || !session?.user) return;
+    setFavoriteBusy(true);
+    await toggleFavorite({
+      itemType: "resource",
+      itemId: resourceId,
+      displayName: resource.title,
+      displaySubtitle: resource.section,
+    });
+    setFavoriteBusy(false);
+  };
+
+  const handleToggleEnroll = async () => {
+    if (!canEnroll || enrollBusy || enrollmentsLoading) return;
+    setEnrollBusy(true);
+    setEnrollError(null);
+    try {
+      await toggleEnrollment(resourceId);
+    } catch (err) {
+      setEnrollError(err instanceof Error ? err.message : "Could not update enrollment");
+    } finally {
+      setEnrollBusy(false);
+    }
+  };
 
   if (!resource) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -51,11 +94,27 @@ export default function ResourceDetailScreen() {
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
         <View style={styles.headerCenter} />
+        <Pressable
+          style={styles.headerIconButton}
+          onPress={() => void handleToggleFavorite()}
+          disabled={favoriteBusy}
+          testID="button-toggle-favorite"
+        >
+          {favoriteBusy ? (
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+          ) : (
+            <Feather
+              name="heart"
+              size={22}
+              color={favorited ? "#D4534A" : Colors.light.accent}
+            />
+          )}
+        </Pressable>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
           <Feather name="bell" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -67,7 +126,7 @@ export default function ResourceDetailScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
         showsVerticalScrollIndicator={false}
       >
         {isCourse ? (
@@ -85,42 +144,85 @@ export default function ResourceDetailScreen() {
               <ThemedText style={styles.description}>{resource.description}</ThemedText>
             </View>
 
+            <View style={styles.interestBanner}>
+              <Feather name="info" size={16} color={Colors.light.accent} />
+              <ThemedText style={styles.interestBannerText}>
+                Courses are not purchased in-app yet. Expressing interest notifies our team — no payment is taken here.
+              </ThemedText>
+            </View>
+
             <View style={styles.bodyCard}>
               <ThemedText style={styles.bodyTitle}>Course Details</ThemedText>
               <ThemedText style={styles.bodyText}>{resource.body}</ThemedText>
             </View>
 
             <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Feather name="user" size={16} color={Colors.light.accent} />
-                <ThemedText style={styles.infoText}>Instructor: Dr. Neelam Parwani</ThemedText>
-              </View>
-              <View style={styles.infoRow}>
-                <Feather name="map-pin" size={16} color={Colors.light.accent} />
-                <ThemedText style={styles.infoText}>Locations: Jaipur & Gurgaon</ThemedText>
-              </View>
+              {resource.instructorName ? (
+                <View style={styles.infoRow}>
+                  <Feather name="user" size={16} color={Colors.light.accent} />
+                  <ThemedText style={styles.infoText}>Instructor: {resource.instructorName}</ThemedText>
+                </View>
+              ) : null}
+              {resource.locations ? (
+                <View style={styles.infoRow}>
+                  <Feather name="map-pin" size={16} color={Colors.light.accent} />
+                  <ThemedText style={styles.infoText}>Locations: {resource.locations}</ThemedText>
+                </View>
+              ) : null}
               <View style={styles.infoRow}>
                 <Feather name="check-circle" size={16} color={Colors.light.accent} />
-                <ThemedText style={styles.infoText}>Certificate provided upon completion</ThemedText>
+                <ThemedText style={styles.infoText}>
+                  {resource.certificateNote ??
+                    "Certificate details are shared after you express interest."}
+                </ThemedText>
               </View>
             </View>
 
             <Pressable
               style={[styles.enrollBtn, enrolled ? styles.enrolledBtn : null]}
-              onPress={() => setEnrolled(!enrolled)}
+              onPress={() => void handleToggleEnroll()}
+              disabled={!canEnroll || enrollBusy || enrollmentsLoading}
               testID="button-enroll"
             >
-              <Feather name={enrolled ? "check" : "book-open"} size={18} color="#FFFFFF" />
+              {enrollBusy || (enrollmentsLoading && !enrolled) ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Feather name={enrolled ? "check" : "book-open"} size={18} color="#FFFFFF" />
+              )}
               <ThemedText style={styles.enrollBtnText}>
-                {enrolled ? "Enrolled" : `Enroll Now - ${resource.price}`}
+                {enrolled ? "Interest recorded" : `Express interest${resource.price ? ` — ${resource.price}` : ""}`}
               </ThemedText>
             </Pressable>
+
+            {!canEnroll ? (
+              <ThemedText style={styles.enrollHint} testID="text-enroll-sign-in">
+                {isSupabaseConfigured()
+                  ? "Sign in to express interest in this course."
+                  : "Course interest requests require a connected account."}
+              </ThemedText>
+            ) : null}
+
+            {enrollmentsLoading && canEnroll && !enrolled ? (
+              <ThemedText style={styles.enrollHint}>Checking enrollment…</ThemedText>
+            ) : null}
+
+            {enrollmentsError ? (
+              <ThemedText style={styles.enrollErrorText} testID="text-enrollments-error">
+                {enrollmentsError}
+              </ThemedText>
+            ) : null}
+
+            {enrollError ? (
+              <ThemedText style={styles.enrollErrorText} testID="text-enroll-error">
+                {enrollError}
+              </ThemedText>
+            ) : null}
 
             {enrolled ? (
               <View style={styles.enrolledMessage}>
                 <Feather name="check-circle" size={16} color={Colors.light.accent} />
                 <ThemedText style={styles.enrolledText}>
-                  Thank you for your interest! We will contact you shortly with course details.
+                  Thank you for your interest! This is not a purchase — our team will contact you with course details and next steps.
                 </ThemedText>
               </View>
             ) : null}
@@ -255,6 +357,21 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textSecondary,
   },
+  interestBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+    backgroundColor: `${Colors.light.accent}10`,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  interestBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.light.text,
+  },
   bodyCard: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.md,
@@ -322,6 +439,18 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: Colors.light.text,
     lineHeight: 20,
+  },
+  enrollHint: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+    textAlign: "center",
+  },
+  enrollErrorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#B33A3A",
+    textAlign: "center",
   },
   watchBtn: {
     flexDirection: "row",

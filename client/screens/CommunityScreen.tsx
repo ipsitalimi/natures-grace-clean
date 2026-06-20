@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ImageBackground } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
@@ -11,13 +11,20 @@ import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import AppHeader from "@/components/AppHeader";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import SellerDrawer from "@/components/SellerDrawer";
+import PractitionerDrawer from "@/components/PractitionerDrawer";
+import { useIsSellerTabContext } from "@/hooks/useIsSellerTabContext";
+import { useIsPractitionerTabContext } from "@/hooks/useIsPractitionerTabContext";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type CommunityStackParamList = {
   EventDetail: { eventId: string };
   DiscussionThread: { discussionId: string };
-  Placeholder: { title: string };
+  CreateDiscussion: undefined;
 };
 
 type MainTabParamList = {
@@ -100,8 +107,14 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const { events, discussions } = useDataContext();
-  const activeEvents = events.filter((e) => e.status === "Active");
+  const isSellerTab = useIsSellerTabContext();
+  const isPractitionerTab = useIsPractitionerTabContext();
+  const isRoleTab = isSellerTab || isPractitionerTab;
+  const { events, discussions, discussionsLoading, discussionsError } = useDataContext();
+  const { settings } = usePlatformConfig();
+  const activeEvents = events.filter(
+    (e) => e.status === "Active" && e.isVisible !== false
+  );
 
   const navigateToEvent = (eventId: string) => {
     navigation.navigate("EventDetail", { eventId });
@@ -117,17 +130,27 @@ export default function CommunityScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
-        <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
-      
+      {isSellerTab ? (
+        <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      ) : isPractitionerTab ? (
+        <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      ) : (
+        <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
+      )}
+      {isRoleTab ? (
+        <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
+      ) : (
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+          <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+          <View style={styles.headerCenter} />
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+            <Feather name="bell" size={22} color={Colors.light.accent} />
+          </Pressable>
+        </View>
+      )}
+
       <View style={styles.content}>
         <View style={styles.titleSection}>
           <ThemedText style={styles.title}>Community</ThemedText>
@@ -172,41 +195,62 @@ export default function CommunityScreen() {
 
         <View style={[styles.sectionHeader, { marginTop: 20 }]}>
           <ThemedText style={styles.sectionTitle}>Discussions</ThemedText>
+          <Pressable
+            style={styles.startDiscussionButton}
+            onPress={() => navigation.navigate("CreateDiscussion")}
+            testID="button-start-discussion"
+          >
+            <Feather name="plus" size={16} color={Colors.light.accent} />
+            <ThemedText style={styles.startDiscussionText}>New</ThemedText>
+          </Pressable>
         </View>
 
-        {discussions.map((discussion) => (
-          <Pressable
-            key={discussion.id}
-            style={styles.discussionCard}
-            onPress={() => navigateToDiscussion(discussion.id)}
-          >
-            <View style={styles.discussionHeader}>
-              <ThemedText style={styles.discussionTitle}>{discussion.title}</ThemedText>
-              <View style={styles.todayBadge}>
-                <ThemedText style={styles.todayBadgeText}>{discussion.date}</ThemedText>
-              </View>
-            </View>
-            <ThemedText style={styles.discussionDate}>{discussion.date}</ThemedText>
-            <ThemedText style={styles.discussionQuestion}>
-              {discussion.question}
-            </ThemedText>
-            <View style={styles.discussionFooter}>
-              <ThemedText style={styles.repliesCount}>{discussion.replies.length} Replies</ThemedText>
-              <View style={styles.viewThreadButton}>
-                <ThemedText style={styles.viewThreadText}>View Thread</ThemedText>
-                <Feather name="chevron-right" size={14} color={Colors.light.accent} />
-              </View>
-            </View>
-          </Pressable>
-        ))}
-
-        {discussions.length === 0 ? (
+        {discussionsLoading ? (
           <View style={styles.emptySection}>
-            <ThemedText style={styles.emptyText}>
-              More discussions will appear here soon.
-            </ThemedText>
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+            <ThemedText style={styles.emptyText}>Loading discussions…</ThemedText>
           </View>
-        ) : null}
+        ) : discussionsError ? (
+          <View style={styles.emptySection}>
+            <ThemedText style={styles.emptyText}>{discussionsError}</ThemedText>
+          </View>
+        ) : (
+          <>
+            {discussions.map((discussion) => (
+              <Pressable
+                key={discussion.id}
+                style={styles.discussionCard}
+                onPress={() => navigateToDiscussion(discussion.id)}
+              >
+                <View style={styles.discussionHeader}>
+                  <ThemedText style={styles.discussionTitle}>{discussion.title}</ThemedText>
+                  <View style={styles.todayBadge}>
+                    <ThemedText style={styles.todayBadgeText}>{discussion.date}</ThemedText>
+                  </View>
+                </View>
+                <ThemedText style={styles.discussionDate}>{discussion.date}</ThemedText>
+                <ThemedText style={styles.discussionQuestion}>
+                  {discussion.question}
+                </ThemedText>
+                <View style={styles.discussionFooter}>
+                  <ThemedText style={styles.repliesCount}>{discussion.replies.length} Replies</ThemedText>
+                  <View style={styles.viewThreadButton}>
+                    <ThemedText style={styles.viewThreadText}>View Thread</ThemedText>
+                    <Feather name="chevron-right" size={14} color={Colors.light.accent} />
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+
+            {discussions.length === 0 ? (
+              <View style={styles.emptySection}>
+                <ThemedText style={styles.emptyText}>
+                  More discussions will appear here soon.
+                </ThemedText>
+              </View>
+            ) : null}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -301,6 +345,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: Colors.light.text,
+  },
+  startDiscussionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: `${Colors.light.accent}10`,
+  },
+  startDiscussionText: {
+    fontSize: 14,
+    color: Colors.light.accent,
+    fontWeight: "600",
   },
   viewAllButton: {
     flexDirection: "row",

@@ -1,9 +1,13 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, TextInput, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { adminUsers as initialAdminUsers, type AdminUser } from "@/data/adminMockData";
+import { type AdminUser } from "@/data/adminMockData";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useAuth } from "@/context/AuthContext";
+import { provisionUserRole } from "@/services/platform/adminUsersService";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 const ROLE_CYCLE = ["User", "Practitioner", "Seller", "Admin"] as const;
 
@@ -54,34 +58,82 @@ export default function AdminUsersScreen({
   onViewUser: (userId: string) => void;
   onBackToDashboard: () => void;
 }) {
-  const [users, setUsers] = useState<AdminUser[]>(initialAdminUsers);
+  const { users, updateUser, logActivity, configLoading, refreshRemoteConfig } = usePlatformConfig();
+  const { session } = useAuth();
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const toggleUserStatus = (userId: string) => {
-    setUsers(users.map(user => {
-      if (user.id === userId) {
-        const newStatus = user.status === "Active" ? "Suspended" : "Active";
-        return { ...user, status: newStatus };
-      }
-      return user;
-    }));
+  const filteredUsers = users.filter((user) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      user.name.toLowerCase().includes(q) ||
+      user.email.toLowerCase().includes(q) ||
+      user.role.toLowerCase().includes(q)
+    );
+  });
+
+  const toggleUserStatus = async (userId: string) => {
+    const user = users.find((u) => u.id === userId);
+    if (!user) return;
+    const newStatus = user.status === "Active" ? "Suspended" : "Active";
+    const result = await updateUser(userId, { status: newStatus });
+    if (result.error) {
+      Alert.alert("Update failed", result.error);
+      return;
+    }
+    logActivity(`${user.name} ${newStatus === "Suspended" ? "suspended" : "activated"}`, "user");
   };
 
   const cycleUserRole = (userId: string) => {
-    setUsers(users.map(user => {
-      if (user.id === userId) {
-        const currentIndex = ROLE_CYCLE.indexOf(user.role);
-        const nextIndex = (currentIndex + 1) % ROLE_CYCLE.length;
-        return { ...user, role: ROLE_CYCLE[nextIndex] };
+    const user = users.find((u) => u.id === userId);
+    if (!user) return;
+    const currentIndex = ROLE_CYCLE.indexOf(user.role);
+    const nextIndex = (currentIndex + 1) % ROLE_CYCLE.length;
+    const nextRole = ROLE_CYCLE[nextIndex];
+
+    const applyRole = async () => {
+      if (!session?.access_token) {
+        Alert.alert("Update failed", "Sign in as admin to change roles.");
+        return;
       }
-      return user;
-    }));
+      if (nextRole === "Seller" || nextRole === "Practitioner" || nextRole === "Admin") {
+        const provisioned = await provisionUserRole(userId, nextRole, session.access_token);
+        if (provisioned.error) {
+          Alert.alert("Update failed", provisioned.error);
+          return;
+        }
+        await refreshRemoteConfig({ includeProfiles: true });
+        logActivity(`${user.name} role changed to ${nextRole}`, "user");
+        return;
+      }
+      const result = await updateUser(userId, { role: nextRole });
+      if (result.error) {
+        Alert.alert("Update failed", result.error);
+        return;
+      }
+      logActivity(`${user.name} role changed to ${nextRole}`, "user");
+    };
+
+    if (nextRole === "Admin") {
+      Alert.alert(
+        "Grant Admin role",
+        `Make ${user.name} an administrator? This grants full platform access.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Confirm", style: "destructive", onPress: () => void applyRole() },
+        ]
+      );
+      return;
+    }
+
+    void applyRole();
   };
 
   const stats = {
     total: users.length,
-    active: users.filter(u => u.status === "Active").length,
-    suspended: users.filter(u => u.status === "Suspended").length,
-    inactive: users.filter(u => u.status === "Inactive").length,
+    active: users.filter((u) => u.status === "Active").length,
+    suspended: users.filter((u) => u.status === "Suspended").length,
+    inactive: users.filter((u) => u.status === "Inactive").length,
   };
 
   return (
@@ -122,11 +174,36 @@ export default function AdminUsersScreen({
           style={styles.searchInput}
           placeholder="Search users..."
           placeholderTextColor={Colors.light.textSecondary}
-          editable={true}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
         />
       </View>
 
-      {users.map((user) => (
+      {configLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading users…</ThemedText>
+        </View>
+      ) : null}
+
+      {!configLoading && !isSupabaseConfigured() ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyText}>
+            Connect Supabase to load registered user profiles.
+          </ThemedText>
+        </View>
+      ) : null}
+
+      {!configLoading && isSupabaseConfigured() && users.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyText}>
+            No user profiles yet. Accounts will appear here after signup.
+          </ThemedText>
+        </View>
+      ) : null}
+
+      {!configLoading &&
+        filteredUsers.map((user) => (
         <View key={user.id} style={styles.userCard}>
           <View style={styles.userInfo}>
             <ThemedText style={styles.userName}>{user.name}</ThemedText>
@@ -177,6 +254,7 @@ export default function AdminUsersScreen({
           </View>
         </View>
       ))}
+
     </ScrollView>
   );
 }
@@ -337,5 +415,29 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.lg,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+  },
+  emptyCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  emptyText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

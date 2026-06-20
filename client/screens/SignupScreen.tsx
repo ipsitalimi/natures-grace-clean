@@ -1,33 +1,74 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TextInput, Pressable, ScrollView, Image } from "react-native";
+import {
+  View,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  ScrollView,
+  Image,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 import appLogo from "../../assets/images/natures-grace-logo.png";
+import { getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
-type AuthStackParamList = {
-  Login: undefined;
-  Signup: undefined;
-  ForgotPassword: undefined;
-  Main: undefined;
-};
-
-type NavigationProp = NativeStackNavigationProp<AuthStackParamList>;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Signup">;
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
+  const { isConfigured } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const handleContinue = () => {
+    setError("");
+
+    if (!name.trim() || !email.trim() || !password) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    if (!isConfigured) {
+      setError("Account creation requires a configured backend. Contact support.");
+      return;
+    }
+
+    navigation.navigate("SignupLegal", {
+      name: name.trim(),
+      email: email.trim(),
+      password,
+    });
+  };
 
   return (
-    <View style={[styles.container, { paddingTop: 20, paddingBottom: insets.bottom + 20 }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: getAuthScreenPaddingTop(insets.top),
+          paddingBottom: getScrollBottomPadding(insets.bottom, 20),
+        },
+      ]}
+    >
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -94,22 +135,21 @@ export default function SignupScreen() {
             />
           </View>
 
+          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
           <Pressable
             style={styles.primaryButton}
-            onPress={() => navigation.reset({ index: 0, routes: [{ name: "Main" }] })}
+            onPress={handleContinue}
             testID="button-create-account"
           >
-            <ThemedText style={styles.primaryButtonText}>Create Account</ThemedText>
+            <ThemedText style={styles.primaryButtonText}>Continue</ThemedText>
           </Pressable>
         </View>
       </ScrollView>
 
       <View style={styles.bottomSection}>
         <ThemedText style={styles.switchText}>Already have an account? </ThemedText>
-        <Pressable
-          onPress={() => navigation.navigate("Login")}
-          testID="link-login"
-        >
+        <Pressable onPress={() => navigation.navigate("Login")} testID="link-login">
           <ThemedText style={styles.switchLink}>Login</ThemedText>
         </Pressable>
       </View>
@@ -123,22 +163,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.backgroundRoot,
     paddingHorizontal: Spacing["2xl"],
   },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: "center",
-  },
-  logoArea: {
-    alignItems: "center",
-    marginBottom: 32,
-  },
-  logoImage: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-  },
+  scrollView: { flex: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: "center" },
+  logoArea: { alignItems: "center", marginBottom: 32 },
+  logoImage: { width: 90, height: 90, borderRadius: 45 },
   appTitle: {
     fontSize: 26,
     fontWeight: "700",
@@ -146,17 +174,9 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     letterSpacing: 0.3,
   },
-  tagline: {
-    fontSize: 15,
-    color: Colors.light.textMuted,
-    marginTop: 6,
-  },
-  formArea: {
-    gap: 16,
-  },
-  inputWrapper: {
-    gap: 6,
-  },
+  tagline: { fontSize: 15, color: Colors.light.textMuted, marginTop: 6 },
+  formArea: { gap: 16 },
+  inputWrapper: { gap: 6 },
   inputLabel: {
     fontSize: 14,
     fontWeight: "500",
@@ -173,31 +193,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.divider,
   },
+  errorText: { fontSize: 14, color: "#C0392B", textAlign: "center" },
+  infoText: { fontSize: 14, color: Colors.light.accent, textAlign: "center" },
   primaryButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.sm,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: Spacing.sm,
+    minHeight: 52,
+    justifyContent: "center",
   },
-  primaryButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#FFFFFF",
-  },
+  primaryButtonDisabled: { opacity: 0.7 },
+  primaryButtonText: { fontSize: 16, fontWeight: "600", color: "#FFFFFF" },
   bottomSection: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: Spacing.lg,
   },
-  switchText: {
-    fontSize: 15,
-    color: Colors.light.textSecondary,
-  },
-  switchLink: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Colors.light.accent,
-  },
+  switchText: { fontSize: 15, color: Colors.light.textSecondary },
+  switchLink: { fontSize: 15, fontWeight: "600", color: Colors.light.accent },
 });

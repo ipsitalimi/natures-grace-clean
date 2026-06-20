@@ -1,58 +1,118 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, TextInput, Pressable } from "react-native";
+import { View, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { homeRouteForRole, useAuth } from "@/context/AuthContext";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, "ChangePassword">;
 
 export default function ChangePasswordScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp>();
+  const { changePassword, isConfigured, pendingPasswordRecovery, profile } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmation, setConfirmation] = useState(false);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const handleUpdate = () => {
+  const handleUpdate = async () => {
+    setError("");
+    if (!isConfigured) {
+      setError("Password change requires a configured backend.");
+      return;
+    }
+    if (!pendingPasswordRecovery && !currentPassword) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (!newPassword || !confirmPassword) {
+      setError("Please fill in all fields.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("New passwords do not match.");
+      return;
+    }
+
+    setSaving(true);
+    const result = await changePassword(newPassword, pendingPasswordRecovery ? undefined : currentPassword);
+    setSaving(false);
+
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
     setConfirmation(true);
+
+    if (pendingPasswordRecovery && profile) {
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: homeRouteForRole(profile.role) }],
+        });
+      }, 1200);
+      return;
+    }
+
     setTimeout(() => setConfirmation(false), 2500);
   };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
+        {!pendingPasswordRecovery ? (
+          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+          </Pressable>
+        ) : (
+          <View style={styles.headerIconButton} />
+        )}
         <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
+        <View style={styles.headerIconButton} />
       </View>
 
       <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Change Password</ThemedText>
+        <ThemedText style={styles.pageTitle}>
+          {pendingPasswordRecovery ? "Reset Password" : "Change Password"}
+        </ThemedText>
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Current Password</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={currentPassword}
-            onChangeText={setCurrentPassword}
-            placeholder="Enter current password"
-            placeholderTextColor={Colors.light.textSecondary}
-            secureTextEntry
-            testID="input-current-password"
-          />
-        </View>
+        {!pendingPasswordRecovery ? (
+          <View style={styles.fieldGroup}>
+            <ThemedText style={styles.label}>Current Password</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={currentPassword}
+              onChangeText={setCurrentPassword}
+              placeholder="Enter current password"
+              placeholderTextColor={Colors.light.textSecondary}
+              secureTextEntry
+              testID="input-current-password"
+            />
+          </View>
+        ) : null}
 
         <View style={styles.fieldGroup}>
           <ThemedText style={styles.label}>New Password</ThemedText>
@@ -82,12 +142,22 @@ export default function ChangePasswordScreen() {
 
         <ThemedText style={styles.requirementsNote}>Password must be at least 8 characters</ThemedText>
 
+        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
         {confirmation ? (
           <ThemedText style={styles.confirmationText} testID="text-password-updated">Password Updated</ThemedText>
         ) : null}
 
-        <Pressable style={styles.updateButton} onPress={handleUpdate} testID="button-update-password">
-          <ThemedText style={styles.updateButtonText}>Update Password</ThemedText>
+        <Pressable
+          style={[styles.updateButton, saving && styles.updateButtonDisabled]}
+          onPress={() => void handleUpdate()}
+          disabled={saving}
+          testID="button-update-password"
+        >
+          {saving ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.updateButtonText}>Update Password</ThemedText>
+          )}
         </Pressable>
       </ScrollView>
     </View>
@@ -156,6 +226,12 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
     marginLeft: 4,
   },
+  errorText: {
+    fontSize: 14,
+    color: "#C0392B",
+    textAlign: "center",
+    marginBottom: Spacing.md,
+  },
   confirmationText: {
     fontSize: 14,
     fontWeight: "600",
@@ -168,6 +244,11 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     paddingVertical: 16,
     alignItems: "center",
+    minHeight: 52,
+    justifyContent: "center",
+  },
+  updateButtonDisabled: {
+    opacity: 0.7,
   },
   updateButtonText: {
     fontSize: 16,

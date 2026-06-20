@@ -1,8 +1,8 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo, useCallback } from "react";
 import { View, StyleSheet, Pressable, Dimensions, ScrollView, Image } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
@@ -13,9 +13,14 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
 import AppHeader from "@/components/AppHeader";
-import { useBooking } from "@/context/BookingContext";
 import { Practitioner } from "@/data/practitioners";
+import type { UserSessionHistory } from "@/data/practitionerBookings";
 import { useDataContext } from "@/context/DataContext";
+import { fetchNextUpcomingUserBooking } from "@/services/content/practitionerBookingsService";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
+import { useAuth } from "@/context/AuthContext";
 import exploreWellnessIcon from "../../assets/images/icons/explore-wellness-icon.png";
 import journalIcon from "../../assets/images/icons/journal-icon.png";
 import resourcesIconImg from "../../assets/images/icons/resources-icon.png";
@@ -25,7 +30,6 @@ import knowAdminIcon from "../../assets/images/icons/know-admin-icon.png";
 
 type RootStackParamList = {
   Main: undefined;
-  Placeholder: { title: string };
   Resources: undefined;
   NGStore: undefined;
   KnowYourAdmin: undefined;
@@ -247,16 +251,67 @@ export default function HomeScreen() {
   const navigation = useNavigation<HomeScreenNavigationProp>();
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [activeSpecialist, setActiveSpecialist] = useState(0);
-  const { upcomingBooking } = useBooking();
-  const { practitionerCategories } = useDataContext();
-  const featuredSpecialists = practitionerCategories.flatMap((c) => c.practitioners).slice(0, 4);
+  const [nextSession, setNextSession] = useState<UserSessionHistory | null>(null);
+  const { practitionerCategories, events } = useDataContext();
+  const {
+    homeContent,
+    getDailyAffirmation,
+    getFeaturedPractitioners,
+    filterApprovedPractitioners,
+    filterVisibleEvents,
+    settings,
+  } = usePlatformConfig();
+  const {
+    loading: brandLoading,
+    error: brandError,
+    appNameDisplay,
+    appNameMuted,
+    reload: reloadBrand,
+  } = useAppBrandCopy();
+  const { emailConfirmedMessage, consumeEmailConfirmedMessage, profile, session } = useAuth();
+  const allPractitioners = practitionerCategories.flatMap((c) => c.practitioners);
+  const featuredSpecialists = getFeaturedPractitioners(filterApprovedPractitioners(allPractitioners));
+
+  const harGharDhyanEvent = useMemo(() => {
+    const visible = filterVisibleEvents(events).filter((e) => e.status === "Active");
+    const byTitle = visible.find((e) => /har\s*ghar|dhyan/i.test(e.title));
+    return byTitle ?? visible[0] ?? null;
+  }, [events, filterVisibleEvents]);
+
+  const loadNextSession = useCallback(async () => {
+    if (!isSupabaseConfigured() || !session?.user?.id) {
+      setNextSession(null);
+      return;
+    }
+    const upcoming = await fetchNextUpcomingUserBooking(session.user.id);
+    setNextSession(upcoming);
+  }, [session?.user?.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadNextSession();
+    }, [loadNextSession])
+  );
+
+  const handleJoinHarGharDhyan = () => {
+    if (harGharDhyanEvent) {
+      navigation.navigate("CommunityTab", {
+        screen: "EventDetail",
+        params: { eventId: harGharDhyanEvent.id },
+      });
+      return;
+    }
+    navigation.navigate("CommunityTab");
+  };
 
   const goToNextSpecialist = () => {
+    if (featuredSpecialists.length === 0) return;
     setActiveSpecialist((prev) => (prev + 1) % featuredSpecialists.length);
   };
 
   const goToPrevSpecialist = () => {
-    setActiveSpecialist((prev) => 
+    if (featuredSpecialists.length === 0) return;
+    setActiveSpecialist((prev) =>
       prev === 0 ? featuredSpecialists.length - 1 : prev - 1
     );
   };
@@ -272,36 +327,39 @@ export default function HomeScreen() {
     })
     .runOnJS(true);
 
-  const affirmations = [
-    "I am worthy of love and happiness.",
-    "I trust the journey of my life.",
-    "I am at peace with who I am.",
-    "I choose peace over perfection today.",
-    "I am growing and healing every day.",
-    "My feelings are valid and I honour them.",
-    "I release what no longer serves me.",
-  ];
-
-  const getDailyAffirmation = () => {
-    const today = new Date();
-    const dayIndex = today.getFullYear() * 1000 + today.getMonth() * 31 + today.getDate();
-    return affirmations[dayIndex % affirmations.length];
-  };
-
-  const userName = "Limi";
-
-  const navigateToPlaceholder = (title: string) => {
-    navigation.navigate("Placeholder", { title });
-  };
+  const userName =
+    profile?.full_name?.trim().split(/\s+/)[0] ||
+    homeContent.welcomeName.trim() ||
+    "there";
+  const dailyAffirmation = getDailyAffirmation();
+  const cards = homeContent.actionCards;
 
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
       <AppHeader onProfilePress={() => setDrawerVisible(true)} />
+      {emailConfirmedMessage ? (
+        <Pressable
+          style={styles.emailConfirmedBanner}
+          onPress={consumeEmailConfirmedMessage}
+        >
+          <ThemedText style={styles.emailConfirmedText}>{emailConfirmedMessage}</ThemedText>
+        </Pressable>
+      ) : null}
       
       <View style={[styles.content, { paddingBottom: 6 }]}>
         <View style={styles.titleSection}>
-          <ThemedText style={styles.appTitle}>Nature's Grace</ThemedText>
+          {brandError ? (
+            <Pressable onPress={() => void reloadBrand()} testID="button-home-brand-retry">
+              <ThemedText style={styles.brandError}>{brandError} — tap to retry</ThemedText>
+            </Pressable>
+          ) : null}
+          <ThemedText
+            style={[styles.appTitle, appNameMuted ? styles.appTitleMuted : undefined]}
+            testID="text-home-app-name"
+          >
+            {brandLoading ? "…" : appNameDisplay}
+          </ThemedText>
         </View>
 
         <View style={styles.greetingSection}>
@@ -311,75 +369,103 @@ export default function HomeScreen() {
           <ThemedText style={styles.subGreeting}>How are you feeling today?</ThemedText>
         </View>
 
+        {homeContent.globalBanner.enabled && homeContent.globalBanner.message ? (
+          <View
+            style={[
+              styles.globalBanner,
+              homeContent.globalBanner.tone === "warning" && styles.globalBannerWarning,
+            ]}
+          >
+            <ThemedText style={styles.globalBannerText}>{homeContent.globalBanner.message}</ThemedText>
+          </View>
+        ) : null}
+
         <View style={styles.actionsGrid}>
           <View style={styles.actionsRow}>
-            <ActionCard
-              icon={<Image source={exploreWellnessIcon} style={styles.actionIconImage} resizeMode="contain" />}
-              label="Explore Wellness"
-              onPress={() => navigation.navigate("WellnessTab")}
-            />
-            <ActionCard
-              icon={<Image source={storeIconImg} style={styles.actionIconImage} resizeMode="contain" />}
-              label="Nature's Grace Store"
-              onPress={() => navigation.navigate("StoreTab" as never)}
-            />
-            <ActionCard
-              icon={<Image source={resourcesIconImg} style={styles.actionIconImage} resizeMode="contain" />}
-              label="Courses & Resources"
-              onPress={() => navigation.navigate("Resources")}
-            />
+            {cards.exploreWellness && settings.featureFlags.practitionerBooking ? (
+              <ActionCard
+                icon={<Image source={exploreWellnessIcon} style={styles.actionIconImage} resizeMode="contain" />}
+                label="Explore Wellness"
+                onPress={() => navigation.navigate("WellnessTab")}
+              />
+            ) : null}
+            {cards.store && settings.featureFlags.store ? (
+              <ActionCard
+                icon={<Image source={storeIconImg} style={styles.actionIconImage} resizeMode="contain" />}
+                label={settings.appLabels.storeTitle}
+                onPress={() => navigation.navigate("StoreTab" as never)}
+              />
+            ) : null}
+            {cards.resources ? (
+              <ActionCard
+                icon={<Image source={resourcesIconImg} style={styles.actionIconImage} resizeMode="contain" />}
+                label="Courses & Resources"
+                onPress={() => navigation.navigate("Resources")}
+              />
+            ) : null}
           </View>
           <View style={styles.actionsRow}>
-            <ActionCard
-              icon={<Image source={journalIcon} style={styles.actionIconImage} resizeMode="contain" />}
-              label="Reflect & Journal"
-              onPress={() => navigation.navigate("MoodTab")}
-            />
-            <ActionCard
-              icon={<Image source={buddyIcon} style={styles.actionIconImage} resizeMode="contain" />}
-              label="NG Buddy"
-              onPress={() => navigation.navigate("NGBuddy" as never)}
-            />
-            <ActionCard
-              icon={<Image source={knowAdminIcon} style={styles.actionIconImage} resizeMode="contain" />}
-              label="Know Your Admin"
-              onPress={() => navigation.navigate("KnowYourAdmin")}
-            />
+            {cards.journal && settings.featureFlags.journal ? (
+              <ActionCard
+                icon={<Image source={journalIcon} style={styles.actionIconImage} resizeMode="contain" />}
+                label={settings.appLabels.journalTitle}
+                onPress={() => navigation.navigate("MoodTab")}
+              />
+            ) : null}
+            {cards.buddy && settings.featureFlags.ngBuddy ? (
+              <ActionCard
+                icon={<Image source={buddyIcon} style={styles.actionIconImage} resizeMode="contain" />}
+                label="NG Buddy"
+                onPress={() => navigation.navigate("NGBuddy" as never)}
+              />
+            ) : null}
+            {cards.knowAdmin ? (
+              <ActionCard
+                icon={<Image source={knowAdminIcon} style={styles.actionIconImage} resizeMode="contain" />}
+                label="Know Your Admin"
+                onPress={() => navigation.navigate("KnowYourAdmin")}
+              />
+            ) : null}
           </View>
         </View>
 
         <View style={styles.affirmationSection}>
           <ThemedText style={styles.affirmationText}>
-            Take a deep breath. You are here now.
+            {homeContent.breathingMessage}
           </ThemedText>
           <View style={styles.divider} />
         </View>
 
         <View style={styles.infoCardsRow}>
           <View style={styles.sessionCard}>
-            {upcomingBooking ? (
+            {nextSession ? (
               <>
                 <ThemedText style={styles.infoCardTitle}>Your Next Session</ThemedText>
                 <ThemedText style={styles.sessionName}>
-                  {upcomingBooking.category.split(" ")[0]} with {upcomingBooking.practitionerName.split(" ")[0]}
+                  {nextSession.serviceType} with {nextSession.practitionerName.split(" ")[0]}
                 </ThemedText>
                 <ThemedText style={styles.sessionTime}>
-                  {upcomingBooking.date.dayName}, {upcomingBooking.date.dayNum} {upcomingBooking.date.monthName} at {upcomingBooking.time}
+                  {nextSession.date} at {nextSession.time}
                 </ThemedText>
                 <View style={styles.placeholderImage}>
-                  <Image 
-                    source={{ uri: upcomingBooking.practitionerPhoto }} 
-                    style={styles.sessionImage}
-                    resizeMode="cover"
-                  />
+                  <View style={styles.sessionImage} />
                 </View>
-                <Pressable 
+                <Pressable
                   style={styles.openWellnessButton}
-                  onPress={() => navigateToPlaceholder("Session Details")}
+                  onPress={() =>
+                    (navigation as any).navigate("SessionDetail", { sessionId: nextSession.id })
+                  }
                 >
                   <ThemedText style={styles.openWellnessText}>View Details</ThemedText>
                   <Feather name="chevron-right" size={12} color="#FFFFFF" />
                 </Pressable>
+              </>
+            ) : featuredSpecialists.length === 0 ? (
+              <>
+                <ThemedText style={styles.infoCardTitle}>Meet Our Specialists</ThemedText>
+                <ThemedText style={styles.specialistCategory}>
+                  Featured practitioners will appear here once they are published.
+                </ThemedText>
               </>
             ) : (
               <>
@@ -392,8 +478,12 @@ export default function HomeScreen() {
                 </ThemedText>
                 <GestureDetector gesture={swipeGesture}>
                   <View style={styles.placeholderImage}>
-                    <Image 
-                      source={featuredSpecialists[activeSpecialist]?.localPhoto || { uri: featuredSpecialists[activeSpecialist]?.photo }} 
+                    <Image
+                      source={
+                        featuredSpecialists[activeSpecialist]?.localPhoto || {
+                          uri: featuredSpecialists[activeSpecialist]?.photo,
+                        }
+                      }
                       style={styles.sessionImage}
                       resizeMode="cover"
                     />
@@ -419,7 +509,11 @@ export default function HomeScreen() {
             <View style={styles.affirmationCard}>
               <ThemedText style={styles.carouselTitle}>Daily Affirmation</ThemedText>
               <View style={styles.quoteBar} />
-              <ThemedText style={styles.quoteText}>"{getDailyAffirmation()}"</ThemedText>
+              <ThemedText style={styles.quoteText}>
+                {dailyAffirmation
+                  ? `"${dailyAffirmation}"`
+                  : "Affirmations will appear here once configured in admin settings."}
+              </ThemedText>
               <ThemedText style={styles.affirmationDate}>
                 {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}
               </ThemedText>
@@ -441,11 +535,13 @@ export default function HomeScreen() {
                   <ThemedText style={styles.bulletText}>Breathwork</ThemedText>
                 </View>
               </View>
-              <Pressable 
+              <Pressable
                 style={styles.joinFreeButton}
-                onPress={() => navigation.navigate("CommunityTab", { screen: "EventDetail", params: { eventId: "har-ghar-dhyan" } })}
+                onPress={handleJoinHarGharDhyan}
               >
-                <ThemedText style={styles.joinFreeText}>Join Now</ThemedText>
+                <ThemedText style={styles.joinFreeText}>
+                  {harGharDhyanEvent ? "Join Now" : "View Events"}
+                </ThemedText>
                 <Feather name="chevron-right" size={12} color="#FFFFFF" />
               </Pressable>
             </View>
@@ -457,6 +553,19 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  emailConfirmedBanner: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.sm,
+    backgroundColor: "#E8F5EE",
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+  },
+  emailConfirmedText: {
+    fontSize: 14,
+    color: Colors.light.accent,
+    textAlign: "center",
+    fontWeight: "600",
+  },
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
@@ -487,6 +596,16 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     fontFamily: "ui-serif",
     letterSpacing: 0.5,
+  },
+  appTitleMuted: {
+    fontStyle: "italic",
+    color: Colors.light.textSecondary,
+  },
+  brandError: {
+    fontSize: 12,
+    color: "#8B3A3A",
+    marginBottom: Spacing.xs,
+    textAlign: "center",
   },
   greetingSection: {
     alignItems: "center",
@@ -547,6 +666,24 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontWeight: "500",
     lineHeight: 13,
+  },
+  globalBanner: {
+    backgroundColor: "#E8F5EE",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: "#013220",
+  },
+  globalBannerWarning: {
+    backgroundColor: "#FFF4E5",
+    borderColor: "#B8860B",
+  },
+  globalBannerText: {
+    fontSize: 13,
+    color: Colors.light.text,
+    textAlign: "center",
+    fontFamily: "Nunito_400Regular",
   },
   affirmationSection: {
     alignItems: "center",

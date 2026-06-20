@@ -6,6 +6,7 @@ import Svg, { Path } from "react-native-svg";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { Practitioner } from "@/data/practitioners";
+import VerifiedBadge, { isVerifiedPractitioner } from "@/components/VerifiedBadge";
 
 interface PractitionerCardProps {
   practitioner: Practitioner;
@@ -29,7 +30,12 @@ export default function PractitionerCard({ practitioner, onPress }: Practitioner
         resizeMode="cover"
       />
       <View style={styles.info}>
-        <ThemedText style={styles.name}>{practitioner.name}</ThemedText>
+        <View style={styles.nameRow}>
+          <ThemedText style={styles.name}>{practitioner.name}</ThemedText>
+          {isVerifiedPractitioner(practitioner) ? (
+            <VerifiedBadge kind="practitioner" compact />
+          ) : null}
+        </View>
         <ThemedText style={styles.category}>{practitioner.category}</ThemedText>
         <View style={styles.ratingRow}>
           <StarFilled size={14} />
@@ -69,11 +75,17 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: Spacing.md,
   },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 2,
+  },
   name: {
     fontSize: 15,
     fontWeight: "600",
     color: Colors.light.text,
-    marginBottom: 2,
   },
   category: {
     fontSize: 12,

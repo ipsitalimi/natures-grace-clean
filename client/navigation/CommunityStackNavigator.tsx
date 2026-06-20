@@ -6,6 +6,7 @@ import EventDetailScreen from "@/screens/EventDetailScreen";
 import EventRegistrationScreen from "@/screens/EventRegistrationScreen";
 import DiscussionThreadScreen from "@/screens/DiscussionThreadScreen";
 import AddReplyScreen from "@/screens/AddReplyScreen";
+import CreateDiscussionScreen from "@/screens/CreateDiscussionScreen";
 
 export type CommunityStackParamList = {
   CommunityMain: undefined;
@@ -13,6 +14,7 @@ export type CommunityStackParamList = {
   EventRegistration: { eventId: string };
   DiscussionThread: { discussionId: string };
   AddReply: { discussionId: string };
+  CreateDiscussion: undefined;
 };
 
 const Stack = createNativeStackNavigator<CommunityStackParamList>();
@@ -25,6 +27,7 @@ export default function CommunityStackNavigator() {
       <Stack.Screen name="EventRegistration" component={EventRegistrationScreen} />
       <Stack.Screen name="DiscussionThread" component={DiscussionThreadScreen} />
       <Stack.Screen name="AddReply" component={AddReplyScreen} />
+      <Stack.Screen name="CreateDiscussion" component={CreateDiscussionScreen} />
     </Stack.Navigator>
   );
 }

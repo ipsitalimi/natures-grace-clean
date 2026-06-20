@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 function BuddyIllustration() {
   return (
@@ -80,7 +81,7 @@ export default function NGBuddyScreen() {
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top), paddingBottom: getScrollBottomPadding(insets.bottom) }]}>
       <Pressable
         style={styles.backButton}
         onPress={() => navigation.goBack()}

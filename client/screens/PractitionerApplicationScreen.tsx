@@ -1,24 +1,39 @@
-import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, TextInput, Pressable } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, ScrollView, StyleSheet, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import RoleAgreementSection from "@/components/legal/RoleAgreementSection";
+import {
+  buildAcceptanceInputs,
+  fetchLegalVersions,
+  isPractitionerAgreementCurrent,
+  parseProfileLegalAcceptance,
+  recordLegalAcceptances,
+} from "@/services/legal/legalAcceptanceService";
+import { submitRoleApplication } from "@/services/platform/roleApplicationsService";
+import { uploadApplicationDocuments } from "@/services/platform/applicationDocumentsService";
+import ApplicationDocumentsSection from "@/components/ApplicationDocumentsSection";
+import type { LocalFile } from "@/lib/storageUpload";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 const CATEGORIES = ["Healings", "Counseling", "Therapies", "Spiritual Guidance"];
-
-function sendApplicationToAdminEmail(data: Record<string, string>) {
-  console.log("--- Practitioner Application Submitted ---");
-  console.log("Simulating email to admin: naturesgrace.reiki@gmail.com");
-  console.log("Application Data:", JSON.stringify(data, null, 2));
-  console.log("--- End of simulated email ---");
-}
 
 export default function PractitionerApplicationScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const { appNameDisplay } = useAppBrandCopy();
+  const { session, profile, refreshProfile } = useAuth();
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [agreementCurrent, setAgreementCurrent] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -30,23 +45,80 @@ export default function PractitionerApplicationScreen() {
   const [priceRange, setPriceRange] = useState("");
   const [bio, setBio] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
+  const [pendingDocs, setPendingDocs] = useState<LocalFile[]>([]);
   const [availability, setAvailability] = useState("");
 
-  const handleSubmit = () => {
-    sendApplicationToAdminEmail({
-      fullName,
-      email,
-      phone,
-      category,
-      experience,
-      certifications,
-      sessionTypes,
-      priceRange,
-      bio,
-      whyJoin,
-      availability,
-    });
-    setSubmitted(true);
+  useEffect(() => {
+    if (profile) {
+      if (profile.full_name) setFullName(profile.full_name);
+      if (profile.email) setEmail(profile.email);
+      if (profile.phone) setPhone(profile.phone);
+    }
+  }, [profile?.full_name, profile?.email, profile?.phone]);
+
+  useEffect(() => {
+    if (!profile) return;
+    void (async () => {
+      const versions = await fetchLegalVersions();
+      const acceptance = parseProfileLegalAcceptance(profile);
+      const current = isPractitionerAgreementCurrent(acceptance, versions);
+      setAgreementCurrent(current);
+      if (current) setAgreementChecked(true);
+    })();
+  }, [profile]);
+
+  const canSubmit = isSupabaseConfigured() && Boolean(session?.user);
+  const agreementReady = agreementCurrent || agreementChecked;
+
+  const handleSubmit = async () => {
+    if (!canSubmit || submitting || !agreementReady) return;
+    if (!fullName.trim() || !email.trim() || !category) {
+      setSubmitError("Please fill in your name, email, and practice category.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      if (!agreementCurrent) {
+        const versions = await fetchLegalVersions();
+        const recordResult = await recordLegalAcceptances(
+          buildAcceptanceInputs(["practitioner_agreement"], versions)
+        );
+        if (!recordResult.ok) {
+          throw new Error(recordResult.error ?? "Could not record Practitioner Agreement acceptance");
+        }
+        await refreshProfile();
+      }
+
+      const application = await submitRoleApplication("Practitioner", {
+        fullName: fullName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        category,
+        experience: experience.trim(),
+        certifications: certifications.trim(),
+        sessionTypes: sessionTypes.trim(),
+        priceRange: priceRange.trim(),
+        bio: bio.trim(),
+        whyJoin: whyJoin.trim(),
+        availability: availability.trim(),
+      });
+      if (pendingDocs.length && application) {
+        const uploadResult = await uploadApplicationDocuments(
+          application.id,
+          pendingDocs,
+          "practitioner_credentials"
+        );
+        if (uploadResult.errors.length) {
+          console.warn("[PractitionerApplication] document upload:", uploadResult.errors.join("; "));
+        }
+      }
+      setSubmitted(true);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not submit application");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleReturnToWellness = () => {
@@ -62,7 +134,7 @@ export default function PractitionerApplicationScreen() {
           </View>
           <ThemedText style={styles.confirmationTitle}>Application Submitted</ThemedText>
           <ThemedText style={styles.confirmationMessage}>
-            Your application has been sent to the Nature's Grace team for review.
+            Your application has been sent to the {appNameDisplay} team for review.
           </ThemedText>
           <ThemedText style={styles.confirmationSubtext}>
             We'll contact you if your profile is approved.
@@ -81,21 +153,35 @@ export default function PractitionerApplicationScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + Spacing.lg }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) + Spacing.sm }]}>
         <Pressable style={styles.backButton} onPress={handleReturnToWellness} testID="button-back">
           <Feather name="arrow-left" size={20} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.screenTitle}>Practitioner Application</ThemedText>
+        <ThemedText style={styles.screenTitle}>Become a Practitioner</ThemedText>
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
         <ThemedText style={styles.introText}>
-          Share your practice with the Nature's Grace community.
+          Share your practice with the {appNameDisplay} community.
         </ThemedText>
+
+        {!canSubmit ? (
+          <ThemedText style={styles.hintText} testID="text-practitioner-sign-in">
+            {isSupabaseConfigured()
+              ? "Sign in to submit your practitioner application."
+              : "Applications require a connected account."}
+          </ThemedText>
+        ) : null}
+
+        {submitError ? (
+          <ThemedText style={styles.errorText} testID="text-practitioner-submit-error">
+            {submitError}
+          </ThemedText>
+        ) : null}
 
         <ThemedText style={styles.label}>Full Name</ThemedText>
         <TextInput
@@ -200,7 +286,7 @@ export default function PractitionerApplicationScreen() {
           testID="input-bio"
         />
 
-        <ThemedText style={styles.label}>Why do you want to join Nature's Grace?</ThemedText>
+        <ThemedText style={styles.label}>Why do you want to join {appNameDisplay}?</ThemedText>
         <TextInput
           style={[styles.input, styles.textArea]}
           value={whyJoin}
@@ -222,12 +308,33 @@ export default function PractitionerApplicationScreen() {
           testID="input-availability"
         />
 
+        <ApplicationDocumentsSection
+          files={pendingDocs}
+          onChange={setPendingDocs}
+          disabled={submitting}
+          title="Credentials & documents"
+          hint="Upload certifications, licenses, or ID (PDF or image)."
+        />
+
+        {!agreementCurrent ? (
+          <RoleAgreementSection
+            docKey="practitioner_agreement"
+            checked={agreementChecked}
+            onCheckedChange={setAgreementChecked}
+          />
+        ) : null}
+
         <Pressable
-          style={styles.submitButton}
-          onPress={handleSubmit}
+          style={[styles.submitButton, !canSubmit || submitting || !agreementReady ? styles.submitButtonDisabled : null]}
+          onPress={() => void handleSubmit()}
+          disabled={!canSubmit || submitting || !agreementReady}
           testID="button-submit-application"
         >
-          <ThemedText style={styles.submitButtonText}>Submit Application</ThemedText>
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.submitButtonText}>Submit Application</ThemedText>
+          )}
         </Pressable>
       </ScrollView>
     </View>
@@ -272,6 +379,18 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     marginBottom: Spacing.xl,
     lineHeight: 20,
+  },
+  hintText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.md,
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#B33A3A",
+    marginBottom: Spacing.md,
   },
   label: {
     fontSize: 13,
@@ -328,6 +447,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginTop: Spacing.xl,
+  },
+  submitButtonDisabled: {
+    opacity: 0.5,
   },
   submitButtonText: {
     fontSize: 16,

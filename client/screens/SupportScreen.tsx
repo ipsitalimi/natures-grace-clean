@@ -1,12 +1,15 @@
-import React from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { fetchSupportCopyMap, formatSupportCopyForDisplay, getSupportCopyKey } from "@/services/content/helpSupportService";
 
 type RootStackParamList = {
   Help: undefined;
@@ -16,37 +19,63 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const supportItems = [
-  {
-    id: "1",
-    icon: "help-circle" as const,
-    title: "Help Center",
-    description: "Find answers to common questions",
-    screen: "Help" as const,
-  },
-  {
-    id: "2",
-    icon: "mail" as const,
-    title: "Contact Us",
-    description: "Reach out to our support team",
-    screen: "Contact" as const,
-  },
-  {
-    id: "3",
-    icon: "info" as const,
-    title: "About Nature's Grace",
-    description: "Learn about our mission and values",
-    screen: "About" as const,
-  },
+const supportNavItems = [
+  { id: "1", icon: "help-circle" as const, screen: "Help" as const, titleKey: "support_hub_help_title", descKey: "support_hub_help_description" },
+  { id: "2", icon: "mail" as const, screen: "Contact" as const, titleKey: "support_hub_contact_title", descKey: "support_hub_contact_description" },
+  { id: "3", icon: "info" as const, screen: "About" as const, titleKey: "support_hub_about_title", descKey: "support_hub_about_description" },
 ];
 
 export default function SupportScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
+  const [copyMap, setCopyMap] = useState<Record<string, string> | null>(null);
+  const [copyLoading, setCopyLoading] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+
+  const loadCopy = useCallback(async () => {
+    if (!isSupabaseConfigured()) {
+      setCopyMap(null);
+      setCopyLoading(false);
+      setCopyError(null);
+      return;
+    }
+    setCopyLoading(true);
+    setCopyError(null);
+    const res = await fetchSupportCopyMap();
+    setCopyLoading(false);
+    if (!res.ok) {
+      setCopyError(res.error);
+      setCopyMap(null);
+      return;
+    }
+    setCopyMap(res.map);
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadCopy();
+    }, [loadCopy])
+  );
+
+  const cards = useMemo(
+    () =>
+      supportNavItems.map((item) => {
+        const titleRaw = getSupportCopyKey(copyMap, item.titleKey);
+        const descRaw = getSupportCopyKey(copyMap, item.descKey);
+        return {
+          ...item,
+          title: formatSupportCopyForDisplay(titleRaw),
+          description: formatSupportCopyForDisplay(descRaw),
+          titleMuted: Boolean(copyMap !== null && !titleRaw),
+          descMuted: Boolean(copyMap !== null && !descRaw),
+        };
+      }),
+    [copyMap]
+  );
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -62,10 +91,27 @@ export default function SupportScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
         showsVerticalScrollIndicator={false}
       >
-        {supportItems.map((item) => (
+        {!isSupabaseConfigured() ? (
+          <ThemedText style={styles.hintText}>Connect Supabase to sync support hub copy.</ThemedText>
+        ) : null}
+
+        {copyLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.hintText}>Loading…</ThemedText>
+          </View>
+        ) : null}
+
+        {copyError ? (
+          <Pressable onPress={() => void loadCopy()} testID="button-support-copy-retry">
+            <ThemedText style={styles.errorText}>{copyError} — tap to retry</ThemedText>
+          </Pressable>
+        ) : null}
+
+        {cards.map((item) => (
           <Pressable
             key={item.id}
             style={styles.card}
@@ -76,8 +122,8 @@ export default function SupportScreen() {
               <Feather name={item.icon} size={22} color={Colors.light.accent} />
             </View>
             <View style={styles.cardContent}>
-              <ThemedText style={styles.cardTitle}>{item.title}</ThemedText>
-              <ThemedText style={styles.cardDescription}>{item.description}</ThemedText>
+              <ThemedText style={[styles.cardTitle, item.titleMuted && styles.cardTextMuted]}>{item.title}</ThemedText>
+              <ThemedText style={[styles.cardDescription, item.descMuted && styles.cardDescMuted]}>{item.description}</ThemedText>
             </View>
             <Feather name="chevron-right" size={18} color={Colors.light.textSecondary} />
           </Pressable>
@@ -125,6 +171,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     gap: 10,
   },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  hintText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#8B3A3A",
+    marginBottom: Spacing.sm,
+  },
   card: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
@@ -153,5 +215,13 @@ const styles = StyleSheet.create({
   cardDescription: {
     fontSize: 14,
     color: Colors.light.textSecondary,
+  },
+  cardTextMuted: {
+    color: Colors.light.textSecondary,
+    fontStyle: "italic",
+  },
+  cardDescMuted: {
+    fontStyle: "italic",
+    opacity: 0.85,
   },
 });

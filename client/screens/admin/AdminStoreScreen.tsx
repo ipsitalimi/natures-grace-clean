@@ -4,7 +4,9 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { StoreProduct } from "@/data/storeProducts";
+import { formatInr } from "@/lib/formatCurrency";
 
 type ApprovalStatus = "Approved" | "Pending" | "Rejected";
 
@@ -53,7 +55,7 @@ function ProductCard({
       </View>
       <ThemedText style={styles.productName} numberOfLines={1}>{product.name}</ThemedText>
       <ThemedText style={styles.productCategory}>{product.category}</ThemedText>
-      <ThemedText style={styles.productPrice}>Rs. {product.price.toFixed(2)}</ThemedText>
+      <ThemedText style={styles.productPrice}>{formatInr(product.price)}</ThemedText>
       <ThemedText style={styles.productDescription} numberOfLines={2}>{product.description}</ThemedText>
       <View style={styles.cardActions}>
         <Pressable
@@ -90,22 +92,16 @@ function ProductCard({
 
 export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
   const { storeCategories, addProduct, updateProduct, deleteProduct } = useDataContext();
+  const { settings, updateSettings, logActivity } = usePlatformConfig();
   const allProducts = storeCategories.flatMap((c) => c.products);
 
-  // Commission & Policies state
-  const [commissionRate, setCommissionRate] = useState("12");
-  const [minimumPrice, setMinimumPrice] = useState("99");
-  const [autoApprove, setAutoApprove] = useState(false);
+  const [commissionRate, setCommissionRate] = useState(String(settings.commissionRate));
+  const [minimumPrice, setMinimumPrice] = useState(String(settings.minimumPrice));
+  const [autoApprove, setAutoApprove] = useState(settings.autoApproveProducts);
   const [commissionSaved, setCommissionSaved] = useState(false);
 
-  // Product approval state
-  const [approvalStatuses, setApprovalStatuses] = useState<Record<string, ApprovalStatus>>(() => {
-    const initialStatuses: Record<string, ApprovalStatus> = {};
-    allProducts.forEach((product) => {
-      initialStatuses[product.id] = "Approved";
-    });
-    return initialStatuses;
-  });
+  const getApprovalStatus = (product: StoreProduct): ApprovalStatus =>
+    product.approvalStatus ?? (settings.autoApproveProducts ? "Approved" : "Pending");
 
   // Form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -142,20 +138,27 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
   const handleSave = () => {
     if (!editName.trim()) return;
 
+    const price = parseFloat(editPrice) || 0;
+    const name = editName.trim();
+    const description = editDescription.trim();
+    const category = editCategory.trim() || editingProduct?.category || "General";
+
     if (editingProduct) {
       updateProduct(editingProduct.id, {
-        name: editName.trim(),
-        description: editDescription.trim(),
-        price: parseFloat(editPrice) || 0,
-        category: editCategory.trim() || editingProduct.category,
+        name,
+        description,
+        price,
+        category,
       });
+      logActivity(`Product "${name}" updated`, "store");
     } else {
       addProduct({
-        name: editName.trim(),
-        description: editDescription.trim() || "A wellness product from Nature's Grace.",
-        price: parseFloat(editPrice) || 0,
-        category: editCategory.trim() || "General",
+        name,
+        description: description || "A wellness product from Nature's Grace.",
+        price,
+        category,
       });
+      logActivity(`Product "${name}" added`, "store");
     }
 
     setSaved(true);
@@ -167,6 +170,11 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
   };
 
   const handleSaveCommissionSettings = () => {
+    updateSettings({
+      commissionRate: parseFloat(commissionRate) || settings.commissionRate,
+      minimumPrice: parseFloat(minimumPrice) || settings.minimumPrice,
+      autoApproveProducts: autoApprove,
+    });
     setCommissionSaved(true);
     setTimeout(() => {
       setCommissionSaved(false);
@@ -174,24 +182,18 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
   };
 
   const handleApproveProduct = (productId: string) => {
-    setApprovalStatuses((prev) => ({
-      ...prev,
-      [productId]: "Approved",
-    }));
+    updateProduct(productId, { approvalStatus: "Approved" });
+    logActivity(`Product approved`, "store");
   };
 
   const handleRejectProduct = (productId: string) => {
-    setApprovalStatuses((prev) => ({
-      ...prev,
-      [productId]: "Rejected",
-    }));
+    updateProduct(productId, { approvalStatus: "Rejected" });
+    logActivity(`Product rejected`, "store");
   };
 
-  // Calculate stats
   const totalProducts = allProducts.length;
-  const approvedCount = Object.values(approvalStatuses).filter((status) => status === "Approved").length;
-  const pendingCount = Object.values(approvalStatuses).filter((status) => status === "Pending").length;
-  const totalRevenue = allProducts.reduce((sum, p) => sum + p.price, 0) * 1000; // Mock multiplier for realistic revenue
+  const approvedCount = allProducts.filter((p) => getApprovalStatus(p) === "Approved").length;
+  const pendingCount = allProducts.filter((p) => getApprovalStatus(p) === "Pending").length;
 
   return (
     <ScrollView
@@ -236,7 +238,7 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
         <View style={styles.settingRow}>
           <ThemedText style={styles.settingLabel}>Minimum Price</ThemedText>
           <View style={styles.inputGroup}>
-            <ThemedText style={styles.inputPrefix}>Rs.</ThemedText>
+            <ThemedText style={styles.inputPrefix}>₹</ThemedText>
             <TextInput
               style={styles.settingInput}
               value={minimumPrice}
@@ -284,18 +286,22 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
           <ThemedText style={styles.statLabel}>Pending</ThemedText>
           <ThemedText style={[styles.statValue, { color: "#E8A60D" }]}>{pendingCount}</ThemedText>
         </View>
-        <View style={styles.statCard}>
-          <ThemedText style={styles.statLabel}>Total Revenue</ThemedText>
-          <ThemedText style={styles.statValue}>Rs. {totalRevenue.toLocaleString()}</ThemedText>
-        </View>
       </View>
+
+      {allProducts.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyText}>
+            No products yet. Add a product to build your store catalog.
+          </ThemedText>
+        </View>
+      ) : null}
 
       <View style={styles.productGrid}>
         {allProducts.map((product) => (
           <ProductCard
             key={product.id}
             product={product}
-            status={approvalStatuses[product.id] || "Approved"}
+            status={getApprovalStatus(product)}
             onEdit={() => handleEditProduct(product)}
             onDelete={() => deleteProduct(product.id)}
             onApprove={() => handleApproveProduct(product.id)}
@@ -520,6 +526,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
+  },
+  emptyCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
   productGrid: {
     flexDirection: "row",

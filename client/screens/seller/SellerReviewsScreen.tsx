@@ -1,12 +1,22 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, TextInput } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { sellerReviews, sellerStats, type SellerReview } from "@/data/sellerMockData";
+import type { SellerReviewView } from "@/data/sellerReviews";
+import { useReviews } from "@/context/ReviewsContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
   return (
@@ -23,10 +33,18 @@ function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
   );
 }
 
-function ReviewCard({ review }: { review: SellerReview }) {
+function ReviewCard({
+  review,
+  onSaveReply,
+}: {
+  review: SellerReviewView;
+  onSaveReply: (reviewId: string, reply: string) => Promise<boolean>;
+}) {
   const [replyVisible, setReplyVisible] = useState(false);
   const [replyText, setReplyText] = useState(review.sellerReply ?? "");
   const [replySaved, setReplySaved] = useState(!!review.sellerReply);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const sentimentColor =
     review.sentiment === "positive"
@@ -35,10 +53,18 @@ function ReviewCard({ review }: { review: SellerReview }) {
       ? "#B8860B"
       : "#8B3A3A";
 
-  const handleSaveReply = () => {
+  const handleSaveReply = async () => {
     if (!replyText.trim()) return;
-    setReplySaved(true);
-    setReplyVisible(false);
+    setSaving(true);
+    setSaveError(null);
+    const ok = await onSaveReply(review.id, replyText);
+    setSaving(false);
+    if (ok) {
+      setReplySaved(true);
+      setReplyVisible(false);
+    } else {
+      setSaveError("Could not save reply. Try again.");
+    }
   };
 
   return (
@@ -103,12 +129,20 @@ function ReviewCard({ review }: { review: SellerReview }) {
             numberOfLines={2}
             testID={`input-reply-${review.id}`}
           />
+          {saveError ? (
+            <ThemedText style={styles.saveError}>{saveError}</ThemedText>
+          ) : null}
           <Pressable
-            style={styles.sendReplyBtn}
+            style={[styles.sendReplyBtn, saving && styles.sendReplyDisabled]}
             onPress={handleSaveReply}
+            disabled={saving}
             testID={`button-send-reply-${review.id}`}
           >
-            <ThemedText style={styles.sendReplyText}>Send Reply</ThemedText>
+            {saving ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <ThemedText style={styles.sendReplyText}>Send Reply</ThemedText>
+            )}
           </Pressable>
         </View>
       ) : null}
@@ -119,20 +153,29 @@ function ReviewCard({ review }: { review: SellerReview }) {
 export default function SellerReviewsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const {
+    sellerReviews,
+    sellerStoreStats,
+    sellerReviewsLoading,
+    sellerReviewsError,
+    refreshSellerReviews,
+    saveSellerReply,
+  } = useReviews();
 
-  const totalReviews = sellerReviews.length;
-  const positiveCount = sellerReviews.filter((r) => r.sentiment === "positive").length;
-  const neutralCount = sellerReviews.filter((r) => r.sentiment === "neutral").length;
-  const negativeCount = sellerReviews.filter((r) => r.sentiment === "negative").length;
-  const avgRating = sellerReviews.reduce((s, r) => s + r.rating, 0) / totalReviews;
+  const approvedReviews = sellerReviews.filter((r) => r.status === "Approved");
+  const totalReviews = sellerStoreStats.reviewCount;
+  const positiveCount = sellerStoreStats.positiveCount;
+  const neutralCount = sellerStoreStats.neutralCount;
+  const negativeCount = sellerStoreStats.negativeCount;
+  const avgRating = sellerStoreStats.avgRating;
 
   const ratingCounts = [5, 4, 3, 2, 1].map((star) => ({
     star,
-    count: sellerReviews.filter((r) => r.rating === star).length,
+    count: approvedReviews.filter((r) => r.rating === star).length,
   }));
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
@@ -143,57 +186,100 @@ export default function SellerReviewsScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
       >
-        <View style={styles.ratingOverview}>
-          <View style={styles.ratingCenter}>
-            <ThemedText style={styles.ratingBig}>{avgRating.toFixed(1)}</ThemedText>
-            <StarRating rating={Math.round(avgRating)} size={18} />
-            <ThemedText style={styles.ratingCount}>{totalReviews} reviews</ThemedText>
+        {sellerReviewsLoading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator color={Colors.light.accent} size="large" />
+            <ThemedText style={styles.hintText}>Loading reviews…</ThemedText>
           </View>
-
-          <View style={styles.ratingBars}>
-            {ratingCounts.map(({ star, count }) => (
-              <View key={star} style={styles.ratingBarRow}>
-                <ThemedText style={styles.ratingBarLabel}>{star}</ThemedText>
-                <Feather name="star" size={10} color="#D4943A" />
-                <View style={styles.ratingBarTrack}>
-                  <View
-                    style={[
-                      styles.ratingBarFill,
-                      { width: `${totalReviews > 0 ? (count / totalReviews) * 100 : 0}%` },
-                    ]}
-                  />
-                </View>
-                <ThemedText style={styles.ratingBarCount}>{count}</ThemedText>
+        ) : sellerReviewsError ? (
+          <View style={styles.centered}>
+            <ThemedText style={styles.errorText}>{sellerReviewsError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => refreshSellerReviews()}>
+              <ThemedText style={styles.retryText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.ratingOverview}>
+              <View style={styles.ratingCenter}>
+                <ThemedText style={styles.ratingBig}>
+                  {totalReviews > 0 ? avgRating.toFixed(1) : "—"}
+                </ThemedText>
+                <StarRating rating={Math.round(avgRating)} size={18} />
+                <ThemedText style={styles.ratingCount}>
+                  {totalReviews} approved review{totalReviews === 1 ? "" : "s"}
+                </ThemedText>
               </View>
-            ))}
-          </View>
-        </View>
 
-        <View style={styles.sentimentRow}>
-          <View style={[styles.sentimentCard, { backgroundColor: "rgba(74,90,43,0.08)" }]}>
-            <Feather name="thumbs-up" size={18} color="#4A5A2B" />
-            <ThemedText style={[styles.sentimentNum, { color: "#4A5A2B" }]}>{positiveCount}</ThemedText>
-            <ThemedText style={styles.sentimentLbl}>Positive</ThemedText>
-          </View>
-          <View style={[styles.sentimentCard, { backgroundColor: "rgba(212,148,58,0.1)" }]}>
-            <Feather name="minus-circle" size={18} color="#B8860B" />
-            <ThemedText style={[styles.sentimentNum, { color: "#B8860B" }]}>{neutralCount}</ThemedText>
-            <ThemedText style={styles.sentimentLbl}>Neutral</ThemedText>
-          </View>
-          <View style={[styles.sentimentCard, { backgroundColor: "rgba(139,58,58,0.08)" }]}>
-            <Feather name="thumbs-down" size={18} color="#8B3A3A" />
-            <ThemedText style={[styles.sentimentNum, { color: "#8B3A3A" }]}>{negativeCount}</ThemedText>
-            <ThemedText style={styles.sentimentLbl}>Critical</ThemedText>
-          </View>
-        </View>
+              <View style={styles.ratingBars}>
+                {ratingCounts.map(({ star, count }) => (
+                  <View key={star} style={styles.ratingBarRow}>
+                    <ThemedText style={styles.ratingBarLabel}>{star}</ThemedText>
+                    <Feather name="star" size={10} color="#D4943A" />
+                    <View style={styles.ratingBarTrack}>
+                      <View
+                        style={[
+                          styles.ratingBarFill,
+                          {
+                            width: `${totalReviews > 0 ? (count / totalReviews) * 100 : 0}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <ThemedText style={styles.ratingBarCount}>{count}</ThemedText>
+                  </View>
+                ))}
+              </View>
+            </View>
 
-        <ThemedText style={styles.sectionTitle}>Customer Reviews</ThemedText>
+            <View style={styles.sentimentRow}>
+              <View style={[styles.sentimentCard, { backgroundColor: "rgba(74,90,43,0.08)" }]}>
+                <Feather name="thumbs-up" size={18} color="#4A5A2B" />
+                <ThemedText style={[styles.sentimentNum, { color: "#4A5A2B" }]}>
+                  {positiveCount}
+                </ThemedText>
+                <ThemedText style={styles.sentimentLbl}>Positive</ThemedText>
+              </View>
+              <View style={[styles.sentimentCard, { backgroundColor: "rgba(212,148,58,0.1)" }]}>
+                <Feather name="minus-circle" size={18} color="#B8860B" />
+                <ThemedText style={[styles.sentimentNum, { color: "#B8860B" }]}>
+                  {neutralCount}
+                </ThemedText>
+                <ThemedText style={styles.sentimentLbl}>Neutral</ThemedText>
+              </View>
+              <View style={[styles.sentimentCard, { backgroundColor: "rgba(139,58,58,0.08)" }]}>
+                <Feather name="thumbs-down" size={18} color="#8B3A3A" />
+                <ThemedText style={[styles.sentimentNum, { color: "#8B3A3A" }]}>
+                  {negativeCount}
+                </ThemedText>
+                <ThemedText style={styles.sentimentLbl}>Critical</ThemedText>
+              </View>
+            </View>
 
-        {sellerReviews.map((review) => (
-          <ReviewCard key={review.id} review={review} />
-        ))}
+            <ThemedText style={styles.sectionTitle}>Customer Reviews</ThemedText>
+
+            {!isSupabaseConfigured() ? (
+              <ThemedText style={styles.hintText}>
+                Connect Supabase to load and save store reviews.
+              </ThemedText>
+            ) : sellerReviews.length === 0 ? (
+              <ThemedText style={styles.hintText}>
+                No product reviews yet. Approved reviews will appear here after customers submit
+                them.
+              </ThemedText>
+            ) : (
+              sellerReviews.map((review) => (
+                <ReviewCard
+                  key={review.id}
+                  review={review}
+                  onSaveReply={saveSellerReply}
+                />
+              ))
+            )}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -224,6 +310,35 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
+  },
+  centered: {
+    alignItems: "center",
+    paddingVertical: Spacing["3xl"],
+    gap: Spacing.md,
+  },
+  hintText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  errorText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    textAlign: "center",
+  },
+  retryBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.light.button,
+    borderRadius: BorderRadius.xs,
+  },
+  retryText: {
+    fontSize: 14,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
   },
   ratingOverview: {
     backgroundColor: Colors.light.cardBackground,
@@ -433,11 +548,19 @@ const styles = StyleSheet.create({
     minHeight: 72,
     textAlignVertical: "top",
   },
+  saveError: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+  },
   sendReplyBtn: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.xs,
     paddingVertical: 10,
     alignItems: "center",
+  },
+  sendReplyDisabled: {
+    opacity: 0.7,
   },
   sendReplyText: {
     fontSize: 14,

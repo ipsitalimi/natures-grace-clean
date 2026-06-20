@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -10,12 +10,29 @@ import Svg, { Path } from "react-native-svg";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useAuth } from "@/context/AuthContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { fetchOfferingsForPractitioner } from "@/services/content/practitionerOfferingsService";
+import { fetchAvailabilityForOffering } from "@/services/content/practitionerAvailabilityService";
+import type { SessionOffering } from "@/data/practitionerBookings";
+import type { OfferingAvailabilityState } from "@/data/practitionerBookings";
+import {
+  getBookingDates,
+  getTimeSlotsForDate,
+  isDateBookable,
+} from "@/lib/bookingSlots";
 import ProfileDrawer from "@/components/ProfileDrawer";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   BookSession: { practitionerId: string };
   SessionSummary: {
     practitionerId: string;
+    offeringId?: string;
+    serviceName?: string;
+    sessionPrice: number;
+    sessionDateIso: string;
     selectedDate: { dayName: string; dayNum: number; monthName: string };
     selectedTime: string;
     duration: number;
@@ -78,39 +95,25 @@ function getCategoryLabel(category: string): string {
   }
 }
 
-function getNextSevenDays(): { date: Date; dayName: string; dayNum: number; monthName: string }[] {
-  const days = [];
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  
-  for (let i = 0; i < 7; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() + i);
-    days.push({
-      date,
-      dayName: dayNames[date.getDay()],
-      dayNum: date.getDate(),
-      monthName: monthNames[date.getMonth()],
-    });
-  }
-  return days;
+function getNextSevenDays(maxDays: number) {
+  return getBookingDates(maxDays);
 }
 
-const timeSlots = [
-  "9:00 AM",
-  "10:00 AM",
-  "11:00 AM",
-  "2:00 PM",
-  "3:00 PM",
-  "4:00 PM",
-  "5:00 PM",
-];
-
-const durationOptions = [
+const DEFAULT_DURATION_OPTIONS = [
   { minutes: 15, label: "15 mins" },
   { minutes: 30, label: "30 mins" },
   { minutes: 45, label: "45 mins" },
 ];
+
+function priceForDuration(
+  offerings: SessionOffering[],
+  durationMinutes: number,
+  fallbackPerSession: number
+): number {
+  const offering = offerings.find((o) => o.duration === durationMinutes);
+  if (offering) return offering.price;
+  return Math.round((fallbackPerSession / 60) * durationMinutes);
+}
 
 function DurationIcon({ size = 20, color = Colors.light.accent }: { size?: number; color?: string }) {
   return (
@@ -141,15 +144,69 @@ export default function BookSessionScreen() {
   const [selectedTimeIndex, setSelectedTimeIndex] = useState<number | null>(null);
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<number | null>(null);
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [offerings, setOfferings] = useState<SessionOffering[]>([]);
+  const [availability, setAvailability] = useState<OfferingAvailabilityState | null>(null);
+  const [loadingSchedule, setLoadingSchedule] = useState(true);
 
   const { practitionerCategories } = useDataContext();
+  const { settings } = usePlatformConfig();
+  const { session } = useAuth();
   const practitioner = practitionerCategories.flatMap((c) => c.practitioners).find((p) => p.id === practitionerId);
-  const dates = getNextSevenDays();
+  const maxDays = Math.max(1, settings.maxAdvanceBookingDays ?? 7);
+  const dates = getNextSevenDays(maxDays);
+
+  const durationOptions = useMemo(() => {
+    if (offerings.length === 0) return DEFAULT_DURATION_OPTIONS;
+    const unique = [...new Map(offerings.map((o) => [o.duration, o])).values()];
+    return unique.map((o) => ({ minutes: o.duration, label: `${o.duration} mins` }));
+  }, [offerings]);
+
+  const selectedDate = selectedDateIndex !== null ? dates[selectedDateIndex] : null;
+  const timeSlots = useMemo(() => {
+    if (!selectedDate || !availability) return [];
+    return getTimeSlotsForDate(selectedDate.isoDate, availability);
+  }, [selectedDate, availability]);
+
+  const selectedOffering = useMemo(() => {
+    if (selectedDurationIndex === null) return null;
+    const minutes = durationOptions[selectedDurationIndex]?.minutes;
+    if (!minutes) return null;
+    return offerings.find((o) => o.duration === minutes) ?? null;
+  }, [selectedDurationIndex, durationOptions, offerings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingSchedule(true);
+      const rows = await fetchOfferingsForPractitioner(practitionerId);
+      if (cancelled) return;
+      setOfferings(rows);
+      if (rows[0]) {
+        const avail = await fetchAvailabilityForOffering(rows[0].id);
+        if (!cancelled) setAvailability(avail);
+      }
+      if (!cancelled) setLoadingSchedule(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [practitionerId]);
+
+  useEffect(() => {
+    setSelectedTimeIndex(null);
+  }, [selectedDateIndex]);
+
+  const bookableDates = useMemo(() => {
+    if (!availability) return dates.map((_, i) => i);
+    return dates
+      .map((d, i) => (isDateBookable(d.isoDate, availability) ? i : -1))
+      .filter((i) => i >= 0);
+  }, [dates, availability]);
 
   if (!practitioner) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
           <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={Colors.light.accent} />
           </Pressable>
@@ -163,15 +220,35 @@ export default function BookSessionScreen() {
     );
   }
 
-  const canContinue = selectedDateIndex !== null && selectedTimeIndex !== null && selectedDurationIndex !== null;
-  const selectedDate = selectedDateIndex !== null ? dates[selectedDateIndex] : null;
+  const canContinue =
+    selectedDateIndex !== null &&
+    selectedTimeIndex !== null &&
+    selectedDurationIndex !== null &&
+    timeSlots.length > 0 &&
+    !loadingSchedule &&
+    offerings.length > 0 &&
+    availability !== null;
+
   const selectedTime = selectedTimeIndex !== null ? timeSlots[selectedTimeIndex] : null;
   const selectedDuration = selectedDurationIndex !== null ? durationOptions[selectedDurationIndex] : null;
 
   const handleContinue = () => {
-    if (selectedDate && selectedTime && selectedDuration) {
+    if (!session?.user && isSupabaseConfigured()) {
+      navigation.navigate("Login" as never);
+      return;
+    }
+    if (selectedDate && selectedTime && selectedDuration && practitioner) {
+      const sessionPrice = priceForDuration(
+        offerings,
+        selectedDuration.minutes,
+        practitioner.pricePerSession
+      );
       navigation.navigate("SessionSummary", {
         practitionerId,
+        offeringId: selectedOffering?.id,
+        serviceName: selectedOffering?.sessionType ?? getCategoryLabel(practitioner.category),
+        sessionPrice,
+        sessionDateIso: selectedDate.isoDate,
         selectedDate: {
           dayName: selectedDate.dayName,
           dayNum: selectedDate.dayNum,
@@ -186,7 +263,7 @@ export default function BookSessionScreen() {
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -217,6 +294,22 @@ export default function BookSessionScreen() {
           </View>
         </View>
 
+        {!loadingSchedule && offerings.length === 0 ? (
+          <View style={styles.emptyScheduleCard}>
+            <ThemedText style={styles.emptyScheduleText}>
+              This practitioner has not published session offerings yet. Please check back later.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {!loadingSchedule && offerings.length > 0 && !availability ? (
+          <View style={styles.emptyScheduleCard}>
+            <ThemedText style={styles.emptyScheduleText}>
+              No availability is configured for this practitioner yet.
+            </ThemedText>
+          </View>
+        ) : null}
+
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <CalendarIcon size={18} />
@@ -225,19 +318,26 @@ export default function BookSessionScreen() {
           <ThemedText style={styles.sectionSubtitle}>
             Choose a day that works for you
           </ThemedText>
+          {loadingSchedule ? (
+            <ActivityIndicator color={Colors.light.accent} style={{ marginVertical: Spacing.md }} />
+          ) : null}
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.datesContainer}
           >
-            {dates.map((day, index) => (
+            {dates.map((day, index) => {
+              const disabled = availability ? !bookableDates.includes(index) : false;
+              return (
               <Pressable
                 key={index}
                 style={[
                   styles.dateCard,
                   selectedDateIndex === index && styles.dateCardSelected,
+                  disabled && styles.dateCardDisabled,
                 ]}
-                onPress={() => setSelectedDateIndex(index)}
+                onPress={() => !disabled && setSelectedDateIndex(index)}
+                disabled={disabled}
               >
                 <ThemedText
                   style={[
@@ -264,7 +364,8 @@ export default function BookSessionScreen() {
                   {day.monthName}
                 </ThemedText>
               </Pressable>
-            ))}
+            );
+            })}
           </ScrollView>
         </View>
 
@@ -274,7 +375,9 @@ export default function BookSessionScreen() {
             <ThemedText style={styles.sectionTitle}>Select Time</ThemedText>
           </View>
           <ThemedText style={styles.sectionSubtitle}>
-            Available time slots
+            {timeSlots.length === 0
+              ? "No times available for this date"
+              : "Available time slots"}
           </ThemedText>
           <View style={styles.timeSlotsGrid}>
             {timeSlots.map((time, index) => (
@@ -331,7 +434,7 @@ export default function BookSessionScreen() {
         </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
         <Pressable
           style={[styles.confirmButton, !canContinue && styles.confirmButtonDisabled]}
           onPress={canContinue ? handleContinue : undefined}
@@ -389,6 +492,19 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     textAlign: "center",
     marginTop: 40,
+  },
+  emptyScheduleCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    marginBottom: Spacing.lg,
+  },
+  emptyScheduleText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 20,
   },
   practitionerCard: {
     flexDirection: "row",
@@ -469,6 +585,9 @@ const styles = StyleSheet.create({
   dateCardSelected: {
     backgroundColor: Colors.light.button,
     borderColor: Colors.light.button,
+  },
+  dateCardDisabled: {
+    opacity: 0.35,
   },
   dateDayName: {
     fontSize: 12,

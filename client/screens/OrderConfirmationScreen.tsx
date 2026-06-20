@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { View, StyleSheet, Pressable, Image, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
@@ -7,41 +7,38 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { productImages } from "@/data/storeProducts";
+import ProductImageView from "@/components/ProductImageView";
 import { useDataContext } from "@/context/DataContext";
-import { useCart } from "@/context/CartContext";
+import { DELIVERY_LABELS } from "@/constants/deliveryOptions";
+import { getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+
+type ConfirmationItem = {
+  productId: string;
+  productName: string;
+  productCategory: string;
+  quantity: number;
+  unitPrice: number;
+};
 
 type OrderConfirmationParamList = {
   OrderConfirmation: {
+    orderNumber: string;
     deliveryOption: string;
     totalPrice: number;
+    items: ConfirmationItem[];
   };
 };
 
 type OrderConfirmationRouteProp = RouteProp<OrderConfirmationParamList, "OrderConfirmation">;
 
-const deliveryLabels: Record<string, string> = {
-  standard: "Standard Delivery (5-7 business days)",
-  express: "Express Delivery (2-3 business days)",
-  overnight: "Overnight Delivery (Next business day)",
-};
-
 export default function OrderConfirmationScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const route = useRoute<OrderConfirmationRouteProp>();
-  const { deliveryOption, totalPrice } = route.params;
+  const { orderNumber, deliveryOption, totalPrice, items } = route.params;
   const { storeCategories } = useDataContext();
-  const { items, clearCart } = useCart();
-
-  const orderedItemsRef = useRef(items.map((item) => ({ ...item })));
-  const orderedItems = orderedItemsRef.current;
 
   const allProducts = storeCategories.flatMap((c) => c.products);
-
-  useEffect(() => {
-    clearCart();
-  }, []);
 
   const handleContinueShopping = () => {
     navigation.dispatch(
@@ -52,12 +49,16 @@ export default function OrderConfirmationScreen() {
     );
   };
 
-  const orderNumber = useRef(Math.floor(100000 + Math.random() * 900000)).current;
-
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 40, paddingBottom: insets.bottom + 20 }]}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: getAuthScreenPaddingTop(insets.top) + 28,
+            paddingBottom: getScrollBottomPadding(insets.bottom, 20),
+          },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.successIconContainer}>
@@ -68,29 +69,32 @@ export default function OrderConfirmationScreen() {
 
         <ThemedText style={styles.title}>Order Placed</ThemedText>
         <ThemedText style={styles.subtitle}>
-          Thank you for your order! Your wellness journey continues.
+          Thank you for your order! Payment confirmed — your wellness journey continues.
         </ThemedText>
 
         <View style={styles.orderCard}>
           <ThemedText style={styles.orderCardTitle}>Order Items</ThemedText>
-          {orderedItems.map((item) => {
+          {items.map((item) => {
             const product = allProducts.find((p) => p.id === item.productId);
-            if (!product) return null;
             return (
               <View key={item.productId} style={styles.orderProductRow}>
                 <View style={styles.orderImageContainer}>
-                  {productImages[product.id] ? (
-                    <Image source={productImages[product.id]} style={styles.orderImage} resizeMode="cover" />
+                  {product ? (
+                    <ProductImageView
+                      product={product}
+                      containerStyle={styles.orderImage}
+                      imageStyle={styles.orderImage}
+                    />
                   ) : (
                     <View style={styles.orderImagePlaceholder} />
                   )}
                 </View>
                 <View style={styles.orderProductInfo}>
-                  <ThemedText style={styles.orderProductName} numberOfLines={2}>{product.name}</ThemedText>
+                  <ThemedText style={styles.orderProductName} numberOfLines={2}>{item.productName}</ThemedText>
                   <ThemedText style={styles.orderProductQty}>Qty: {item.quantity}</ThemedText>
                 </View>
                 <ThemedText style={styles.orderProductPrice}>
-                  ${(product.price * item.quantity).toFixed(2)}
+                  ₹{(item.unitPrice * item.quantity).toFixed(0)}
                 </ThemedText>
               </View>
             );
@@ -101,21 +105,21 @@ export default function OrderConfirmationScreen() {
           <View style={styles.orderDetailRow}>
             <Feather name="truck" size={14} color={Colors.light.textSecondary} />
             <ThemedText style={styles.orderDetailText}>
-              {deliveryLabels[deliveryOption] || "Standard Delivery"}
+              {DELIVERY_LABELS[deliveryOption] || "Standard Delivery"}
             </ThemedText>
           </View>
 
           <View style={styles.orderDetailRow}>
             <Feather name="credit-card" size={14} color={Colors.light.textSecondary} />
             <ThemedText style={styles.orderDetailText}>
-              Total: ${totalPrice.toFixed(2)}
+              Total: ₹{totalPrice.toFixed(0)}
             </ThemedText>
           </View>
 
           <View style={styles.orderDetailRow}>
             <Feather name="hash" size={14} color={Colors.light.textSecondary} />
             <ThemedText style={styles.orderDetailText}>
-              Order #{orderNumber}
+              Order {orderNumber}
             </ThemedText>
           </View>
         </View>

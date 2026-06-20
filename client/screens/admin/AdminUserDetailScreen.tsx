@@ -1,14 +1,19 @@
-import React from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+} from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import {
-  adminUsers,
-  userSessionHistory,
-  type AdminUser,
-  type AdminSession,
-} from "@/data/adminMockData";
+import type { AdminUser } from "@/data/adminMockData";
+import type { AdminSessionStatus, AdminUpcomingSession } from "@/data/adminSessions";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import * as bookingsService from "@/services/content/practitionerBookingsService";
 
 function getUserStatusStyle(status: AdminUser["status"]) {
   switch (status) {
@@ -36,7 +41,7 @@ function getStatusTextColor(status: AdminUser["status"]) {
   }
 }
 
-function getSessionStatusStyle(status: AdminSession["status"]) {
+function getSessionStatusStyle(status: AdminSessionStatus) {
   switch (status) {
     case "Upcoming":
       return { backgroundColor: Colors.light.accent };
@@ -56,7 +61,52 @@ export default function AdminUserDetailScreen({
   userId: string;
   onBack: () => void;
 }) {
-  const user = adminUsers.find((u) => u.id === userId);
+  const { users } = usePlatformConfig();
+  const user = users.find((u) => u.id === userId);
+  const [sessions, setSessions] = useState<AdminUpcomingSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(isSupabaseConfigured());
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setSessions([]);
+      setSessionsLoading(false);
+      setSessionsError(null);
+      return;
+    }
+    if (!user) return;
+
+    let cancelled = false;
+    setSessionsLoading(true);
+    setSessionsError(null);
+
+    bookingsService
+      .fetchAdminUserSessionHistory(user.id)
+      .then((rows) => {
+        if (!cancelled) setSessions(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSessionsError(
+            err instanceof Error ? err.message : "Could not load session history"
+          );
+          setSessions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSessionsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user]);
+
+  const sessionCountLabel = isSupabaseConfigured()
+    ? sessionsLoading
+      ? "Loading sessions…"
+      : `${sessions.length} session${sessions.length === 1 ? "" : "s"}`
+    : "—";
 
   if (!user) {
     return (
@@ -103,10 +153,12 @@ export default function AdminUserDetailScreen({
           <Feather name="mail" size={14} color={Colors.light.textSecondary} />
           <ThemedText style={styles.profileDetailText}>{user.email}</ThemedText>
         </View>
-        <View style={styles.profileDetailRow}>
-          <Feather name="phone" size={14} color={Colors.light.textSecondary} />
-          <ThemedText style={styles.profileDetailText}>{user.phone}</ThemedText>
-        </View>
+        {user.phone?.trim() ? (
+          <View style={styles.profileDetailRow}>
+            <Feather name="phone" size={14} color={Colors.light.textSecondary} />
+            <ThemedText style={styles.profileDetailText}>{user.phone}</ThemedText>
+          </View>
+        ) : null}
         <View style={styles.profileDetailRow}>
           <Feather name="calendar" size={14} color={Colors.light.textSecondary} />
           <ThemedText style={styles.profileDetailText}>
@@ -116,30 +168,68 @@ export default function AdminUserDetailScreen({
         <View style={styles.profileDetailRow}>
           <Feather name="activity" size={14} color={Colors.light.textSecondary} />
           <ThemedText style={styles.profileDetailText}>
-            {user.sessionsCount} sessions
+            {sessionCountLabel}
           </ThemedText>
         </View>
       </View>
 
       <ThemedText style={styles.subSectionTitle}>Session History</ThemedText>
-      {userSessionHistory.map((session) => (
-        <View key={session.id} style={styles.sessionCard}>
-          <View style={styles.sessionHeader}>
-            <ThemedText style={styles.sessionPractitioner}>
-              {session.practitionerName}
+      {sessionsLoading ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.sessionStateText}>
+              Loading session history…
             </ThemedText>
-            <View style={[styles.sessionStatusBadge, getSessionStatusStyle(session.status)]}>
-              <ThemedText style={styles.sessionStatusText}>
-                {session.status}
-              </ThemedText>
-            </View>
           </View>
-          <ThemedText style={styles.sessionService}>{session.service}</ThemedText>
-          <ThemedText style={styles.sessionDate}>
-            {session.date} at {session.time}
-          </ThemedText>
         </View>
-      ))}
+      ) : sessionsError ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ThemedText style={styles.sessionErrorText}>{sessionsError}</ThemedText>
+          </View>
+        </View>
+      ) : !isSupabaseConfigured() ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ThemedText style={styles.sessionStateText}>
+              Connect Supabase to load user booking history.
+            </ThemedText>
+          </View>
+        </View>
+      ) : sessions.length === 0 ? (
+        <View style={styles.sessionCard}>
+          <View style={styles.sessionState}>
+            <ThemedText style={styles.sessionStateText}>
+              No sessions found for this user.
+            </ThemedText>
+          </View>
+        </View>
+      ) : (
+        sessions.map((session) => (
+          <View key={session.id} style={styles.sessionCard}>
+            <View style={styles.sessionHeader}>
+              <ThemedText style={styles.sessionPractitioner}>
+                {session.practitionerName}
+              </ThemedText>
+              <View style={[styles.sessionStatusBadge, getSessionStatusStyle(session.status)]}>
+                <ThemedText style={styles.sessionStatusText}>
+                  {session.status}
+                </ThemedText>
+              </View>
+            </View>
+            <ThemedText style={styles.sessionService}>{session.service}</ThemedText>
+            <ThemedText style={styles.sessionDate}>
+              {session.date} at {session.time}
+            </ThemedText>
+            {session.paymentStatus ? (
+              <ThemedText style={styles.sessionPayment}>
+                Payment: {session.paymentStatus}
+              </ThemedText>
+            ) : null}
+          </View>
+        ))
+      )}
     </ScrollView>
   );
 }
@@ -276,5 +366,28 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
     marginTop: Spacing.xs,
+  },
+  sessionPayment: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
+    marginTop: Spacing.xs,
+  },
+  sessionState: {
+    alignItems: "center",
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+  },
+  sessionStateText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+  },
+  sessionErrorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    textAlign: "center",
   },
 });

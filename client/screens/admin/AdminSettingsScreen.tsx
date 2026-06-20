@@ -1,65 +1,123 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 
 function ToggleRow({
   label,
   value,
   onToggle,
   testID,
+  disabled,
+  plannedHint,
 }: {
   label: string;
   value: boolean;
   onToggle: () => void;
   testID: string;
+  disabled?: boolean;
+  plannedHint?: string;
 }) {
   return (
-    <View style={styles.toggleRow}>
-      <ThemedText style={styles.toggleLabel}>{label}</ThemedText>
-      <Pressable
-        style={[styles.toggle, value ? styles.toggleEnabled : styles.toggleDisabled]}
-        onPress={onToggle}
-        testID={testID}
-      >
-        <View
+    <View style={styles.toggleBlock}>
+      <View style={styles.toggleRow}>
+        <ThemedText style={[styles.toggleLabel, disabled ? styles.toggleLabelMuted : null]}>
+          {label}
+        </ThemedText>
+        <Pressable
           style={[
-            styles.toggleThumb,
-            value ? styles.toggleThumbEnabled : styles.toggleThumbDisabled,
+            styles.toggle,
+            value ? styles.toggleEnabled : styles.toggleDisabled,
+            disabled ? styles.toggleDisabledControl : null,
           ]}
-        />
-      </Pressable>
+          onPress={disabled ? undefined : onToggle}
+          disabled={disabled}
+          testID={testID}
+        >
+          <View
+            style={[
+              styles.toggleThumb,
+              value ? styles.toggleThumbEnabled : styles.toggleThumbDisabled,
+            ]}
+          />
+        </Pressable>
+      </View>
+      {plannedHint ? <ThemedText style={styles.plannedHint}>{plannedHint}</ThemedText> : null}
     </View>
   );
 }
 
 export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
   const navigation = useNavigation();
-  const [maintenanceMode, setMaintenanceMode] = useState(false);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [pushNotifications, setPushNotifications] = useState(true);
-  const [weeklyReport, setWeeklyReport] = useState(false);
-  const [twoFactor, setTwoFactor] = useState(false);
-  const [sessionTimeout, setSessionTimeout] = useState("30 minutes");
+  const { settings, updateSettings, persistConfigNow, homeContent, updateHomeContent } = usePlatformConfig();
+  const {
+    loading: brandLoading,
+    error: brandError,
+    appNameDisplay,
+    appVersionDisplay,
+    appNameMuted,
+    appVersionMuted,
+    reload: reloadBrand,
+  } = useAppBrandCopy();
+  const [twoFactor, setTwoFactor] = useState(settings.twoFactorEnabled);
+  const [sessionTimeout, setSessionTimeout] = useState(
+    `${settings.sessionTimeoutMinutes} minutes`
+  );
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const [maxAdvanceBooking, setMaxAdvanceBooking] = useState("30");
-  const [minBookingNotice, setMinBookingNotice] = useState("2");
-  const [instantBooking, setInstantBooking] = useState(true);
-  const [allowRescheduling, setAllowRescheduling] = useState(true);
+  const {
+    maintenanceMode,
+    emailNotifications,
+    pushNotifications,
+    weeklyReport,
+    featureFlags,
+    appLabels,
+  } = settings;
 
-  const [freeCancellationWindow, setFreeCancellationWindow] = useState("24");
-  const [cancellationFee, setCancellationFee] = useState("100");
-  const [allowPartialRefunds, setAllowPartialRefunds] = useState(true);
+  const [maxAdvanceBooking, setMaxAdvanceBooking] = useState(String(settings.maxAdvanceBookingDays));
+  const [minBookingNotice, setMinBookingNotice] = useState(String(settings.minBookingNoticeHours));
+  const [instantBooking, setInstantBooking] = useState(settings.instantBooking);
+  const [allowRescheduling, setAllowRescheduling] = useState(settings.allowRescheduling);
+  const [freeCancellationWindow, setFreeCancellationWindow] = useState(String(settings.freeCancellationHours));
+  const [cancellationFee, setCancellationFee] = useState(String(settings.cancellationFeePercent));
+  const [allowPartialRefunds, setAllowPartialRefunds] = useState(settings.allowPartialRefunds);
+  const [acceptUPI, setAcceptUPI] = useState(settings.acceptUPI);
+  const [acceptCards, setAcceptCards] = useState(settings.acceptCards);
+  const [acceptWallet, setAcceptWallet] = useState(settings.acceptWallet);
+  const [payoutCycle, setPayoutCycle] = useState<"Weekly" | "Bi-Weekly" | "Monthly">(settings.payoutCycle);
 
-  const [acceptUPI, setAcceptUPI] = useState(true);
-  const [acceptCards, setAcceptCards] = useState(true);
-  const [acceptWallet, setAcceptWallet] = useState(false);
-  const [payoutCycle, setPayoutCycle] = useState<"Weekly" | "Bi-Weekly" | "Monthly">("Weekly");
-
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (saving) return;
+    setSaveError(null);
+    setSaving(true);
+    const timeoutMinutes = parseInt(sessionTimeout, 10) || settings.sessionTimeoutMinutes;
+    updateSettings({
+      maxAdvanceBookingDays: parseInt(maxAdvanceBooking, 10) || settings.maxAdvanceBookingDays,
+      minBookingNoticeHours: parseInt(minBookingNotice, 10) || settings.minBookingNoticeHours,
+      instantBooking,
+      allowRescheduling,
+      freeCancellationHours: parseInt(freeCancellationWindow, 10) || settings.freeCancellationHours,
+      cancellationFeePercent: parseInt(cancellationFee, 10) || settings.cancellationFeePercent,
+      allowPartialRefunds,
+      acceptUPI,
+      acceptCards,
+      acceptWallet,
+      payoutCycle,
+      twoFactorEnabled: twoFactor,
+      sessionTimeoutMinutes: timeoutMinutes,
+    });
+    const result = await persistConfigNow();
+    setSaving(false);
+    if (result.error) {
+      setSaveError(result.error);
+      return;
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -79,26 +137,42 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
 
       <ThemedText style={styles.subSectionTitle}>General</ThemedText>
       <View style={styles.settingsCard}>
+        {brandError ? (
+          <Pressable onPress={() => void reloadBrand()} testID="button-admin-brand-retry">
+            <ThemedText style={styles.brandHintError}>{brandError} — tap to retry</ThemedText>
+          </Pressable>
+        ) : null}
         <ThemedText style={styles.inputLabel}>App Name</ThemedText>
-        <TextInput
-          style={[styles.input, styles.readonlyInput]}
-          value="Nature's Grace"
-          editable={false}
-          testID="input-app-name"
-        />
+        {brandLoading ? (
+          <ActivityIndicator color={Colors.light.accent} style={styles.brandSpinner} />
+        ) : (
+          <TextInput
+            style={[styles.input, styles.readonlyInput, appNameMuted ? styles.readonlyMuted : undefined]}
+            value={appNameDisplay}
+            editable={false}
+            testID="input-app-name"
+          />
+        )}
+        <ThemedText style={styles.brandEditHint}>
+          Editable in Admin Support → About page (support_copy).
+        </ThemedText>
 
         <ThemedText style={styles.inputLabel}>Version</ThemedText>
-        <TextInput
-          style={[styles.input, styles.readonlyInput]}
-          value="1.0.0"
-          editable={false}
-          testID="input-version"
-        />
+        {brandLoading ? (
+          <ActivityIndicator color={Colors.light.accent} style={styles.brandSpinner} />
+        ) : (
+          <TextInput
+            style={[styles.input, styles.readonlyInput, appVersionMuted ? styles.readonlyMuted : undefined]}
+            value={appVersionDisplay}
+            editable={false}
+            testID="input-version"
+          />
+        )}
 
         <ToggleRow
           label="Maintenance Mode"
           value={maintenanceMode}
-          onToggle={() => setMaintenanceMode(!maintenanceMode)}
+          onToggle={() => updateSettings({ maintenanceMode: !maintenanceMode })}
           testID="toggle-maintenance-mode"
         />
       </View>
@@ -108,20 +182,26 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
         <ToggleRow
           label="Email Notifications"
           value={emailNotifications}
-          onToggle={() => setEmailNotifications(!emailNotifications)}
+          onToggle={() => updateSettings({ emailNotifications: !emailNotifications })}
           testID="toggle-email-notifications"
+          disabled
+          plannedHint="Stored for future use — platform email dispatch uses per-user preferences today."
         />
         <ToggleRow
           label="Push Notifications"
           value={pushNotifications}
-          onToggle={() => setPushNotifications(!pushNotifications)}
+          onToggle={() => updateSettings({ pushNotifications: !pushNotifications })}
           testID="toggle-push-notifications"
+          disabled
+          plannedHint="Stored for future use — push sends when EXPO_ACCESS_TOKEN is set and users opt in."
         />
         <ToggleRow
           label="Weekly Report"
           value={weeklyReport}
-          onToggle={() => setWeeklyReport(!weeklyReport)}
+          onToggle={() => updateSettings({ weeklyReport: !weeklyReport })}
           testID="toggle-weekly-report"
+          disabled
+          plannedHint="Not implemented yet — no automated weekly report is sent."
         />
       </View>
 
@@ -132,16 +212,21 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
           value={twoFactor}
           onToggle={() => setTwoFactor(!twoFactor)}
           testID="toggle-two-factor"
+          disabled
+          plannedHint="Not enforced in the app yet — login remains email and password only."
         />
 
         <ThemedText style={styles.inputLabel}>Session Timeout</ThemedText>
         <TextInput
-          style={styles.input}
+          style={[styles.input, styles.readonlyInput]}
           value={sessionTimeout}
-          onChangeText={setSessionTimeout}
+          editable={false}
           placeholderTextColor={Colors.light.textSecondary}
           testID="input-session-timeout"
         />
+        <ThemedText style={styles.plannedHint}>
+          Saved for future use — sessions are not auto-expired by this value yet.
+        </ThemedText>
       </View>
 
       <ThemedText style={styles.subSectionTitle}>Data</ThemedText>
@@ -191,6 +276,8 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
           value={allowRescheduling}
           onToggle={() => setAllowRescheduling(!allowRescheduling)}
           testID="toggle-allow-rescheduling"
+          disabled
+          plannedHint="Not implemented — users cancel and rebook to change session time."
         />
       </View>
 
@@ -206,7 +293,7 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
           testID="input-free-cancellation-window"
         />
 
-        <ThemedText style={styles.inputLabel}>Cancellation Fee (Rs.)</ThemedText>
+        <ThemedText style={styles.inputLabel}>Cancellation Fee (₹)</ThemedText>
         <TextInput
           style={styles.input}
           value={cancellationFee}
@@ -225,24 +312,30 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
       </View>
 
       <ThemedText style={styles.subSectionTitle}>Payment Settings</ThemedText>
+      <ThemedText style={[styles.plannedHint, styles.sectionPlannedHint]}>
+        Checkout uses Razorpay — these toggles are stored only and do not change the payment sheet yet.
+      </ThemedText>
       <View style={styles.settingsCard}>
         <ToggleRow
           label="Accept UPI"
           value={acceptUPI}
           onToggle={() => setAcceptUPI(!acceptUPI)}
           testID="toggle-accept-upi"
+          disabled
         />
         <ToggleRow
           label="Accept Cards"
           value={acceptCards}
           onToggle={() => setAcceptCards(!acceptCards)}
           testID="toggle-accept-cards"
+          disabled
         />
         <ToggleRow
           label="Accept Wallet"
           value={acceptWallet}
           onToggle={() => setAcceptWallet(!acceptWallet)}
           testID="toggle-accept-wallet"
+          disabled
         />
 
         <ThemedText style={styles.inputLabel}>Payout Cycle</ThemedText>
@@ -271,9 +364,13 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
         </View>
       </View>
 
-      <Pressable style={styles.saveButton} onPress={handleSave} testID="button-save-settings">
-        <ThemedText style={styles.saveButtonText}>Save Settings</ThemedText>
+      <Pressable style={styles.saveButton} onPress={() => void handleSave()} disabled={saving} testID="button-save-settings">
+        <ThemedText style={styles.saveButtonText}>{saving ? "Saving…" : "Save Settings"}</ThemedText>
       </Pressable>
+
+      {saveError ? (
+        <ThemedText style={styles.errorText}>{saveError}</ThemedText>
+      ) : null}
 
       {saved ? (
         <View style={styles.confirmationBanner}>
@@ -282,14 +379,16 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
         </View>
       ) : null}
 
-      <Pressable
-        style={styles.debugLink}
-        onPress={() => (navigation as any).navigate("FirebaseDebug")}
-        testID="button-firebase-debug"
-      >
-        <Feather name="terminal" size={14} color={Colors.light.textMuted} />
-        <ThemedText style={styles.debugLinkText}>Firebase Debug</ThemedText>
-      </Pressable>
+      {__DEV__ ? (
+        <Pressable
+          style={styles.debugLink}
+          onPress={() => (navigation as any).navigate("FirebaseDebug")}
+          testID="button-firebase-debug"
+        >
+          <Feather name="terminal" size={14} color={Colors.light.textMuted} />
+          <ThemedText style={styles.debugLinkText}>Firebase Debug</ThemedText>
+        </Pressable>
+      ) : null}
     </ScrollView>
   );
 }
@@ -356,17 +455,58 @@ const styles = StyleSheet.create({
   readonlyInput: {
     opacity: 0.7,
   },
+  readonlyMuted: {
+    fontStyle: "italic",
+    color: Colors.light.textSecondary,
+  },
+  brandSpinner: {
+    marginBottom: Spacing.md,
+    alignSelf: "flex-start",
+  },
+  brandEditHint: {
+    fontSize: 11,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    marginTop: -6,
+    marginBottom: Spacing.md,
+  },
+  brandHintError: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    marginBottom: Spacing.sm,
+  },
   toggleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: Spacing.sm,
   },
+  toggleBlock: {
+    marginBottom: Spacing.xs,
+  },
   toggleLabel: {
     fontSize: 14,
     fontFamily: "Nunito_400Regular",
     color: Colors.light.text,
     flex: 1,
+  },
+  toggleLabelMuted: {
+    color: Colors.light.textMuted,
+  },
+  plannedHint: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    lineHeight: 17,
+    marginBottom: Spacing.sm,
+  },
+  sectionPlannedHint: {
+    marginBottom: Spacing.sm,
+    paddingHorizontal: 2,
+  },
+  toggleDisabledControl: {
+    opacity: 0.55,
   },
   toggle: {
     width: 44,
@@ -448,6 +588,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Nunito_700Bold",
     color: "#FFFFFF",
+  },
+  errorText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: "#8B3A3A",
+    marginTop: Spacing.sm,
+    textAlign: "center",
   },
   confirmationBanner: {
     flexDirection: "row",

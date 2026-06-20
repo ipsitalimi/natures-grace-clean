@@ -1,39 +1,49 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import {
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  TextInput,
+  ActivityIndicator,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { useAuth } from "@/context/AuthContext";
+import { usePaymentMethods } from "@/context/PaymentMethodsContext";
+import type { PaymentMethodCardView } from "@/data/paymentMethods";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
-const mockCards = [
-  {
-    id: "1",
-    type: "Visa",
-    lastFour: "4242",
-    expires: "09/27",
-    isDefault: true,
-  },
-  {
-    id: "2",
-    type: "Mastercard",
-    lastFour: "8531",
-    expires: "03/28",
-    isDefault: false,
-  },
-];
-
-function PaymentCard({ card }: { card: (typeof mockCards)[0] }) {
+function PaymentCard({
+  card,
+  onDelete,
+  onSetDefault,
+}: {
+  card: PaymentMethodCardView;
+  onDelete: () => void;
+  onSetDefault: () => void;
+}) {
   return (
-    <View style={styles.card} testID={`payment-card-${card.id}`}>
+    <Pressable
+      style={styles.card}
+      onPress={onSetDefault}
+      disabled={card.isDefault}
+      testID={`payment-card-${card.id}`}
+    >
       <View style={styles.cardContent}>
         <View style={styles.cardIcon}>
           <Feather name="credit-card" size={24} color={Colors.light.accent} />
         </View>
         <View style={styles.cardInfo}>
           <View style={styles.cardNameRow}>
-            <ThemedText style={styles.cardType}>{card.type} ending in {card.lastFour}</ThemedText>
+            <ThemedText style={styles.cardType}>
+              {card.type} ending in {card.lastFour}
+            </ThemedText>
             {card.isDefault ? (
               <View style={styles.defaultBadge}>
                 <ThemedText style={styles.defaultBadgeText}>Default</ThemedText>
@@ -42,57 +52,242 @@ function PaymentCard({ card }: { card: (typeof mockCards)[0] }) {
           </View>
           <ThemedText style={styles.cardExpiry}>Expires {card.expires}</ThemedText>
         </View>
-        <Pressable style={styles.deleteButton} testID={`button-delete-card-${card.id}`}>
+        <Pressable
+          style={styles.deleteButton}
+          onPress={onDelete}
+          testID={`button-delete-card-${card.id}`}
+        >
           <Feather name="trash-2" size={18} color="#D4534A" />
         </Pressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 export default function PaymentMethodsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
-  const [confirmation, setConfirmation] = useState(false);
+  const { session } = useAuth();
+  const {
+    cardViews,
+    methodsLoading,
+    methodsError,
+    addPaymentMethod,
+    removePaymentMethod,
+    setDefaultPaymentMethod,
+  } = usePaymentMethods();
 
-  const handleAdd = () => {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [brand, setBrand] = useState("Visa");
+  const [last4, setLast4] = useState("");
+  const [expires, setExpires] = useState("");
+  const [confirmation, setConfirmation] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleAddPress = () => {
+    if (!showAddForm) {
+      setShowAddForm(true);
+      setActionError(null);
+      return;
+    }
+    handleSaveNew();
+  };
+
+  const handleSaveNew = async () => {
+    if (!brand.trim() || last4.replace(/\D/g, "").length !== 4 || !expires.trim()) {
+      setActionError("Enter card brand, last 4 digits, and expiry (MM/YY).");
+      return;
+    }
+
+    if (!isSupabaseConfigured()) {
+      setActionError("Sign in with Supabase configured to save payment methods.");
+      return;
+    }
+
+    if (!session?.user) {
+      setActionError("Sign in to save payment methods.");
+      return;
+    }
+
+    setSubmitting(true);
+    setActionError(null);
+    const created = await addPaymentMethod({
+      brand: brand.trim(),
+      last4: last4.replace(/\D/g, "").slice(-4),
+      expiryLabel: expires.trim(),
+    });
+
+    if (!created) {
+      setActionError("Could not save payment method.");
+      setSubmitting(false);
+      return;
+    }
+
+    setBrand("Visa");
+    setLast4("");
+    setExpires("");
+    setShowAddForm(false);
     setConfirmation(true);
     setTimeout(() => setConfirmation(false), 2500);
+    setSubmitting(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    setActionError(null);
+    const ok = await removePaymentMethod(id);
+    if (!ok) {
+      setActionError("Could not remove payment method.");
+    }
+  };
+
+  const handleSetDefault = async (id: string) => {
+    setActionError(null);
+    const ok = await setDefaultPaymentMethod(id);
+    if (!ok) {
+      setActionError("Could not update default payment method.");
+    }
   };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
         <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+        <Pressable
+          style={styles.headerIconButton}
+          onPress={() => navigation.navigate("Notifications" as never)}
+          testID="button-notifications"
+        >
           <Feather name="bell" size={22} color={Colors.light.accent} />
         </Pressable>
       </View>
 
       <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Payment Methods</ThemedText>
+        <ThemedText style={styles.pageTitle}>Payment References</ThemedText>
       </View>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
+        ]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {mockCards.map((card) => (
-          <PaymentCard key={card.id} card={card} />
-        ))}
+        <View style={styles.infoBanner}>
+          <Feather name="info" size={16} color={Colors.light.accent} />
+          <ThemedText style={styles.infoBannerText}>
+            Saved cards are stored for your reference only. Checkout still uses Razorpay and does not charge these cards automatically.
+          </ThemedText>
+        </View>
 
-        {confirmation ? (
-          <ThemedText style={styles.confirmationText} testID="text-payment-added">Payment Method Added</ThemedText>
+        {methodsLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.loadingText}>Loading payment methods…</ThemedText>
+          </View>
         ) : null}
 
-        <Pressable style={styles.addButton} onPress={handleAdd} testID="button-add-payment">
-          <Feather name="plus" size={18} color="#FFFFFF" />
-          <ThemedText style={styles.addButtonText}>Add Payment Method</ThemedText>
+        {methodsError ? (
+          <ThemedText style={styles.errorText}>{methodsError}</ThemedText>
+        ) : null}
+
+        {actionError ? <ThemedText style={styles.errorText}>{actionError}</ThemedText> : null}
+
+        {!session?.user && isSupabaseConfigured() ? (
+          <ThemedText style={styles.errorText}>Sign in to manage payment methods.</ThemedText>
+        ) : null}
+
+        {!methodsLoading && !methodsError && cardViews.length === 0 ? (
+          <ThemedText style={styles.emptyText}>No saved payment references yet.</ThemedText>
+        ) : null}
+
+        {cardViews.map((card) => (
+          <PaymentCard
+            key={card.id}
+            card={card}
+            onDelete={() => handleDelete(card.id)}
+            onSetDefault={() => handleSetDefault(card.id)}
+          />
+        ))}
+
+        {showAddForm ? (
+          <View style={styles.addForm}>
+            <ThemedText style={styles.formLabel}>Card brand</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={brand}
+              onChangeText={setBrand}
+              placeholder="Visa"
+              placeholderTextColor={Colors.light.textSecondary}
+              testID="input-card-brand"
+            />
+            <ThemedText style={styles.formLabel}>Last 4 digits</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={last4}
+              onChangeText={setLast4}
+              placeholder="4242"
+              placeholderTextColor={Colors.light.textSecondary}
+              keyboardType="number-pad"
+              maxLength={4}
+              testID="input-card-last4"
+            />
+            <ThemedText style={styles.formLabel}>Expiry (MM/YY)</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={expires}
+              onChangeText={setExpires}
+              placeholder="09/27"
+              placeholderTextColor={Colors.light.textSecondary}
+              testID="input-card-expiry"
+            />
+            <ThemedText style={styles.formHint}>
+              Only masked details are stored — never your full card number or CVV.
+            </ThemedText>
+          </View>
+        ) : null}
+
+        {confirmation ? (
+          <ThemedText style={styles.confirmationText} testID="text-payment-added">
+            Payment Method Added
+          </ThemedText>
+        ) : null}
+
+        <Pressable
+          style={[styles.addButton, submitting && styles.addButtonDisabled]}
+          onPress={handleAddPress}
+          disabled={submitting}
+          testID="button-add-payment"
+        >
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Feather name="plus" size={18} color="#FFFFFF" />
+              <ThemedText style={styles.addButtonText}>
+                {showAddForm ? "Save Payment Method" : "Add Payment Method"}
+              </ThemedText>
+            </>
+          )}
         </Pressable>
+
+        {showAddForm ? (
+          <Pressable
+            style={styles.cancelLink}
+            onPress={() => {
+              setShowAddForm(false);
+              setActionError(null);
+            }}
+            testID="button-cancel-add-payment"
+          >
+            <ThemedText style={styles.cancelLinkText}>Cancel</ThemedText>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -136,6 +331,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
     gap: 10,
+  },
+  infoBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: Spacing.sm,
+    backgroundColor: `${Colors.light.accent}12`,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  infoBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: Colors.light.text,
+  },
+  loadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: Spacing.sm,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#8B3A3A",
+    textAlign: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
+    marginBottom: Spacing.sm,
   },
   card: {
     backgroundColor: Colors.light.cardBackground,
@@ -187,6 +418,34 @@ const styles = StyleSheet.create({
   deleteButton: {
     padding: 8,
   },
+  addForm: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.lg,
+    gap: 6,
+  },
+  formLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.light.textSecondary,
+    marginTop: 4,
+  },
+  input: {
+    backgroundColor: Colors.light.backgroundRoot,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: Colors.light.text,
+    borderWidth: 1,
+    borderColor: Colors.light.divider,
+  },
+  formHint: {
+    fontSize: 12,
+    color: Colors.light.textSecondary,
+    marginTop: Spacing.sm,
+    lineHeight: 18,
+  },
   confirmationText: {
     fontSize: 14,
     fontWeight: "600",
@@ -204,9 +463,21 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: Spacing.md,
   },
+  addButtonDisabled: {
+    opacity: 0.5,
+  },
   addButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  cancelLink: {
+    alignItems: "center",
+    paddingVertical: Spacing.sm,
+  },
+  cancelLinkText: {
+    fontSize: 14,
+    color: Colors.light.accent,
+    fontWeight: "500",
   },
 });

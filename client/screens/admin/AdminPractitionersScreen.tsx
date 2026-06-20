@@ -4,7 +4,9 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { Practitioner } from "@/data/practitioners";
+import { formatInr } from "@/lib/formatCurrency";
 
 type ApprovalStatus = "Approved" | "Pending" | "Rejected";
 
@@ -61,7 +63,7 @@ function PractitionerCard({
           </View>
           <ThemedText style={styles.practitionerCategory}>{practitioner.category}</ThemedText>
           <ThemedText style={styles.practitionerExperience}>{practitioner.experience}</ThemedText>
-          <ThemedText style={styles.practitionerPrice}>Rs. {practitioner.pricePerSession}/-</ThemedText>
+          <ThemedText style={styles.practitionerPrice}>{formatInr(practitioner.pricePerSession)}/-</ThemedText>
           
           <View style={styles.credentialSection}>
             <View style={styles.credentialHeader}>
@@ -130,32 +132,27 @@ export default function AdminPractitionersScreen({
   onAddPractitioner: () => void;
   onBackToDashboard: () => void;
 }) {
-  const { practitionerCategories, deletePractitioner } = useDataContext();
+  const { practitionerCategories, deletePractitioner, updatePractitionerMeta } = useDataContext();
+  const { logActivity } = usePlatformConfig();
   const allPractitioners = practitionerCategories.flatMap((c) => c.practitioners);
 
-  const [practitionerStates, setPractitionerStates] = useState<Record<string, PractitionerState>>(() => {
-    const initial: Record<string, PractitionerState> = {};
-    allPractitioners.forEach((p) => {
-      initial[p.id] = {
-        approvalStatus: "Approved",
-        isVerified: false,
-      };
-    });
-    return initial;
+  const getPractitionerState = (practitioner: (typeof allPractitioners)[0]): PractitionerState => ({
+    approvalStatus: practitioner.approvalStatus ?? "Approved",
+    isVerified: practitioner.isVerified ?? false,
   });
 
-  const updatePractitionerState = (id: string, updates: Partial<PractitionerState>) => {
-    setPractitionerStates((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], ...updates },
-    }));
+  const updatePractitionerState = (
+    id: string,
+    updates: Partial<PractitionerState>
+  ) => {
+    updatePractitionerMeta(id, updates);
   };
 
   const stats = {
     total: allPractitioners.length,
-    approved: Object.values(practitionerStates).filter((s) => s.approvalStatus === "Approved").length,
-    pending: Object.values(practitionerStates).filter((s) => s.approvalStatus === "Pending").length,
-    rejected: Object.values(practitionerStates).filter((s) => s.approvalStatus === "Rejected").length,
+    approved: allPractitioners.filter((p) => getPractitionerState(p).approvalStatus === "Approved").length,
+    pending: allPractitioners.filter((p) => getPractitionerState(p).approvalStatus === "Pending").length,
+    rejected: allPractitioners.filter((p) => getPractitionerState(p).approvalStatus === "Rejected").length,
   };
 
   return (
@@ -198,21 +195,34 @@ export default function AdminPractitionersScreen({
         </View>
       </View>
 
-      {allPractitioners.map((practitioner) => (
+      {allPractitioners.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <ThemedText style={styles.emptyText}>
+            No practitioners yet. Add a practitioner to get started.
+          </ThemedText>
+        </View>
+      ) : (
+        allPractitioners.map((practitioner) => (
         <PractitionerCard
           key={practitioner.id}
           practitioner={practitioner}
-          state={practitionerStates[practitioner.id] || { approvalStatus: "Approved", isVerified: false }}
+          state={getPractitionerState(practitioner)}
           onDelete={() => deletePractitioner(practitioner.id)}
-          onApprove={() => updatePractitionerState(practitioner.id, { approvalStatus: "Approved" })}
-          onReject={() => updatePractitionerState(practitioner.id, { approvalStatus: "Rejected" })}
-          onToggleVerification={() =>
-            updatePractitionerState(practitioner.id, {
-              isVerified: !practitionerStates[practitioner.id].isVerified,
-            })
-          }
+          onApprove={() => {
+            updatePractitionerState(practitioner.id, { approvalStatus: "Approved" });
+            logActivity(`Practitioner ${practitioner.name} approved`, "user");
+          }}
+          onReject={() => {
+            updatePractitionerState(practitioner.id, { approvalStatus: "Rejected" });
+            logActivity(`Practitioner ${practitioner.name} rejected`, "user");
+          }}
+          onToggleVerification={() => {
+            const current = getPractitionerState(practitioner);
+            updatePractitionerState(practitioner.id, { isVerified: !current.isVerified });
+          }}
         />
-      ))}
+      ))
+      )}
     </ScrollView>
   );
 }
@@ -435,5 +445,19 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: Spacing.xs,
+  },
+  emptyCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.lg,
+    marginTop: Spacing.sm,
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

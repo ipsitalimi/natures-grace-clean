@@ -7,7 +7,9 @@ import Svg, { Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { productListingsStore, type ProductListing } from "@/data/productListingsStore";
+import { useDataContext } from "@/context/DataContext";
+import type { SellerProduct } from "@/data/sellerMockData";
+import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 function getCategoryColor(category: string): { bg: string; text: string } {
   switch (category) {
@@ -32,31 +34,25 @@ export default function ProductListingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const isFocused = useIsFocused();
+  const { sellerCatalog, deleteProduct } = useDataContext();
 
-  const [listings, setListings] = useState<ProductListing[]>(productListingsStore.getListings());
+  const listings: SellerProduct[] = sellerCatalog;
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     if (isFocused) {
-      setListings(productListingsStore.getListings());
+      setDeleteConfirm(null);
     }
   }, [isFocused]);
 
-  useEffect(() => {
-    const unsub = productListingsStore.subscribe(() => {
-      setListings(productListingsStore.getListings());
-    });
-    return unsub;
-  }, []);
-
   const handleDelete = (id: string) => {
-    productListingsStore.deleteListing(id);
+    deleteProduct(id);
     setDeleteConfirm(id);
     setTimeout(() => setDeleteConfirm(null), 2000);
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
           <Feather name="arrow-left" size={20} color={Colors.light.accent} />
@@ -66,7 +62,7 @@ export default function ProductListingsScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
         showsVerticalScrollIndicator={false}
       >
         <Pressable

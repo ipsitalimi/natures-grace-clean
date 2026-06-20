@@ -1,14 +1,17 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import React, { useState, useCallback } from "react";
+import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProfileDrawer from "@/components/ProfileDrawer";
-import { mockSessions, SessionData } from "@/data/mockSessions";
+import type { UserSessionHistory } from "@/data/practitionerBookings";
+import { usePractitionerContext } from "@/context/PractitionerContext";
+import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 type RootStackParamList = {
   SessionDetail: { sessionId: string };
@@ -16,7 +19,7 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-function getStatusColor(status: SessionData["status"]): string {
+function getStatusColor(status: UserSessionHistory["status"]): string {
   switch (status) {
     case "Completed":
       return Colors.light.accent;
@@ -29,7 +32,7 @@ function getStatusColor(status: SessionData["status"]): string {
   }
 }
 
-function SessionCard({ session, onPress }: { session: SessionData; onPress: () => void }) {
+function SessionCard({ session, onPress }: { session: UserSessionHistory; onPress: () => void }) {
   return (
     <Pressable style={styles.card} onPress={onPress} testID={`session-card-${session.id}`}>
       <View style={styles.cardTop}>
@@ -70,18 +73,30 @@ export default function SessionHistoryScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const [drawerVisible, setDrawerVisible] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const sessions = mockSessions;
+  const { userSessions, loading: practitionerLoading, loadError, refresh } = usePractitionerContext();
+  const sessions = userSessions;
+  const loading = practitionerLoading;
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 400);
-    return () => clearTimeout(timer);
-  }, []);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh({ silent: true });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh])
+  );
 
   return (
     <View style={styles.container}>
       <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
         <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
           <Feather name="arrow-left" size={22} color={Colors.light.accent} />
         </Pressable>
@@ -101,11 +116,26 @@ export default function SessionHistoryScreen() {
           <SkeletonCard />
           <SkeletonCard />
         </View>
+      ) : loadError ? (
+        <View style={styles.emptyState}>
+          <Feather name="alert-circle" size={36} color={Colors.light.textSecondary} />
+          <ThemedText style={styles.emptyText}>{loadError}</ThemedText>
+          <Pressable style={styles.retryBtn} onPress={() => void refresh()}>
+            <ThemedText style={styles.retryText}>Try again</ThemedText>
+          </Pressable>
+        </View>
       ) : sessions.length > 0 ? (
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor={Colors.light.accent}
+            />
+          }
         >
           {sessions.map((session) => (
             <SessionCard
@@ -118,7 +148,11 @@ export default function SessionHistoryScreen() {
       ) : (
         <View style={styles.emptyState}>
           <Feather name="clock" size={36} color={Colors.light.textSecondary} />
-          <ThemedText style={styles.emptyText}>Nothing here yet.</ThemedText>
+          <ThemedText style={styles.emptyText}>
+            {!isSupabaseConfigured()
+              ? "Connect Supabase to view your session history."
+              : "No sessions yet. Book a session from Wellness to see it here."}
+          </ThemedText>
         </View>
       )}
     </View>
@@ -224,6 +258,19 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: Colors.light.textSecondary,
+    textAlign: "center",
+  },
+  retryBtn: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.light.accent,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   skeletonLine: {
     height: 14,
