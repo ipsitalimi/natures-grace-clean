@@ -1,7 +1,12 @@
 import type { CommunityEvent } from "@/context/DataContext";
 import type { ResourceItem } from "@/data/mockResources";
 import type { StoreCategory, StoreProduct } from "@/data/storeProducts";
+import {
+  findStoreCategoryTemplate,
+  storeCategoryTemplates,
+} from "@/data/storeCategories";
 import type { Category, Practitioner } from "@/data/practitioners";
+import { groupPractitionersByCategoryTemplates } from "@/lib/practitionerSpecialties";
 import type { DailyPrompt } from "@/context/GratitudeContext";
 import type { NotificationItem } from "@/types/notifications";
 import type { ModeratedReview } from "@/context/PlatformConfigContext";
@@ -46,12 +51,18 @@ export type DbResourceRow = {
   metadata?: Record<string, unknown>;
 };
 
+export type DbPractitionerSpecialtyRow = {
+  category: string;
+  subcategory: string;
+};
+
 export type DbPractitionerRow = {
   id: string;
   profile_id: string | null;
   name: string;
   category: string;
   subcategory: string;
+  specialties?: DbPractitionerSpecialtyRow[] | null;
   bio: string;
   experience: string;
   certifications: string[];
@@ -156,6 +167,7 @@ export function productRowToStoreProduct(row: DbProductRow): StoreProduct {
     stock: row.stock,
     status: row.status as StoreProduct["status"],
     approvalStatus: row.approval_status as StoreProduct["approvalStatus"],
+    sellerId: row.seller_id ?? undefined,
     imageKey: (row.metadata?.image_key as string) ?? undefined,
     imageUrl: row.image_url,
     metadata: row.metadata,
@@ -182,12 +194,30 @@ export function resourceRowToItem(row: DbResourceRow): ResourceItem {
   };
 }
 
+function parseSpecialtiesFromRow(row: DbPractitionerRow): Practitioner["specialties"] {
+  const raw = row.specialties;
+  if (Array.isArray(raw) && raw.length > 0) {
+    return raw
+      .map((s) => ({
+        category: String(s.category ?? "").trim(),
+        subcategory: String(s.subcategory ?? "").trim(),
+      }))
+      .filter((s) => s.category && s.subcategory);
+  }
+  if (row.category?.trim() && row.subcategory?.trim()) {
+    return [{ category: row.category.trim(), subcategory: row.subcategory.trim() }];
+  }
+  return [];
+}
+
 export function practitionerRowToPractitioner(row: DbPractitionerRow): Practitioner {
+  const specialties = parseSpecialtiesFromRow(row);
   return {
     id: row.id,
     name: row.name,
     category: row.category,
     subcategory: row.subcategory,
+    specialties,
     photo: row.photo_url ?? "",
     bio: row.bio,
     experience: row.experience,
@@ -246,62 +276,48 @@ export function reviewRowToModerated(row: DbReviewRow): ModeratedReview {
   };
 }
 
-const CATEGORY_ICON: Record<string, string> = {
-  "spiritual-manifestation": "star",
-  "mindful-radiance": "sun",
-  "conscious-nutrition": "heart",
-  "spirit-space": "home",
-  "sacred-rituals": "zap",
-  "daily-vitality": "activity",
-};
+export function groupProductsIntoCategories(
+  products: StoreProduct[],
+  templates: StoreCategory[] = storeCategoryTemplates
+): StoreCategory[] {
+  const grouped = templates.map((template) => ({
+    ...template,
+    products: products.filter((p) => {
+      const match = findStoreCategoryTemplate(templates, p.category);
+      return match?.id === template.id;
+    }),
+  }));
 
-export function groupProductsIntoCategories(products: StoreProduct[]): StoreCategory[] {
-  const byCat = new Map<string, StoreProduct[]>();
-  products.forEach((p) => {
-    const list = byCat.get(p.category) ?? [];
-    list.push(p);
-    byCat.set(p.category, list);
-  });
+  const unmatched = products.filter((p) => !findStoreCategoryTemplate(templates, p.category));
+  if (unmatched.length > 0) {
+    grouped.push({
+      id: "general",
+      name: "General",
+      description: "Other wellness products from our community sellers.",
+      icon: "circle",
+      products: unmatched,
+    });
+  }
 
-  return Array.from(byCat.entries()).map(([name, prods]) => {
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    return {
-      id,
-      name,
-      description: name,
-      icon: CATEGORY_ICON[id] ?? "circle",
-      products: prods,
-    };
-  });
+  return grouped;
 }
 
 export function groupPractitionersIntoCategories(
   practitioners: Practitioner[],
   categoryTemplates: Category[]
 ): Category[] {
-  const templates = categoryTemplates.map((c) => ({
-    ...c,
-    practitioners: [] as Practitioner[],
-  }));
+  const grouped = groupPractitionersByCategoryTemplates(practitioners, categoryTemplates);
 
-  practitioners.forEach((p) => {
-    const catId = p.category.toLowerCase().replace(/\s+/g, "-");
-    let cat = templates.find(
-      (c) => c.id === catId || c.name.toLowerCase() === p.category.toLowerCase()
-    );
-    if (!cat) {
-      cat = {
-        id: catId,
-        name: p.category,
-        subtitle: "",
-        description: `${p.category} services`,
-        subcategories: [],
-        practitioners: [],
-      };
-      templates.push(cat);
-    }
-    cat.practitioners.push(p);
-  });
+  if (__DEV__) {
+    practitioners.forEach((p) => {
+      const inAny = grouped.some((c) => c.practitioners.some((x) => x.id === p.id));
+      if (!inAny && p.category) {
+        console.warn(
+          `[groupPractitionersIntoCategories] Practitioner "${p.name}" has unmatched category "${p.category}"`
+        );
+      }
+    });
+  }
 
-  return templates.filter((c) => c.practitioners.length > 0);
+  return grouped;
 }

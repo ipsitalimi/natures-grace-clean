@@ -13,12 +13,12 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { BackHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr } from "@/lib/formatCurrency";
 import {
   getOrderStatusColor,
@@ -207,10 +207,10 @@ function ShipOrderModal({
 }
 
 export default function SellerOrdersScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const { scrollPaddingBottom } = useLayoutInsets(24);
   const [activeTab, setActiveTab] = useState<OrderStatus>("Pending");
-  const { orders, advanceOrderStatus, ordersLoading } = useOrdersContext();
+  const { orders, advanceOrderStatus, ordersLoading, ordersError, refreshOrders } =
+    useOrdersContext();
   const [shipOrder, setShipOrder] = useState<SellerOrder | null>(null);
   const [courier, setCourier] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
@@ -274,14 +274,8 @@ export default function SellerOrdersScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Orders</ThemedText>
-        <View style={{ width: 38 }} />
-      </View>
+    <View style={styles.container}>
+      <BackHeader title="Orders" showNotifications={false} />
 
       <ScrollView
         horizontal
@@ -317,6 +311,14 @@ export default function SellerOrdersScreen() {
           <ActivityIndicator color={Colors.light.accent} />
           <ThemedText style={styles.loadingText}>Loading orders…</ThemedText>
         </View>
+      ) : ordersError ? (
+        <View style={styles.loadingState}>
+          <Feather name="alert-circle" size={28} color={Colors.light.textMuted} />
+          <ThemedText style={styles.loadingText}>{ordersError}</ThemedText>
+          <Pressable style={styles.retryBtn} onPress={() => void refreshOrders()}>
+            <ThemedText style={styles.retryBtnText}>Try again</ThemedText>
+          </Pressable>
+        </View>
       ) : (
         <FlatList
           data={filteredOrders}
@@ -327,7 +329,7 @@ export default function SellerOrdersScreen() {
           contentContainerStyle={[
             styles.listContent,
             filteredOrders.length === 0 && styles.listEmpty,
-            { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
+            { paddingBottom: scrollPaddingBottom },
           ]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={<EmptyState status={activeTab} />}
@@ -354,26 +356,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.light.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.text,
   },
   tabsScrollView: {
     flexGrow: 0,
@@ -441,6 +423,20 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: 14,
     color: Colors.light.textMuted,
+    textAlign: "center",
+    paddingHorizontal: Spacing.lg,
+  },
+  retryBtn: {
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.light.accent,
+  },
+  retryBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   orderCard: {
     backgroundColor: Colors.light.cardBackground,

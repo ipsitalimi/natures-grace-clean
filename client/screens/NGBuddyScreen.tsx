@@ -1,13 +1,12 @@
 import React from "react";
-import { View, StyleSheet, Pressable } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { View, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Ellipse } from "react-native-svg";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 function BuddyIllustration() {
   return (
@@ -77,18 +76,11 @@ function BuddyIllustration() {
 }
 
 export default function NGBuddyScreen() {
-  const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets();
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top), paddingBottom: getScrollBottomPadding(insets.bottom) }]}>
-      <Pressable
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-        testID="button-back"
-      >
-        <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-      </Pressable>
+    <View style={[styles.container, { paddingBottom: scrollPaddingBottom }]}>
+      <BackHeader showNotifications={false} />
 
       <View style={styles.content}>
         <View style={styles.illustrationWrap}>
@@ -143,10 +135,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  backButton: {
-    padding: 12,
-    paddingLeft: Spacing.lg,
   },
   content: {
     flex: 1,

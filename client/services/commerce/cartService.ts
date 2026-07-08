@@ -1,7 +1,14 @@
 import type { CartCheckoutState, CartItem, ProductSnapshot } from "@/data/cart";
 import { EMPTY_CHECKOUT } from "@/data/cart";
-import { deliveryFeeForOption } from "@/constants/deliveryOptions";
+import type { DeliveryTierId } from "@/constants/sellerDelivery";
+import {
+  deliveryFeeForSellerOption,
+  getEnabledSellerDeliveryOptions,
+  parseSellerDeliverySettings,
+} from "@/constants/sellerDelivery";
+import { fetchSellerDeliveryBySellerIds } from "@/services/commerce/sellerDeliveryService";
 import { getSupabase } from "@/lib/supabase";
+import { isMissingColumnError } from "@/lib/supabaseSchemaErrors";
 import {
   fetchActivePromoForSellerByCode,
   fetchProductSellerIds,
@@ -18,6 +25,7 @@ export type DbCartSessionRow = {
   id: string;
   user_id: string;
   delivery_option: string;
+  seller_delivery_options?: Record<string, string> | null;
   order_note: string;
   checkout_status: "active" | "checkout" | "completed";
   subtotal: number;
@@ -45,10 +53,25 @@ export type CartSnapshot = {
   items: CartItem[];
 };
 
+function parseSellerDeliveryOptions(raw: unknown): Record<string, DeliveryTierId> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, DeliveryTierId> = {};
+  for (const [sellerId, optionId] of Object.entries(raw as Record<string, unknown>)) {
+    if (
+      typeof sellerId === "string" &&
+      (optionId === "standard" || optionId === "express" || optionId === "overnight")
+    ) {
+      out[sellerId] = optionId;
+    }
+  }
+  return out;
+}
+
 function mapSession(row: DbCartSessionRow): CartCheckoutState {
   return {
     sessionId: row.id,
     deliveryOption: row.delivery_option,
+    sellerDeliveryOptions: parseSellerDeliveryOptions(row.seller_delivery_options),
     orderNote: row.order_note ?? "",
     checkoutStatus: row.checkout_status,
     subtotal: Number(row.subtotal),
@@ -125,9 +148,79 @@ async function ensureCartSessionId(): Promise<string | null> {
   return created.id as string;
 }
 
+async function fetchCartProductSellerMap(
+  sessionId: string
+): Promise<Map<string, string | null>> {
+  const supabase = getSupabase();
+  if (!supabase) return new Map();
+
+  const { data: itemRows } = await supabase
+    .from("cart_items")
+    .select("product_id")
+    .eq("cart_session_id", sessionId);
+
+  const productIds = ((itemRows ?? []) as { product_id: string }[]).map((r) => r.product_id);
+  if (productIds.length === 0) return new Map();
+
+  const { data: products } = await supabase.from("products").select("id, seller_id").in("id", productIds);
+
+  const map = new Map<string, string | null>();
+  for (const row of (products ?? []) as { id: string; seller_id: string | null }[]) {
+    map.set(row.id, row.seller_id);
+  }
+  return map;
+}
+
+async function resolveSellerDeliveryTotals(
+  sessionId: string,
+  sellerDeliveryOptions: Record<string, DeliveryTierId>
+): Promise<{
+  deliveryFee: number;
+  sellerDeliveryOptions: Record<string, DeliveryTierId>;
+  primaryDeliveryOption: string;
+}> {
+  const productSellerMap = await fetchCartProductSellerMap(sessionId);
+  const sellerIds = [
+    ...new Set(
+      [...productSellerMap.values()].filter((id): id is string => Boolean(id))
+    ),
+  ];
+
+  if (sellerIds.length === 0) {
+    return {
+      deliveryFee: 0,
+      sellerDeliveryOptions: {},
+      primaryDeliveryOption: "standard",
+    };
+  }
+
+  const profiles = await fetchSellerDeliveryBySellerIds(sellerIds);
+  const nextOptions: Record<string, DeliveryTierId> = { ...sellerDeliveryOptions };
+  let deliveryFee = 0;
+  let primaryDeliveryOption = "standard";
+
+  for (const sellerId of sellerIds) {
+    const profile = profiles[sellerId];
+    const settings = profile?.settings ?? parseSellerDeliverySettings(null);
+    const enabled = getEnabledSellerDeliveryOptions(settings);
+    const fallback = enabled[0]?.id ?? "standard";
+    const selected = nextOptions[sellerId];
+    const valid =
+      selected && enabled.some((o) => o.id === selected) ? selected : fallback;
+    nextOptions[sellerId] = valid;
+    deliveryFee += deliveryFeeForSellerOption(settings, valid);
+    if (!primaryDeliveryOption || sellerIds[0] === sellerId) {
+      primaryDeliveryOption = valid;
+    }
+  }
+
+  return { deliveryFee, sellerDeliveryOptions: nextOptions, primaryDeliveryOption };
+}
+
 async function recalculateSessionTotals(
   sessionId: string,
-  deliveryOption?: string
+  deliveryOption?: string,
+  sellerDeliveryOptions?: Record<string, DeliveryTierId>
 ): Promise<CartCheckoutState | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -151,8 +244,14 @@ async function recalculateSessionTotals(
     (s, i) => s + Number(i.line_total),
     0
   );
-  const option = deliveryOption ?? sessionRow.delivery_option;
-  const delivery_fee = deliveryFeeForOption(option);
+
+  const currentOptions =
+    sellerDeliveryOptions ?? parseSellerDeliveryOptions(sessionRow.seller_delivery_options);
+
+  const deliveryResolved = await resolveSellerDeliveryTotals(sessionId, currentOptions);
+  const option = deliveryOption ?? deliveryResolved.primaryDeliveryOption;
+  const delivery_fee = deliveryResolved.deliveryFee;
+  const mergedSellerOptions = deliveryResolved.sellerDeliveryOptions;
 
   let seller_promo_id = sessionRow.seller_promo_id ?? null;
   let platform_promo_id = sessionRow.platform_promo_id ?? null;
@@ -201,29 +300,61 @@ async function recalculateSessionTotals(
 
   const total = Math.max(0, subtotal - promo_discount) + delivery_fee;
 
-  const { data: updated, error } = await supabase
+  const fullPatch = {
+    delivery_option: option,
+    seller_delivery_options: mergedSellerOptions,
+    subtotal,
+    delivery_fee,
+    seller_promo_id,
+    platform_promo_id,
+    promo_code,
+    promo_discount,
+    total,
+    checkout_status: "active" as const,
+  };
+
+  let { data: updated, error } = await supabase
     .from("cart_sessions")
-    .update({
-      delivery_option: option,
-      subtotal,
-      delivery_fee,
-      seller_promo_id,
-      platform_promo_id,
-      promo_code,
-      promo_discount,
-      total,
-      checkout_status: "active",
-    })
+    .update(fullPatch)
     .eq("id", sessionId)
     .select()
     .single();
 
-  if (error || !updated) {
-    console.error("[cartService] recalc:", error?.message);
-    return null;
+  if (error && isMissingColumnError(error.message, "seller_delivery_options")) {
+    const { seller_delivery_options: _omit, ...legacyPatch } = fullPatch;
+    const retry = await supabase
+      .from("cart_sessions")
+      .update(legacyPatch)
+      .eq("id", sessionId)
+      .select()
+      .single();
+    updated = retry.data;
+    error = retry.error;
   }
 
-  return mapSession(updated as DbCartSessionRow);
+  if (error || !updated) {
+    console.error("[cartService] recalc:", error?.message);
+    return {
+      sessionId,
+      deliveryOption: option,
+      sellerDeliveryOptions: mergedSellerOptions,
+      orderNote: sessionRow.order_note ?? "",
+      checkoutStatus: sessionRow.checkout_status,
+      subtotal,
+      deliveryFee: delivery_fee,
+      promoDiscount: promo_discount,
+      sellerPromoId: seller_promo_id,
+      platformPromoId: platform_promo_id,
+      promoCode: promo_code,
+      total,
+    };
+  }
+
+  const mapped = mapSession(updated as DbCartSessionRow);
+  return {
+    ...mapped,
+    sellerDeliveryOptions: mergedSellerOptions,
+  };
 }
 
 export async function applyPromoCode(rawCode: string): Promise<{ snap: CartSnapshot } | { error: string }> {
@@ -497,6 +628,7 @@ export async function removeItem(productId: string): Promise<CartSnapshot | null
 
 export async function updateCartPreferences(input: {
   deliveryOption?: string;
+  sellerDeliveryOptions?: Record<string, DeliveryTierId>;
   orderNote?: string;
 }): Promise<CartCheckoutState | null> {
   const supabase = getSupabase();
@@ -505,8 +637,13 @@ export async function updateCartPreferences(input: {
   const sessionId = await ensureCartSessionId();
   if (!sessionId) return null;
 
-  if (input.deliveryOption !== undefined) {
-    return recalculateSessionTotals(sessionId, input.deliveryOption);
+  if (input.deliveryOption !== undefined || input.sellerDeliveryOptions !== undefined) {
+    const snap = await fetchCart();
+    const merged = {
+      ...snap.checkout.sellerDeliveryOptions,
+      ...(input.sellerDeliveryOptions ?? {}),
+    };
+    return recalculateSessionTotals(sessionId, input.deliveryOption, merged);
   }
 
   if (input.orderNote !== undefined) {
@@ -572,19 +709,65 @@ export async function clearCart(): Promise<void> {
   if (!session?.id) return;
 
   await supabase.from("cart_items").delete().eq("cart_session_id", session.id);
-  await supabase
-    .from("cart_sessions")
-    .update({
-      delivery_option: "standard",
-      order_note: "",
-      checkout_status: "active",
-      subtotal: 0,
-      delivery_fee: 0,
-      total: 0,
-      seller_promo_id: null,
-      platform_promo_id: null,
-      promo_code: "",
-      promo_discount: 0,
-    })
-    .eq("id", session.id);
+
+  const resetPatch = {
+    delivery_option: "standard",
+    seller_delivery_options: {},
+    order_note: "",
+    checkout_status: "active" as const,
+    subtotal: 0,
+    delivery_fee: 0,
+    total: 0,
+    seller_promo_id: null,
+    platform_promo_id: null,
+    promo_code: "",
+    promo_discount: 0,
+  };
+
+  let { error } = await supabase.from("cart_sessions").update(resetPatch).eq("id", session.id);
+
+  if (error && isMissingColumnError(error.message, "seller_delivery_options")) {
+    const { seller_delivery_options: _omit, ...legacyReset } = resetPatch;
+    ({ error } = await supabase.from("cart_sessions").update(legacyReset).eq("id", session.id));
+  }
+
+  if (error) {
+    console.error("[cartService] clear:", error.message);
+  }
+}
+
+export async function removeItemsByProductIds(productIds: string[]): Promise<CartSnapshot | null> {
+  const supabase = getSupabase();
+  if (!supabase || productIds.length === 0) return null;
+
+  const sessionId = await ensureCartSessionId();
+  if (!sessionId) return null;
+
+  const { error } = await supabase
+    .from("cart_items")
+    .delete()
+    .eq("cart_session_id", sessionId)
+    .in("product_id", productIds);
+
+  if (error) {
+    console.error("[cartService] remove batch:", error.message);
+    return null;
+  }
+
+  await recalculateSessionTotals(sessionId);
+  return fetchCart();
+}
+
+export async function setSellerDeliveryOption(
+  sellerId: string,
+  optionId: DeliveryTierId
+): Promise<CartSnapshot | null> {
+  const snap = await fetchCart();
+  if (!snap.checkout.sessionId) return null;
+
+  await recalculateSessionTotals(snap.checkout.sessionId, optionId, {
+    ...snap.checkout.sellerDeliveryOptions,
+    [sellerId]: optionId,
+  });
+  return fetchCart();
 }

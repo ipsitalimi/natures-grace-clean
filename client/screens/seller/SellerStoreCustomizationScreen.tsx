@@ -7,17 +7,17 @@ import {
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { ScreenHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { useDataContext } from "@/context/DataContext";
 import { formatInr } from "@/lib/formatCurrency";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import {
   fetchSellerStorefrontByProfileId,
   updateSellerStorefrontByProfileId,
@@ -47,8 +47,7 @@ const EMPTY_SETTINGS: StorefrontSettings = {
 };
 
 export default function SellerStoreCustomizationScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const { scrollPaddingBottom } = useLayoutInsets(24);
   const { session } = useAuth();
   const { sellerCatalog: sellerProducts } = useDataContext();
 
@@ -58,6 +57,7 @@ export default function SellerStoreCustomizationScreen() {
   const [selectedColor, setSelectedColor] = useState(EMPTY_SETTINGS.accent_color);
   const [selectedBanner, setSelectedBanner] = useState(0);
   const [featuredIds, setFeaturedIds] = useState<string[]>([]);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -72,6 +72,7 @@ export default function SellerStoreCustomizationScreen() {
       setSelectedColor(settings.accent_color);
       setSelectedBanner(settings.banner_theme_index);
       setFeaturedIds(settings.featured_product_ids);
+      setOnboardingComplete(settings.onboarding_complete === true);
     },
     []
   );
@@ -129,6 +130,7 @@ export default function SellerStoreCustomizationScreen() {
         accent_color: selectedColor,
         banner_theme_index: selectedBanner,
         featured_product_ids: featuredIds,
+        onboarding_complete: onboardingComplete,
       },
     });
     setSaving(false);
@@ -150,25 +152,26 @@ export default function SellerStoreCustomizationScreen() {
   const inputsDisabled = saving || loading;
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Store Customization</ThemedText>
-        <Pressable
-          style={styles.saveHeaderBtn}
-          onPress={() => void handleSave()}
-          disabled={saving || loading}
-          testID="button-save-header"
-        >
-          {saving ? (
-            <ActivityIndicator color={Colors.light.accent} size="small" />
-          ) : (
-            <ThemedText style={styles.saveHeaderText}>Save</ThemedText>
-          )}
-        </Pressable>
-      </View>
+    <View style={styles.container}>
+      <ScreenHeader
+        variant="action"
+        title="Store Customization"
+        showNotifications={false}
+        rightAction={
+          <Pressable
+            style={styles.saveHeaderBtn}
+            onPress={() => void handleSave()}
+            disabled={saving || loading}
+            testID="button-save-header"
+          >
+            {saving ? (
+              <ActivityIndicator color={Colors.light.accent} size="small" />
+            ) : (
+              <ThemedText style={styles.saveHeaderText}>Save</ThemedText>
+            )}
+          </Pressable>
+        }
+      />
 
       {!isSupabaseConfigured() ? (
         <ThemedText style={styles.hint}>Connect Supabase to save store customization.</ThemedText>
@@ -189,7 +192,7 @@ export default function SellerStoreCustomizationScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
       >
         <View style={[styles.previewBanner, { backgroundColor: previewBanner.bg }]}>
           <View style={[styles.previewAvatar, { borderColor: previewBanner.accent }]}>
@@ -361,26 +364,6 @@ export default function SellerStoreCustomizationScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.light.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.text,
-  },
   saveHeaderBtn: {
     paddingHorizontal: Spacing.md,
     paddingVertical: 8,

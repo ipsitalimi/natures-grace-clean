@@ -1,17 +1,17 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Rect, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
 import { useJournal } from "@/context/JournalContext";
 import { useGratitude } from "@/context/GratitudeContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import { parseMoodsFromStorage } from "@/lib/journalMoods";
 
 function CalendarIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -74,8 +74,18 @@ function StatBlock({ icon, value, label, color = Colors.light.accent }: StatBloc
   return (
     <View style={[styles.statBlock, { backgroundColor: `${color}10` }]}>
       <View style={styles.statIcon}>{icon}</View>
-      <ThemedText style={[styles.statValue, { color }]}>{value}</ThemedText>
-      <ThemedText style={styles.statLabel}>{label}</ThemedText>
+      <ThemedText
+        style={[styles.statValue, { color }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.65}
+        maxFontSizeMultiplier={1.2}
+      >
+        {value}
+      </ThemedText>
+      <ThemedText style={styles.statLabel} numberOfLines={2}>
+        {label}
+      </ThemedText>
     </View>
   );
 }
@@ -88,9 +98,8 @@ function isInCurrentMonth(dateISO: string): boolean {
 
 export default function MonthlyOverviewScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(tabBarHeight);
   const navigation = useNavigation();
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const { entries, getStreak, journalLoading, journalError } = useJournal();
   const { myGratitudes, gratitudeLoading, gratitudeError } = useGratitude();
 
@@ -100,7 +109,9 @@ export default function MonthlyOverviewScreen() {
     const monthEntries = entries.filter((e) => isInCurrentMonth(e.dateISO));
     const monthGratitudes = myGratitudes.filter((g) => isInCurrentMonth(g.dateISO));
     const peacefulDays = new Set(
-      monthEntries.filter((e) => e.mood === "Peaceful").map((e) => e.dateISO)
+      monthEntries
+        .filter((e) => parseMoodsFromStorage(e.mood).includes("Peaceful"))
+        .map((e) => e.dateISO)
     ).size;
     return {
       entries: monthEntries.length,
@@ -115,24 +126,13 @@ export default function MonthlyOverviewScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Monthly Overview</ThemedText>
-      </View>
+      <BelowHeaderTitle>Monthly Overview</BelowHeaderTitle>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.monthHeader}>
@@ -214,32 +214,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
   scrollView: {
     flex: 1,
   },
@@ -287,13 +261,18 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 12,
+    justifyContent: "space-between",
+    rowGap: 12,
+    columnGap: 12,
     marginBottom: Spacing.lg,
   },
   statBlock: {
-    width: "47%",
+    width: "48%",
+    minWidth: 140,
+    flexGrow: 1,
     borderRadius: 14,
-    padding: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
     alignItems: "center",
   },
   statIcon: {
@@ -302,11 +281,16 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 28,
     fontWeight: "700",
+    textAlign: "center",
+    width: "100%",
+    lineHeight: 34,
   },
   statLabel: {
     fontSize: 12,
     color: Colors.light.textSecondary,
-    marginTop: 2,
+    marginTop: 4,
+    textAlign: "center",
+    width: "100%",
   },
   insightCard: {
     backgroundColor: Colors.light.cardBackground,

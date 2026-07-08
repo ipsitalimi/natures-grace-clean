@@ -18,7 +18,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   payoutCycle: "Weekly",
   commissionRate: 12,
   minimumPrice: 99,
-  autoApproveProducts: false,
+  autoApproveProducts: __DEV__,
   featureFlags: {
     ngBuddy: false,
     journal: true,
@@ -33,6 +33,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   },
   twoFactorEnabled: false,
   sessionTimeoutMinutes: 30,
+  youtubeChannelUrl: "",
 };
 
 export const DEFAULT_HOME_CONTENT: HomeContent = {

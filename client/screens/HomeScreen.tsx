@@ -1,5 +1,5 @@
-import React, { useState, useRef, useMemo, useCallback } from "react";
-import { View, StyleSheet, Pressable, Dimensions, ScrollView, Image } from "react-native";
+import React, { useState, useMemo, useCallback } from "react";
+import { View, StyleSheet, Pressable, ScrollView, Image } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -10,9 +10,12 @@ import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
-import AppHeader from "@/components/AppHeader";
+import { Colors, BorderRadius } from "@/constants/theme";
+import { CompactHeader } from "@/components/layout";
+import { Layout, LayoutSpacing } from "@/constants/layout";
+import { useDrawer } from "@/context/DrawerContext";
+import { getScrollBottomPadding } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { Practitioner } from "@/data/practitioners";
 import type { UserSessionHistory } from "@/data/practitionerBookings";
 import { useDataContext } from "@/context/DataContext";
@@ -21,6 +24,7 @@ import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 import { useAuth } from "@/context/AuthContext";
+import appLogo from "../../assets/images/natures-grace-logo.png";
 import exploreWellnessIcon from "../../assets/images/icons/explore-wellness-icon.png";
 import journalIcon from "../../assets/images/icons/journal-icon.png";
 import resourcesIconImg from "../../assets/images/icons/resources-icon.png";
@@ -46,8 +50,6 @@ type HomeScreenNavigationProp = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, "HomeTab">,
   NativeStackNavigationProp<RootStackParamList>
 >;
-
-const { height: screenHeight } = Dimensions.get("window");
 
 function LotusIcon({ size = 24, color = Colors.light.accent }: { size?: number; color?: string }) {
   return (
@@ -248,10 +250,13 @@ function getSpecialistLabel(category: string): string {
 
 export default function HomeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
+  const { insets } = useLayoutInsets();
+  const { openDrawer } = useDrawer();
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [activeSpecialist, setActiveSpecialist] = useState(0);
   const [nextSession, setNextSession] = useState<UserSessionHistory | null>(null);
+  const [nextSessionLoading, setNextSessionLoading] = useState(false);
+  const [nextSessionError, setNextSessionError] = useState<string | null>(null);
   const { practitionerCategories, events } = useDataContext();
   const {
     homeContent,
@@ -278,13 +283,41 @@ export default function HomeScreen() {
     return byTitle ?? visible[0] ?? null;
   }, [events, filterVisibleEvents]);
 
+  const featuredEventBullets = useMemo(() => {
+    if (!harGharDhyanEvent) {
+      return ["Community gatherings", "Guided sessions", "Mindful connection"];
+    }
+    if (harGharDhyanEvent.whatToExpect?.length) {
+      return harGharDhyanEvent.whatToExpect.slice(0, 3);
+    }
+    const fromDescription = harGharDhyanEvent.description
+      .split(/[.•\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    return fromDescription.length > 0 ? fromDescription : [harGharDhyanEvent.mode, harGharDhyanEvent.date].filter(Boolean);
+  }, [harGharDhyanEvent]);
+
   const loadNextSession = useCallback(async () => {
     if (!isSupabaseConfigured() || !session?.user?.id) {
       setNextSession(null);
+      setNextSessionError(null);
+      setNextSessionLoading(false);
       return;
     }
-    const upcoming = await fetchNextUpcomingUserBooking(session.user.id);
-    setNextSession(upcoming);
+    setNextSessionLoading(true);
+    setNextSessionError(null);
+    try {
+      const upcoming = await fetchNextUpcomingUserBooking(session.user.id);
+      setNextSession(upcoming);
+    } catch (err) {
+      setNextSession(null);
+      setNextSessionError(
+        err instanceof Error ? err.message : "Could not load your next session."
+      );
+    } finally {
+      setNextSessionLoading(false);
+    }
   }, [session?.user?.id]);
 
   useFocusEffect(
@@ -333,11 +366,12 @@ export default function HomeScreen() {
     "there";
   const dailyAffirmation = getDailyAffirmation();
   const cards = homeContent.actionCards;
+  const showSpecialists = featuredSpecialists.length > 0;
+  const scrollBottom = getScrollBottomPadding(insets.bottom, tabBarHeight);
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <AppHeader onProfilePress={() => setDrawerVisible(true)} />
+      <CompactHeader onProfilePress={() => openDrawer("profile")} />
       {emailConfirmedMessage ? (
         <Pressable
           style={styles.emailConfirmedBanner}
@@ -346,27 +380,33 @@ export default function HomeScreen() {
           <ThemedText style={styles.emailConfirmedText}>{emailConfirmedMessage}</ThemedText>
         </Pressable>
       ) : null}
-      
-      <View style={[styles.content, { paddingBottom: 6 }]}>
-        <View style={styles.titleSection}>
+
+      <View style={styles.aboveFold}>
+        <View style={styles.heroSection}>
           {brandError ? (
             <Pressable onPress={() => void reloadBrand()} testID="button-home-brand-retry">
               <ThemedText style={styles.brandError}>{brandError} — tap to retry</ThemedText>
             </Pressable>
           ) : null}
-          <ThemedText
-            style={[styles.appTitle, appNameMuted ? styles.appTitleMuted : undefined]}
-            testID="text-home-app-name"
-          >
-            {brandLoading ? "…" : appNameDisplay}
-          </ThemedText>
-        </View>
-
-        <View style={styles.greetingSection}>
-          <ThemedText style={styles.greetingText}>
-            Welcome back, <ThemedText style={styles.userName}>{userName}</ThemedText>
-          </ThemedText>
-          <ThemedText style={styles.subGreeting}>How are you feeling today?</ThemedText>
+          <View style={styles.logoSlot}>
+            <Image source={appLogo} style={styles.heroLogo} resizeMode="contain" />
+          </View>
+          <View style={styles.heroTextCluster}>
+            <ThemedText
+              style={[styles.appTitle, appNameMuted ? styles.appTitleMuted : undefined]}
+              testID="text-home-app-name"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.85}
+            >
+              {brandLoading ? "…" : appNameDisplay}
+            </ThemedText>
+            <ThemedText style={styles.greetingText}>
+              Welcome back, <ThemedText style={styles.userName}>{userName}</ThemedText>
+            </ThemedText>
+            <ThemedText style={styles.subGreeting}>How are you feeling today?</ThemedText>
+          </View>
+          <View style={styles.heroSpacer} />
         </View>
 
         {homeContent.globalBanner.enabled && homeContent.globalBanner.message ? (
@@ -429,16 +469,32 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.affirmationSection}>
-          <ThemedText style={styles.affirmationText}>
-            {homeContent.breathingMessage}
-          </ThemedText>
-          <View style={styles.divider} />
-        </View>
+        <ThemedText style={styles.affirmationText} numberOfLines={2}>
+          {homeContent.breathingMessage}
+        </ThemedText>
+      </View>
 
+      <ScrollView
+        style={styles.lowerScroll}
+        contentContainerStyle={[styles.lowerScrollContent, { paddingBottom: scrollBottom }]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.infoCardsRow}>
-          <View style={styles.sessionCard}>
-            {nextSession ? (
+          <View style={[styles.sessionCard, !showSpecialists && !nextSession && !nextSessionLoading && !nextSessionError && styles.sessionCardCompact]}>
+            {nextSessionLoading ? (
+              <>
+                <ThemedText style={styles.infoCardTitle}>Your Next Session</ThemedText>
+                <ThemedText style={styles.sessionTime}>Loading…</ThemedText>
+              </>
+            ) : nextSessionError ? (
+              <>
+                <ThemedText style={styles.infoCardTitle}>Your Next Session</ThemedText>
+                <ThemedText style={styles.sessionTime}>{nextSessionError}</ThemedText>
+                <Pressable style={styles.openWellnessButton} onPress={() => void loadNextSession()}>
+                  <ThemedText style={styles.openWellnessText}>Try again</ThemedText>
+                </Pressable>
+              </>
+            ) : nextSession ? (
               <>
                 <ThemedText style={styles.infoCardTitle}>Your Next Session</ThemedText>
                 <ThemedText style={styles.sessionName}>
@@ -447,7 +503,7 @@ export default function HomeScreen() {
                 <ThemedText style={styles.sessionTime}>
                   {nextSession.date} at {nextSession.time}
                 </ThemedText>
-                <View style={styles.placeholderImage}>
+                <View style={styles.sessionImageWrap}>
                   <View style={styles.sessionImage} />
                 </View>
                 <Pressable
@@ -460,14 +516,7 @@ export default function HomeScreen() {
                   <Feather name="chevron-right" size={12} color="#FFFFFF" />
                 </Pressable>
               </>
-            ) : featuredSpecialists.length === 0 ? (
-              <>
-                <ThemedText style={styles.infoCardTitle}>Meet Our Specialists</ThemedText>
-                <ThemedText style={styles.specialistCategory}>
-                  Featured practitioners will appear here once they are published.
-                </ThemedText>
-              </>
-            ) : (
+            ) : showSpecialists ? (
               <>
                 <ThemedText style={styles.infoCardTitle}>Meet Our Specialists</ThemedText>
                 <ThemedText style={styles.specialistName} numberOfLines={1}>
@@ -477,7 +526,7 @@ export default function HomeScreen() {
                   {getSpecialistLabel(featuredSpecialists[activeSpecialist]?.category || "")}
                 </ThemedText>
                 <GestureDetector gesture={swipeGesture}>
-                  <View style={styles.placeholderImage}>
+                  <View style={styles.sessionImageWrap}>
                     <Image
                       source={
                         featuredSpecialists[activeSpecialist]?.localPhoto || {
@@ -502,66 +551,81 @@ export default function HomeScreen() {
                   ))}
                 </View>
               </>
+            ) : (
+              <>
+                <ThemedText style={styles.infoCardTitle}>Meet Our Specialists</ThemedText>
+                <ThemedText style={styles.emptyHint}>
+                  Featured practitioners will appear here once published.
+                </ThemedText>
+                {settings.featureFlags.practitionerBooking ? (
+                  <Pressable
+                    style={styles.compactLinkButton}
+                    onPress={() => navigation.navigate("WellnessTab")}
+                  >
+                    <ThemedText style={styles.compactLinkText}>Browse wellness</ThemedText>
+                    <Feather name="chevron-right" size={12} color={Colors.light.accent} />
+                  </Pressable>
+                ) : null}
+              </>
             )}
           </View>
 
           <View style={styles.rightCardsColumn}>
-            <View style={styles.affirmationCard}>
+            <View style={[styles.affirmationCard, !dailyAffirmation && styles.affirmationCardCompact]}>
               <ThemedText style={styles.carouselTitle}>Daily Affirmation</ThemedText>
-              <View style={styles.quoteBar} />
-              <ThemedText style={styles.quoteText}>
-                {dailyAffirmation
-                  ? `"${dailyAffirmation}"`
-                  : "Affirmations will appear here once configured in admin settings."}
-              </ThemedText>
+              {dailyAffirmation ? (
+                <>
+                  <View style={styles.quoteBar} />
+                  <ThemedText style={styles.quoteText}>"{dailyAffirmation}"</ThemedText>
+                </>
+              ) : (
+                <ThemedText style={styles.emptyHint}>
+                  Affirmations appear once configured in admin.
+                </ThemedText>
+              )}
               <ThemedText style={styles.affirmationDate}>
                 {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}
               </ThemedText>
             </View>
 
             <View style={styles.harGharDhyanCard}>
-              <ThemedText style={styles.harGharTitle}>Har Ghar Dhyan</ThemedText>
+              <ThemedText style={styles.harGharTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>
+                {harGharDhyanEvent?.title ?? "Community Events"}
+              </ThemedText>
               <View style={styles.bulletList}>
-                <View style={styles.bulletItem}>
-                  <View style={styles.bullet} />
-                  <ThemedText style={styles.bulletText}>Meditation</ThemedText>
-                </View>
-                <View style={styles.bulletItem}>
-                  <View style={styles.bullet} />
-                  <ThemedText style={styles.bulletText}>Mudras</ThemedText>
-                </View>
-                <View style={styles.bulletItem}>
-                  <View style={styles.bullet} />
-                  <ThemedText style={styles.bulletText}>Breathwork</ThemedText>
-                </View>
+                {featuredEventBullets.map((bullet, index) => (
+                  <View key={`${bullet}-${index}`} style={styles.bulletItem}>
+                    <View style={styles.bullet} />
+                    <ThemedText style={styles.bulletText} numberOfLines={2}>
+                      {bullet}
+                    </ThemedText>
+                  </View>
+                ))}
               </View>
-              <Pressable
-                style={styles.joinFreeButton}
-                onPress={handleJoinHarGharDhyan}
-              >
+              <Pressable style={styles.joinFreeButton} onPress={handleJoinHarGharDhyan}>
                 <ThemedText style={styles.joinFreeText}>
-                  {harGharDhyanEvent ? "Join Now" : "View Events"}
+                  {harGharDhyanEvent?.ctaText || (harGharDhyanEvent ? "Join Now" : "View Events")}
                 </ThemedText>
                 <Feather name="chevron-right" size={12} color="#FFFFFF" />
               </Pressable>
             </View>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   emailConfirmedBanner: {
-    marginHorizontal: Spacing.lg,
-    marginBottom: Spacing.sm,
+    marginHorizontal: Layout.gutter,
+    marginBottom: LayoutSpacing.xs,
     backgroundColor: "#E8F5EE",
     borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
+    padding: LayoutSpacing.sm,
   },
   emailConfirmedText: {
-    fontSize: 14,
+    fontSize: 13,
     color: Colors.light.accent,
     textAlign: "center",
     fontWeight: "600",
@@ -570,78 +634,97 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  content: {
+  aboveFold: {
+    paddingHorizontal: Layout.gutter,
+    flexShrink: 0,
+  },
+  lowerScroll: {
     flex: 1,
-    paddingHorizontal: Spacing.lg,
   },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  lowerScrollContent: {
+    paddingHorizontal: Layout.gutter,
+    paddingTop: LayoutSpacing.sm,
+  },
+  heroSection: {
     alignItems: "center",
-    marginBottom: Spacing.xs,
+    marginBottom: 3,
   },
-  profileButton: {
-    padding: 6,
-  },
-  bellButton: {
-    padding: 6,
-  },
-  titleSection: {
+  /** Small gap beneath the floated logo — title sits tight below. */
+  logoSlot: {
+    height: 8,
+    width: "100%",
     alignItems: "center",
-    marginBottom: Spacing["2xl"],
+  },
+  heroLogo: {
+    position: "absolute",
+    top: -(LayoutSpacing.xs + LayoutSpacing.xs + Layout.headerRowHeight / 2 + 32),
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
+  heroTextCluster: {
+    alignItems: "center",
+    width: "100%",
+    gap: 2,
+  },
+  /** Invisible — preserves affirmation Y while hero text moves up. */
+  heroSpacer: {
+    height: 34,
   },
   appTitle: {
-    fontSize: 34,
+    fontSize: 24,
+    lineHeight: 30,
     fontWeight: "600",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
+    textAlign: "center",
+    maxWidth: "100%",
   },
   appTitleMuted: {
     fontStyle: "italic",
     color: Colors.light.textSecondary,
   },
   brandError: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#8B3A3A",
-    marginBottom: Spacing.xs,
+    marginBottom: LayoutSpacing.xs,
     textAlign: "center",
   },
-  greetingSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-  },
   greetingText: {
-    fontSize: 20,
+    fontSize: 16,
+    lineHeight: 20,
     color: Colors.light.text,
     fontFamily: "ui-serif",
-    marginBottom: 2,
+    textAlign: "center",
   },
   userName: {
     fontWeight: "600",
     fontStyle: "italic",
     color: Colors.light.accent,
-    fontSize: 20,
+    fontSize: 16,
   },
   subGreeting: {
-    fontSize: 15,
+    fontSize: 13,
+    lineHeight: 17,
     color: Colors.light.textMuted,
+    textAlign: "center",
   },
   actionsGrid: {
-    gap: 10,
-    marginBottom: Spacing.lg,
+    gap: LayoutSpacing.xs,
+    marginBottom: LayoutSpacing.xs,
   },
   actionsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 8,
+    gap: LayoutSpacing.xs,
   },
   actionCard: {
     flex: 1,
     backgroundColor: Colors.light.cardBackground,
-    borderRadius: 14,
-    paddingVertical: 18,
-    paddingHorizontal: 10,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: LayoutSpacing.xs,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -654,11 +737,11 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   actionIconContainer: {
-    marginBottom: 8,
+    marginBottom: LayoutSpacing.xs,
   },
   actionIconImage: {
-    width: 48,
-    height: 48,
+    width: 36,
+    height: 36,
   },
   actionLabel: {
     fontSize: 11,
@@ -669,9 +752,9 @@ const styles = StyleSheet.create({
   },
   globalBanner: {
     backgroundColor: "#E8F5EE",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    padding: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.sm,
     borderWidth: 1,
     borderColor: "#013220",
   },
@@ -685,48 +768,42 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontFamily: "Nunito_400Regular",
   },
-  affirmationSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-  },
   affirmationText: {
-    fontSize: 14,
+    fontSize: 12,
+    lineHeight: 16,
     color: Colors.light.brown,
     fontFamily: "ui-serif",
     fontStyle: "italic",
-    marginBottom: 6,
+    marginBottom: LayoutSpacing.xs,
     textAlign: "center",
-  },
-  divider: {
-    width: 50,
-    height: 1,
-    backgroundColor: Colors.light.brownLight,
   },
   infoCardsRow: {
     flexDirection: "row",
-    gap: 12,
-    flex: 1,
+    gap: 10,
+    alignItems: "flex-start",
   },
   sessionCard: {
     flex: 1,
     backgroundColor: Colors.light.cardBackground,
     borderRadius: 16,
-    padding: 12,
+    padding: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.03,
     shadowRadius: 2,
     elevation: 1,
   },
+  sessionCardCompact: {
+    paddingVertical: 10,
+  },
   rightCardsColumn: {
     flex: 1,
-    gap: 10,
+    gap: 8,
   },
   affirmationCard: {
-    flex: 1,
     backgroundColor: Colors.light.cardBackground,
     borderRadius: 16,
-    padding: 12,
+    padding: 10,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -734,7 +811,28 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 2,
     elevation: 1,
-    gap: 8,
+    gap: 6,
+  },
+  affirmationCardCompact: {
+    paddingVertical: 10,
+  },
+  emptyHint: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: Colors.light.textMuted,
+    textAlign: "center",
+  },
+  compactLinkButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+    gap: 2,
+  },
+  compactLinkText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Colors.light.accent,
   },
   quoteBar: {
     width: 28,
@@ -819,11 +917,10 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   harGharDhyanCard: {
-    width: 160,
+    flex: 1,
     backgroundColor: Colors.light.cardBackground,
     borderRadius: 14,
-    padding: 12,
-    justifyContent: "space-between",
+    padding: 10,
   },
   harGharTitle: {
     fontSize: 14,
@@ -867,14 +964,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginRight: 4,
   },
-  placeholderImage: {
-    flex: 1,
+  sessionImageWrap: {
+    height: 88,
     backgroundColor: Colors.light.backgroundSecondary,
     borderRadius: 10,
-    marginVertical: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 50,
+    marginVertical: 6,
     overflow: "hidden",
   },
   sessionImage: {

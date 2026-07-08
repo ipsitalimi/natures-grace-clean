@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from "@/lib/apiBase";
+import { tryGetApiBaseUrl } from "@/lib/apiBase";
 import { getRazorpayKeyId } from "@/lib/razorpayKey";
 import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
 import { authJsonHeaders } from "@/lib/apiAuth";
@@ -23,12 +23,59 @@ export type StorePaymentConfirm = {
   error?: string;
 };
 
+export type StoreOrderCreateResult = {
+  orderId?: string;
+  orderNumber?: string;
+  total?: number;
+  error?: string;
+};
+
+export async function createStoreOrderViaApi(params: {
+  customerName: string;
+  customerEmail?: string;
+  items: { productId: string; quantity: number }[];
+  deliveryOption?: string;
+  notes?: string;
+  sellerPromoId?: string | null;
+  platformPromoId?: string | null;
+  accessToken: string;
+}): Promise<StoreOrderCreateResult> {
+  const baseUrl = tryGetApiBaseUrl();
+  if (!baseUrl) {
+    return { error: "Store checkout requires EXPO_PUBLIC_API_URL to be configured." };
+  }
+  try {
+    const res = await fetch(`${baseUrl}/api/store/checkout/create-order`, {
+      method: "POST",
+      headers: authJsonHeaders(params.accessToken),
+      body: JSON.stringify({
+        customerName: params.customerName,
+        customerEmail: params.customerEmail,
+        items: params.items,
+        deliveryOption: params.deliveryOption,
+        notes: params.notes,
+        sellerPromoId: params.sellerPromoId ?? null,
+        platformPromoId: params.platformPromoId ?? null,
+      }),
+    });
+    const json = (await res.json()) as StoreOrderCreateResult & { error?: string };
+    if (!res.ok) return { error: json.error ?? `Server error (${res.status})` };
+    return json;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not reach checkout server" };
+  }
+}
+
 export async function createStorePaymentOrder(params: {
   storeOrderId: string;
   accessToken: string;
 }): Promise<StorePaymentInit> {
+  const baseUrl = tryGetApiBaseUrl();
+  if (!baseUrl) {
+    return { error: "Store checkout requires EXPO_PUBLIC_API_URL to be configured." };
+  }
   try {
-    const res = await fetch(`${getApiBaseUrl()}/api/store/checkout/create-payment`, {
+    const res = await fetch(`${baseUrl}/api/store/checkout/create-payment`, {
       method: "POST",
       headers: authJsonHeaders(params.accessToken),
       body: JSON.stringify({
@@ -54,8 +101,12 @@ export async function confirmStorePayment(params: {
   devMode?: boolean;
   accessToken: string;
 }): Promise<StorePaymentConfirm> {
+  const baseUrl = tryGetApiBaseUrl();
+  if (!baseUrl) {
+    return { error: "Store checkout requires EXPO_PUBLIC_API_URL to be configured." };
+  }
   try {
-    const res = await fetch(`${getApiBaseUrl()}/api/store/checkout/confirm-payment`, {
+    const res = await fetch(`${baseUrl}/api/store/checkout/confirm-payment`, {
       method: "POST",
       headers: authJsonHeaders(params.accessToken),
       body: JSON.stringify({
@@ -156,6 +207,13 @@ export async function runBookingCheckoutPayment(params: {
   customerEmail?: string;
 }): Promise<BookingCheckoutResult> {
   const receipt = `bk_${Date.now().toString(36)}`;
+  if (__DEV__) {
+    console.log("[bookingCheckout] runBookingCheckoutPayment start", {
+      amountInr: params.amountInr,
+      practitionerId: params.practitionerId,
+      offeringId: params.booking.offeringId,
+    });
+  }
   const order = await createCheckoutOrder({
     amountInr: params.amountInr,
     durationMinutes: params.durationMinutes,
@@ -167,6 +225,15 @@ export async function runBookingCheckoutPayment(params: {
   });
   if (order.error || !order.orderId) {
     return { error: order.error ?? "Could not create payment order" };
+  }
+
+  if (__DEV__) {
+    console.log("[bookingCheckout] create-order ok, opening Razorpay", {
+      orderId: order.orderId,
+      amountPaise: order.amountPaise,
+      devMode: order.devMode,
+      hasKeyId: Boolean(order.keyId ?? getRazorpayKeyId()),
+    });
   }
 
   if (order.devMode) {

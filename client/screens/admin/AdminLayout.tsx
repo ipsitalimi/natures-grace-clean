@@ -1,18 +1,18 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useCallback, useState } from "react";
 import {
   View,
   StyleSheet,
   Pressable,
   ScrollView,
   Animated,
-  Dimensions,
-  TouchableWithoutFeedback,
+  BackHandler,
+  PanResponder,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import ScreenHeader from "@/components/layout/ScreenHeader";
+import { Colors } from "@/constants/theme";
+import { Layout, LayoutSpacing } from "@/constants/layout";
 import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 
 const DRAWER_WIDTH = 260;
@@ -68,28 +68,40 @@ const drawerItems: DrawerItem[] = [
   { name: "Settings", icon: "settings", label: "Settings" },
 ];
 
+const HEADER_TITLES: Partial<Record<AdminScreenName, string>> = {
+  Dashboard: "Admin Dashboard",
+};
+
+function getHeaderTitle(screen: AdminScreenName): string {
+  return HEADER_TITLES[screen] ?? drawerItems.find((i) => i.name === screen)?.label ?? "Admin";
+}
+
 interface AdminLayoutProps {
   activeScreen: AdminScreenName;
   onNavigate: (screen: AdminScreenName) => void;
-  onBack: () => void;
+  onLogout: () => void | Promise<void>;
   children: React.ReactNode;
 }
 
 export default function AdminLayout({
   activeScreen,
   onNavigate,
-  onBack,
+  onLogout,
   children,
 }: AdminLayoutProps) {
-  const insets = useSafeAreaInsets();
   const { appNameDisplay, appNameMuted, loading: brandLoading } = useAppBrandCopy();
-  const headerHeight = 56 + insets.top;
+  const [headerOffset, setHeaderOffset] = useState(0);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [drawerMounted, setDrawerMounted] = React.useState(false);
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayAnim = useRef(new Animated.Value(0)).current;
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+  const drawerOpenRef = useRef(drawerOpen);
+  drawerOpenRef.current = drawerOpen;
 
   useEffect(() => {
     if (drawerOpen) {
+      setDrawerMounted(true);
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: 0,
@@ -102,133 +114,195 @@ export default function AdminLayout({
           useNativeDriver: false,
         }),
       ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          duration: 200,
-          useNativeDriver: false,
-        }),
-        Animated.timing(overlayAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false,
-        }),
-      ]).start();
+      return;
     }
-  }, [drawerOpen]);
+
+    if (!drawerMounted) return;
+
+    Animated.parallel([
+      Animated.timing(slideAnim, {
+        toValue: -DRAWER_WIDTH,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+      Animated.timing(overlayAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setDrawerMounted(false);
+    });
+  }, [drawerOpen, drawerMounted, slideAnim, overlayAnim]);
+
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      closeDrawer();
+      return true;
+    });
+    return () => subscription.remove();
+  }, [drawerOpen, closeDrawer]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        drawerOpenRef.current && gesture.dx < -6 && Math.abs(gesture.dy) < 28,
+      onPanResponderMove: (_, gesture) => {
+        if (gesture.dx < 0) {
+          slideAnim.setValue(Math.max(-DRAWER_WIDTH + gesture.dx, -DRAWER_WIDTH));
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        if (gesture.dx < -DRAWER_WIDTH * 0.22 || gesture.vx < -0.45) {
+          closeDrawer();
+          return;
+        }
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: false,
+        }).start();
+      },
+    })
+  ).current;
 
   const handleDrawerNavigate = (screen: AdminScreenName) => {
-    setDrawerOpen(false);
-    onNavigate(screen);
+    closeDrawer();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => onNavigate(screen));
+    });
+  };
+
+  const handleLogout = () => {
+    closeDrawer();
+    requestAnimationFrame(() => {
+      void onLogout();
+    });
   };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { height: headerHeight, paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <View style={styles.headerLeft}>
-          <Pressable
-            style={styles.hamburgerBtn}
-            onPress={() => setDrawerOpen(true)}
-            testID="button-admin-hamburger"
-          >
-            <Feather name="menu" size={22} color={Colors.light.cardBackground} />
-          </Pressable>
-          <ThemedText style={styles.headerTitle}>Admin Panel</ThemedText>
-        </View>
-        <View style={styles.headerRight}>
-          <Pressable style={styles.headerIconBtn} onPress={() => onNavigate("Notifications")} testID="button-admin-notifications">
-            <Feather name="bell" size={20} color={Colors.light.cardBackground} />
-          </Pressable>
-          <View style={styles.avatarCircle}>
-            <ThemedText style={styles.avatarText}>A</ThemedText>
-          </View>
-        </View>
+      <View onLayout={(event) => setHeaderOffset(event.nativeEvent.layout.height)}>
+        <ScreenHeader
+          variant="title"
+          title={getHeaderTitle(activeScreen)}
+          showNotifications={false}
+          leftAction={
+            <Pressable
+              style={styles.headerIconBtn}
+              onPress={() => setDrawerOpen(true)}
+              testID="button-admin-hamburger"
+            >
+              <Feather name="menu" size={Layout.headerIconSize} color={Colors.light.accent} />
+            </Pressable>
+          }
+          rightAction={
+            <View style={styles.headerRight}>
+              <Pressable
+                style={styles.headerIconBtn}
+                onPress={() => onNavigate("Notifications")}
+                testID="button-admin-notifications"
+              >
+                <Feather name="bell" size={Layout.headerIconSize} color={Colors.light.accent} />
+              </Pressable>
+              <View style={styles.avatarCircle}>
+                <ThemedText style={styles.avatarText}>A</ThemedText>
+              </View>
+            </View>
+          }
+          testID="admin-screen-header"
+        />
       </View>
 
       <View style={styles.body}>{children}</View>
 
-      {drawerOpen ? (
-        <TouchableWithoutFeedback onPress={() => setDrawerOpen(false)}>
+      {drawerMounted ? (
+        <Pressable style={styles.overlay} onPress={closeDrawer} accessibilityLabel="Close menu">
           <Animated.View
             style={[
-              styles.overlay,
+              StyleSheet.absoluteFillObject,
               {
+                backgroundColor: "#000000",
                 opacity: overlayAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0, 0.4],
+                  outputRange: [0, 0.35],
                 }),
-                top: headerHeight,
               },
             ]}
           />
-        </TouchableWithoutFeedback>
+        </Pressable>
       ) : null}
 
-      <Animated.View
-        style={[
-          styles.drawer,
-          {
-            left: slideAnim,
-            top: headerHeight,
-          },
-        ]}
-      >
-        <View style={styles.drawerHeader}>
-          <View style={styles.drawerAvatarLarge}>
-            <ThemedText style={styles.drawerAvatarText}>NG</ThemedText>
-          </View>
-          <View style={styles.drawerHeaderInfo}>
-            <ThemedText
-              style={[styles.drawerName, appNameMuted ? styles.drawerNameMuted : undefined]}
-            >
-              {brandLoading ? "…" : appNameDisplay || "—"}
-            </ThemedText>
-            <ThemedText style={styles.drawerEmail}>Admin Panel</ThemedText>
-          </View>
-        </View>
-
-        <View style={styles.drawerDivider} />
-
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.drawerItemsContainer}
+      {drawerMounted ? (
+        <Animated.View
+          style={[
+            styles.drawer,
+            {
+              left: slideAnim,
+              top: headerOffset,
+            },
+          ]}
+          pointerEvents={drawerOpen ? "auto" : "none"}
         >
-          {drawerItems.map((item) => {
-            const isActive = activeScreen === item.name;
-            return (
-              <Pressable
-                key={item.name}
-                style={[styles.drawerItem, isActive ? styles.drawerItemActive : null]}
-                onPress={() => handleDrawerNavigate(item.name)}
-                testID={`drawer-${item.name.toLowerCase()}`}
+          <View style={styles.drawerBody} {...panResponder.panHandlers}>
+          <View style={styles.drawerHeader}>
+            <View style={styles.drawerAvatarLarge}>
+              <ThemedText style={styles.drawerAvatarText}>NG</ThemedText>
+            </View>
+            <View style={styles.drawerHeaderInfo}>
+              <ThemedText
+                style={[styles.drawerName, appNameMuted ? styles.drawerNameMuted : undefined]}
               >
-                <Feather
-                  name={item.icon}
-                  size={18}
-                  color={isActive ? "#FFFFFF" : "rgba(255,255,255,0.7)"}
-                />
-                <ThemedText
-                  style={[styles.drawerLabel, isActive ? styles.drawerLabelActive : null]}
+                {brandLoading ? "…" : appNameDisplay || "—"}
+              </ThemedText>
+              <ThemedText style={styles.drawerEmail}>Admin Panel</ThemedText>
+            </View>
+          </View>
+
+          <View style={styles.drawerDivider} />
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.drawerItemsContainer}
+          >
+            {drawerItems.map((item) => {
+              const isActive = activeScreen === item.name;
+              return (
+                <Pressable
+                  key={item.name}
+                  style={[styles.drawerItem, isActive ? styles.drawerItemActive : null]}
+                  onPress={() => handleDrawerNavigate(item.name)}
+                  testID={`drawer-${item.name.toLowerCase()}`}
                 >
-                  {item.label}
-                </ThemedText>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+                  <Feather
+                    name={item.icon}
+                    size={18}
+                    color={isActive ? Colors.light.accent : Colors.light.textMuted}
+                  />
+                  <ThemedText
+                    style={[styles.drawerLabel, isActive ? styles.drawerLabelActive : null]}
+                  >
+                    {item.label}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          </View>
 
-        <View style={styles.drawerDivider} />
+          <View style={styles.drawerDivider} />
 
-        <Pressable
-          style={styles.drawerLogout}
-          onPress={onBack}
-          testID="button-admin-logout"
-        >
-          <Feather name="log-out" size={18} color="rgba(255,255,255,0.7)" />
-          <ThemedText style={styles.drawerLogoutText}>Logout</ThemedText>
-        </Pressable>
-      </Animated.View>
+          <Pressable
+            style={styles.drawerLogout}
+            onPress={handleLogout}
+            testID="button-admin-logout"
+          >
+            <Feather name="log-out" size={18} color={Colors.light.textMuted} />
+            <ThemedText style={styles.drawerLogoutText}>Logout</ThemedText>
+          </Pressable>
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -238,99 +312,78 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  header: {
-    flexDirection: "row",
+  headerIconBtn: {
+    padding: Layout.headerIconPadding,
     alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#013220",
-    paddingHorizontal: Spacing.lg,
-    height: 56,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  hamburgerBtn: {
-    padding: 6,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: Colors.light.cardBackground,
-    fontFamily: "Nunito_700Bold",
+    justifyContent: "center",
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 16,
-  },
-  headerIconBtn: {
-    padding: 6,
+    gap: LayoutSpacing.xs,
   },
   avatarCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(1, 50, 32, 0.1)",
     justifyContent: "center",
     alignItems: "center",
   },
   avatarText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
-    color: "#FFFFFF",
-    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
   },
   body: {
     flex: 1,
   },
   overlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#000000",
+    ...StyleSheet.absoluteFillObject,
     zIndex: 10,
   },
   drawer: {
     position: "absolute",
     bottom: 0,
     width: DRAWER_WIDTH,
-    backgroundColor: "#013220",
+    backgroundColor: Colors.light.cardBackground,
     zIndex: 20,
-    paddingBottom: 20,
+    paddingBottom: LayoutSpacing.lg,
+    borderRightWidth: 1,
+    borderRightColor: "rgba(0,0,0,0.06)",
+  },
+  drawerBody: {
+    flex: 1,
   },
   drawerHeader: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 16,
-    gap: 14,
+    paddingHorizontal: LayoutSpacing.lg,
+    paddingTop: LayoutSpacing.lg,
+    paddingBottom: LayoutSpacing.md,
+    gap: LayoutSpacing.sm,
   },
   drawerAvatarLarge: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(1, 50, 32, 0.1)",
     justifyContent: "center",
     alignItems: "center",
   },
   drawerAvatarText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
-    color: "#FFFFFF",
-    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
   },
   drawerHeaderInfo: {
     flex: 1,
   },
   drawerName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    color: "#FFFFFF",
-    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+    fontFamily: "ui-serif",
   },
   drawerNameMuted: {
     fontStyle: "italic",
@@ -338,54 +391,50 @@ const styles = StyleSheet.create({
   },
   drawerEmail: {
     fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
-    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
     marginTop: 2,
   },
   drawerDivider: {
     height: 1,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    marginHorizontal: 16,
-    marginVertical: 8,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    marginHorizontal: LayoutSpacing.md,
+    marginVertical: LayoutSpacing.xs,
   },
   drawerItemsContainer: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingVertical: LayoutSpacing.xs,
+    paddingHorizontal: LayoutSpacing.sm,
   },
   drawerItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    gap: 14,
+    paddingHorizontal: LayoutSpacing.md,
+    paddingVertical: LayoutSpacing.sm + 2,
+    gap: LayoutSpacing.sm,
     borderRadius: 10,
     marginBottom: 2,
   },
   drawerItemActive: {
-    backgroundColor: "rgba(255,255,255,0.15)",
+    backgroundColor: "rgba(1, 50, 32, 0.08)",
   },
   drawerLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "500",
-    color: "rgba(255,255,255,0.7)",
-    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textSecondary,
   },
   drawerLabelActive: {
-    color: "#FFFFFF",
+    color: Colors.light.accent,
     fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
   },
   drawerLogout: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    gap: 14,
+    paddingHorizontal: LayoutSpacing.lg,
+    paddingVertical: LayoutSpacing.md,
+    gap: LayoutSpacing.sm,
   },
   drawerLogoutText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "500",
-    color: "rgba(255,255,255,0.7)",
-    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
   },
 });

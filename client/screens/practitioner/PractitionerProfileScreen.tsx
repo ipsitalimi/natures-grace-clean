@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   View,
-  ScrollView,
   StyleSheet,
   TextInput,
   Pressable,
@@ -9,21 +8,20 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle, KeyboardFormLayout } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { formatInr } from "@/lib/formatCurrency";
 import { uploadPractitionerPhoto, type LocalFile } from "@/lib/storageUpload";
 import { useAuth } from "@/context/AuthContext";
 import { useDataContext } from "@/context/DataContext";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import {
-  fetchPractitionerProfileDetails,
+  fetchPractitionerProfileDetailsResult,
   updatePractitionerProfileDetails,
 } from "@/services/content/practitionerId";
 
@@ -38,7 +36,6 @@ function formatPriceLabel(amount: number): string {
 }
 
 export default function PractitionerProfileScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { profile, session } = useAuth();
   const { refresh } = usePractitionerContext();
@@ -63,16 +60,17 @@ export default function PractitionerProfileScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const load = async () => {
       setLoading(true);
       setLoadError("");
-      const details = await fetchPractitionerProfileDetails(profile?.id);
+      const result = await fetchPractitionerProfileDetailsResult(profile?.id);
       if (cancelled) return;
-      if (!details) {
-        setLoadError("Could not load your practitioner profile.");
+      if (!result.ok) {
+        setLoadError(result.error);
         setLoading(false);
         return;
       }
+      const details = result.profile;
       setPractitionerName(details.name);
       setSpecialty(details.subcategory || details.category);
       setBio(details.bio);
@@ -84,7 +82,8 @@ export default function PractitionerProfileScreen() {
       setPhotoUrl(details.photoUrl);
       setPhotoPreviewUri(details.photoUrl || null);
       setLoading(false);
-    })();
+    };
+    void load();
     return () => {
       cancelled = true;
     };
@@ -165,26 +164,27 @@ export default function PractitionerProfileScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator color={Colors.light.accent} />
+      <View style={styles.container}>
+        <BackHeader showNotifications={false} />
+        <BelowHeaderTitle>My Profile</BelowHeaderTitle>
+        <View style={styles.centered}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading profile…</ThemedText>
+        </View>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>My Profile</ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardFormLayout
+      footerInset={30}
+      header={
+        <>
+          <BackHeader showNotifications={false} />
+          <BelowHeaderTitle>My Profile</BelowHeaderTitle>
+        </>
+      }
+    >
         {loadError ? <ThemedText style={styles.errorText}>{loadError}</ThemedText> : null}
 
         <Pressable
@@ -318,8 +318,7 @@ export default function PractitionerProfileScreen() {
             <ThemedText style={styles.confirmationText}>Profile updated successfully</ThemedText>
           </View>
         ) : null}
-      </ScrollView>
-    </View>
+    </KeyboardFormLayout>
   );
 }
 
@@ -329,35 +328,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.backgroundRoot,
   },
   centered: {
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-  },
-  scrollView: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 10,
   },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
+  loadingText: {
+    fontSize: 14,
+    color: Colors.light.textMuted,
   },
   photoSection: {
     alignItems: "center",
@@ -481,6 +459,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
+    minHeight: 44,
   },
   sessionSetupButtonText: {
     flex: 1,

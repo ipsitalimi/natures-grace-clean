@@ -1,22 +1,28 @@
-import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useState, useEffect } from "react";
+import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { usePractitionerContext } from "@/context/PractitionerContext";
-import { getScrollBottomPadding } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { openMeetingLink } from "@/lib/meetingLink";
 
 export default function PractitionerSessionDetailScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<any>();
   const sessionId = route.params?.sessionId;
   const { sessions, completeSession, cancelSession } = usePractitionerContext();
+  const { scrollPaddingBottom } = useLayoutInsets(16);
   const session = sessions.find((s) => s.id === sessionId);
+  const [sessionNotes, setSessionNotes] = useState(session?.notes ?? "");
+
+  useEffect(() => {
+    setSessionNotes(session?.notes ?? "");
+  }, [session?.id, session?.notes]);
   const [actionDone, setActionDone] = useState("");
   const [actionError, setActionError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -26,16 +32,17 @@ export default function PractitionerSessionDetailScreen() {
     openMeetingLink(session.meetingLink);
   };
 
-  const handleAction = async (action: "complete" | "cancel") => {
+  const runAction = async (action: "complete" | "cancel") => {
     if (!sessionId || submitting) return;
     setSubmitting(true);
     setActionError("");
     setActionDone("");
 
+    const notes = sessionNotes.trim() || undefined;
     const updated =
       action === "complete"
-        ? await completeSession(sessionId, session?.notes)
-        : await cancelSession(sessionId, session?.notes);
+        ? await completeSession(sessionId, notes)
+        : await cancelSession(sessionId, notes);
 
     setSubmitting(false);
 
@@ -49,26 +56,44 @@ export default function PractitionerSessionDetailScreen() {
     setTimeout(() => setActionDone(""), 2500);
   };
 
+  const handleAction = (action: "complete" | "cancel") => {
+    if (action === "cancel") {
+      Alert.alert(
+        "Cancel session?",
+        "The client will be notified. This cannot be undone.",
+        [
+          { text: "Keep session", style: "cancel" },
+          { text: "Cancel session", style: "destructive", onPress: () => void runAction("cancel") },
+        ]
+      );
+      return;
+    }
+    void runAction("complete");
+  };
+
   if (!session) {
     return (
       <View style={styles.container}>
-        <ThemedText style={styles.emptyText}>Session not found</ThemedText>
+        <BackHeader showNotifications={false} />
+        <BelowHeaderTitle>Session Details</BelowHeaderTitle>
+        <View style={styles.notFound}>
+          <ThemedText style={styles.emptyText}>Session not found</ThemedText>
+          <Pressable style={styles.backLink} onPress={() => navigation.goBack()}>
+            <ThemedText style={styles.backLinkText}>Go back</ThemedText>
+          </Pressable>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Session Details</ThemedText>
-      </View>
+      <BackHeader showNotifications={false} />
+      <BelowHeaderTitle>Session Details</BelowHeaderTitle>
 
-      <ScrollView
+      <KeyboardAwareScrollViewCompat
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.card}>
@@ -113,17 +138,24 @@ export default function PractitionerSessionDetailScreen() {
             </View>
           </View>
 
-          {session.notes ? (
-            <View style={styles.notesSection}>
-              <ThemedText style={styles.notesLabel}>Notes</ThemedText>
+          <View style={styles.notesSection}>
+            <ThemedText style={styles.notesLabel}>Session notes</ThemedText>
+            {session.status === "Upcoming" ? (
+              <TextInput
+                style={styles.notesInput}
+                placeholder="Private notes for this session (optional)"
+                placeholderTextColor={Colors.light.textMuted}
+                value={sessionNotes}
+                onChangeText={setSessionNotes}
+                multiline
+                textAlignVertical="top"
+              />
+            ) : session.notes ? (
               <ThemedText style={styles.notesText}>{session.notes}</ThemedText>
-            </View>
-          ) : (
-            <View style={styles.notesSection}>
-              <ThemedText style={styles.notesLabel}>Notes</ThemedText>
+            ) : (
               <ThemedText style={styles.notesPlaceholder}>No notes for this session</ThemedText>
-            </View>
-          )}
+            )}
+          </View>
         </View>
 
         {session.status === "Upcoming" ? (
@@ -139,7 +171,7 @@ export default function PractitionerSessionDetailScreen() {
             <View style={styles.secondaryButtonsRow}>
               <Pressable
                 style={[styles.completeButton, submitting && styles.buttonDisabled]}
-                onPress={() => void handleAction("complete")}
+                onPress={() => handleAction("complete")}
                 disabled={submitting}
                 testID="button-mark-completed"
               >
@@ -148,7 +180,7 @@ export default function PractitionerSessionDetailScreen() {
               </Pressable>
               <Pressable
                 style={[styles.cancelButton, submitting && styles.buttonDisabled]}
-                onPress={() => void handleAction("cancel")}
+                onPress={() => handleAction("cancel")}
                 disabled={submitting}
                 testID="button-cancel-session"
               >
@@ -159,9 +191,7 @@ export default function PractitionerSessionDetailScreen() {
           </View>
         ) : null}
 
-        {actionError ? (
-          <ThemedText style={styles.errorText}>{actionError}</ThemedText>
-        ) : null}
+        {actionError ? <ThemedText style={styles.errorText}>{actionError}</ThemedText> : null}
 
         {actionDone ? (
           <View style={styles.confirmationBanner}>
@@ -169,7 +199,7 @@ export default function PractitionerSessionDetailScreen() {
             <ThemedText style={styles.confirmationText}>{actionDone}</ThemedText>
           </View>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
@@ -179,39 +209,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-  },
-  scrollView: {
-    flex: 1,
-  },
+  scrollView: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
   },
+  notFound: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Spacing.lg,
+    gap: 12,
+  },
   emptyText: {
     fontSize: 15,
-    fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
     textAlign: "center",
-    marginTop: 40,
+  },
+  backLink: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.light.cardBackground,
+  },
+  backLinkText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.light.accent,
   },
   card: {
     backgroundColor: Colors.light.cardBackground,
@@ -233,23 +256,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: Spacing.lg,
   },
-  avatarInfo: {
-    flex: 1,
-  },
+  avatarInfo: { flex: 1 },
   clientName: {
     fontSize: 18,
     fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
   },
   serviceLabel: {
     fontSize: 14,
-    fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
   },
-  detailsGrid: {
-    gap: Spacing.lg,
-  },
+  detailsGrid: { gap: Spacing.lg },
   detailItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -257,13 +274,11 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 12,
-    fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
   },
   detailValue: {
     fontSize: 15,
     fontWeight: "600",
-    fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
   },
   notesSection: {
@@ -275,25 +290,29 @@ const styles = StyleSheet.create({
   notesLabel: {
     fontSize: 14,
     fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
     marginBottom: Spacing.xs,
   },
+  notesInput: {
+    backgroundColor: Colors.light.backgroundRoot,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
+    fontSize: 14,
+    lineHeight: 20,
+    color: Colors.light.text,
+    minHeight: 88,
+  },
   notesText: {
     fontSize: 14,
-    fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
     lineHeight: 20,
   },
   notesPlaceholder: {
     fontSize: 14,
-    fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
     fontStyle: "italic",
   },
-  actionButtons: {
-    gap: Spacing.md,
-  },
+  actionButtons: { gap: Spacing.md },
   joinButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -305,7 +324,7 @@ const styles = StyleSheet.create({
   },
   joinButtonText: {
     fontSize: 16,
-    fontFamily: "Nunito_700Bold",
+    fontWeight: "700",
     color: "#FFFFFF",
   },
   secondaryButtonsRow: {
@@ -325,7 +344,7 @@ const styles = StyleSheet.create({
   },
   completeButtonText: {
     fontSize: 13,
-    fontFamily: "Nunito_700Bold",
+    fontWeight: "700",
     color: Colors.light.accent,
   },
   cancelButton: {
@@ -341,12 +360,10 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 13,
-    fontFamily: "Nunito_700Bold",
+    fontWeight: "700",
     color: "#8B3A3A",
   },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
+  buttonDisabled: { opacity: 0.6 },
   errorText: {
     fontSize: 14,
     color: "#C0392B",
@@ -364,7 +381,7 @@ const styles = StyleSheet.create({
   },
   confirmationText: {
     fontSize: 14,
-    fontFamily: "Nunito_700Bold",
+    fontWeight: "700",
     color: "#013220",
   },
 });

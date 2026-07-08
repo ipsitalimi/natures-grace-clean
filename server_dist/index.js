@@ -21,13 +21,13 @@ function assertServerProductionEnv() {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     missing.push("SUPABASE_SERVICE_ROLE_KEY");
   }
-  if (!process.env.RAZORPAY_KEY_ID?.trim() && !process.env.RAZORPAYX_KEY_ID?.trim()) {
+  if (!process.env.RAZORPAY_KEY_ID?.trim()) {
     missing.push("RAZORPAY_KEY_ID");
   }
-  if (!process.env.RAZORPAY_KEY_SECRET?.trim() && !process.env.RAZORPAYX_KEY_SECRET?.trim()) {
+  if (!process.env.RAZORPAY_KEY_SECRET?.trim()) {
     missing.push("RAZORPAY_KEY_SECRET");
   }
-  if (!process.env.RAZORPAY_WEBHOOK_SECRET?.trim() && !process.env.RAZORPAYX_WEBHOOK_SECRET?.trim()) {
+  if (!process.env.RAZORPAY_WEBHOOK_SECRET?.trim()) {
     missing.push("RAZORPAY_WEBHOOK_SECRET");
   }
   if (missing.length > 0) {
@@ -76,14 +76,8 @@ function requireSupabaseAdmin() {
 }
 
 // server/services/payoutLifecycle.ts
-var TERMINAL = ["Completed", "Failed", "Cancelled"];
 async function getPayoutById(supabase, payoutId) {
   const { data, error } = await supabase.from("seller_payouts").select("*").eq("id", payoutId).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
-}
-async function getPayoutByRazorpayId(supabase, razorpayPayoutId) {
-  const { data, error } = await supabase.from("seller_payouts").select("*").eq("razorpay_payout_id", razorpayPayoutId).maybeSingle();
   if (error) throw new Error(error.message);
   return data;
 }
@@ -100,28 +94,13 @@ async function updatePayoutTxnDescription(supabase, payoutId, description) {
   await supabase.from("wallet_transactions").update({ description }).eq("payout_id", payoutId).eq("category", "payout");
 }
 async function reconcilePendingPayout(supabase, walletId) {
-  const { data: payouts, error } = await supabase.from("seller_payouts").select("amount, status").eq("wallet_id", walletId).in("status", ["Pending", "Processing"]);
+  const { data: payouts, error } = await supabase.from("seller_payouts").select("amount, status").eq("wallet_id", walletId).in("status", ["Pending", "Processing", "Under Review"]);
   if (error) throw new Error(error.message);
   const pendingSum = (payouts ?? []).reduce(
     (sum, p) => sum + Number(p.amount),
     0
   );
   await updateWalletBalances(supabase, walletId, { pending_payout: pendingSum });
-}
-async function markPayoutProcessing(supabase, payoutId, opts) {
-  const payout = await getPayoutById(supabase, payoutId);
-  if (!payout) throw new Error("Payout not found");
-  if (TERMINAL.includes(payout.status)) return payout;
-  const { data, error } = await supabase.from("seller_payouts").update({
-    status: "Processing",
-    razorpay_payout_id: opts.razorpayPayoutId ?? payout.razorpay_payout_id,
-    razorpay_fund_account_id: opts.razorpayFundAccountId ?? payout.razorpay_fund_account_id,
-    notes: opts.notes ?? payout.notes,
-    last_webhook_event: opts.webhookEvent ?? null
-  }).eq("id", payoutId).select().single();
-  if (error) throw new Error(error.message);
-  await reconcilePendingPayout(supabase, payout.wallet_id);
-  return data;
 }
 async function completePayout(supabase, payoutId, opts = {}) {
   const payout = await getPayoutById(supabase, payoutId);
@@ -149,320 +128,6 @@ async function completePayout(supabase, payoutId, opts = {}) {
   );
   await reconcilePendingPayout(supabase, payout.wallet_id);
   return data;
-}
-async function failPayout(supabase, payoutId, opts = {}) {
-  const payout = await getPayoutById(supabase, payoutId);
-  if (!payout) throw new Error("Payout not found");
-  if (payout.status === "Failed") return payout;
-  if (payout.status === "Completed") {
-    throw new Error("Cannot fail a completed payout");
-  }
-  const amount = Number(payout.amount);
-  const wallet = await getWallet(supabase, payout.wallet_id);
-  const { data, error } = await supabase.from("seller_payouts").update({
-    status: "Failed",
-    failure_reason: opts.failureReason ?? "Payout failed",
-    razorpay_payout_id: opts.razorpayPayoutId ?? payout.razorpay_payout_id,
-    last_webhook_event: opts.webhookEvent ?? null
-  }).eq("id", payoutId).select().single();
-  if (error) throw new Error(error.message);
-  const wasReserved = payout.status === "Pending" || payout.status === "Processing";
-  if (wasReserved) {
-    await updateWalletBalances(supabase, payout.wallet_id, {
-      pending_payout: Math.max(0, Number(wallet.pending_payout) - amount),
-      available_balance: Number(wallet.available_balance) + amount
-    });
-    const { data: existingRefund } = await supabase.from("wallet_transactions").select("id").eq("payout_id", payoutId).eq("category", "adjustment").eq("type", "credit").maybeSingle();
-    if (!existingRefund) {
-      await supabase.from("wallet_transactions").insert({
-        wallet_id: payout.wallet_id,
-        payout_id: payoutId,
-        type: "credit",
-        category: "adjustment",
-        amount,
-        description: `Payout failed \u2014 ${opts.failureReason ?? "refunded to wallet"}`,
-        is_released: true
-      });
-    }
-  }
-  await updatePayoutTxnDescription(
-    supabase,
-    payoutId,
-    `Payout failed \u2014 ${opts.failureReason ?? "not processed"}`
-  );
-  await reconcilePendingPayout(supabase, payout.wallet_id);
-  return data;
-}
-async function applyRazorpayPayoutStatus(supabase, entity, webhookEvent) {
-  const razorpayId = entity.id;
-  const referenceId = entity.reference_id;
-  let payout = (razorpayId ? await getPayoutByRazorpayId(supabase, razorpayId) : null) ?? (referenceId ? await getPayoutById(supabase, referenceId) : null);
-  if (!payout) return null;
-  const normalized = (entity.status ?? "").toLowerCase();
-  if (normalized === "processed" || webhookEvent === "payout.processed" || webhookEvent === "payout.updated.processed") {
-    const done = await completePayout(supabase, payout.id, {
-      razorpayPayoutId: razorpayId ?? payout.razorpay_payout_id ?? void 0,
-      razorpayFundAccountId: entity.fund_account_id ?? void 0,
-      webhookEvent
-    });
-    return { payoutId: done.id, status: done.status };
-  }
-  if (normalized === "failed" || normalized === "reversed" || normalized === "cancelled" || webhookEvent.includes("failed") || webhookEvent.includes("reversed")) {
-    const failed = await failPayout(supabase, payout.id, {
-      failureReason: entity.failure_reason ?? normalized,
-      razorpayPayoutId: razorpayId ?? void 0,
-      webhookEvent
-    });
-    return { payoutId: failed.id, status: failed.status };
-  }
-  if (normalized === "processing" || normalized === "queued" || normalized === "pending" || webhookEvent === "payout.initiated" || webhookEvent === "payout.queued") {
-    const processing = await markPayoutProcessing(supabase, payout.id, {
-      razorpayPayoutId: razorpayId ?? void 0,
-      razorpayFundAccountId: entity.fund_account_id ?? void 0,
-      webhookEvent
-    });
-    return { payoutId: processing.id, status: processing.status };
-  }
-  return { payoutId: payout.id, status: payout.status };
-}
-
-// server/services/practitionerPayoutLifecycle.ts
-var TERMINAL2 = ["Completed", "Failed", "Cancelled"];
-async function getPayoutById2(supabase, payoutId) {
-  const { data, error } = await supabase.from("practitioner_payouts").select("*").eq("id", payoutId).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
-}
-async function getPayoutByRazorpayId2(supabase, razorpayPayoutId) {
-  const { data, error } = await supabase.from("practitioner_payouts").select("*").eq("razorpay_payout_id", razorpayPayoutId).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data;
-}
-async function getWallet2(supabase, walletId) {
-  const { data, error } = await supabase.from("practitioner_wallets").select("id, available_balance, pending_payout, held_balance, total_earned").eq("id", walletId).single();
-  if (error || !data) throw new Error(error?.message ?? "Wallet not found");
-  return data;
-}
-async function updateWalletBalances2(supabase, walletId, patch) {
-  const { error } = await supabase.from("practitioner_wallets").update(patch).eq("id", walletId);
-  if (error) throw new Error(error.message);
-}
-async function updatePayoutTxnDescription2(supabase, payoutId, description) {
-  await supabase.from("practitioner_wallet_transactions").update({ description }).eq("payout_id", payoutId).eq("category", "payout");
-}
-async function reconcilePendingPayout2(supabase, walletId) {
-  const { data: payouts, error } = await supabase.from("practitioner_payouts").select("amount, status").eq("wallet_id", walletId).in("status", ["Pending", "Processing"]);
-  if (error) throw new Error(error.message);
-  const pendingSum = (payouts ?? []).reduce(
-    (sum, p) => sum + Number(p.amount),
-    0
-  );
-  await updateWalletBalances2(supabase, walletId, { pending_payout: pendingSum });
-}
-async function markPayoutProcessing2(supabase, payoutId, opts) {
-  const payout = await getPayoutById2(supabase, payoutId);
-  if (!payout) throw new Error("Payout not found");
-  if (TERMINAL2.includes(payout.status)) return payout;
-  const { data, error } = await supabase.from("practitioner_payouts").update({
-    status: "Processing",
-    razorpay_payout_id: opts.razorpayPayoutId ?? payout.razorpay_payout_id,
-    razorpay_fund_account_id: opts.razorpayFundAccountId ?? payout.razorpay_fund_account_id,
-    notes: opts.notes ?? payout.notes,
-    last_webhook_event: opts.webhookEvent ?? null
-  }).eq("id", payoutId).select().single();
-  if (error) throw new Error(error.message);
-  await reconcilePendingPayout2(supabase, payout.wallet_id);
-  return data;
-}
-async function completePayout2(supabase, payoutId, opts = {}) {
-  const payout = await getPayoutById2(supabase, payoutId);
-  if (!payout) throw new Error("Payout not found");
-  if (payout.status === "Completed") return payout;
-  const amount = Number(payout.amount);
-  const wallet = await getWallet2(supabase, payout.wallet_id);
-  const { data, error } = await supabase.from("practitioner_payouts").update({
-    status: "Completed",
-    razorpay_payout_id: opts.razorpayPayoutId ?? payout.razorpay_payout_id,
-    razorpay_fund_account_id: opts.razorpayFundAccountId ?? payout.razorpay_fund_account_id,
-    completed_at: (/* @__PURE__ */ new Date()).toISOString(),
-    last_webhook_event: opts.webhookEvent ?? null,
-    failure_reason: null,
-    notes: opts.notes ?? payout.notes
-  }).eq("id", payoutId).select().single();
-  if (error) throw new Error(error.message);
-  await updateWalletBalances2(supabase, payout.wallet_id, {
-    pending_payout: Math.max(0, Number(wallet.pending_payout) - amount)
-  });
-  await updatePayoutTxnDescription2(
-    supabase,
-    payoutId,
-    "Payout to Bank Account (completed)"
-  );
-  await reconcilePendingPayout2(supabase, payout.wallet_id);
-  return data;
-}
-async function failPayout2(supabase, payoutId, opts = {}) {
-  const payout = await getPayoutById2(supabase, payoutId);
-  if (!payout) throw new Error("Payout not found");
-  if (payout.status === "Failed") return payout;
-  if (payout.status === "Completed") {
-    throw new Error("Cannot fail a completed payout");
-  }
-  const amount = Number(payout.amount);
-  const wallet = await getWallet2(supabase, payout.wallet_id);
-  const { data, error } = await supabase.from("practitioner_payouts").update({
-    status: "Failed",
-    failure_reason: opts.failureReason ?? "Payout failed",
-    razorpay_payout_id: opts.razorpayPayoutId ?? payout.razorpay_payout_id,
-    last_webhook_event: opts.webhookEvent ?? null
-  }).eq("id", payoutId).select().single();
-  if (error) throw new Error(error.message);
-  const wasReserved = payout.status === "Pending" || payout.status === "Processing";
-  if (wasReserved) {
-    await updateWalletBalances2(supabase, payout.wallet_id, {
-      pending_payout: Math.max(0, Number(wallet.pending_payout) - amount),
-      available_balance: Number(wallet.available_balance) + amount
-    });
-    const { data: existingRefund } = await supabase.from("practitioner_wallet_transactions").select("id").eq("payout_id", payoutId).eq("category", "adjustment").eq("type", "credit").maybeSingle();
-    if (!existingRefund) {
-      await supabase.from("practitioner_wallet_transactions").insert({
-        wallet_id: payout.wallet_id,
-        payout_id: payoutId,
-        type: "credit",
-        category: "adjustment",
-        amount,
-        description: `Payout failed \u2014 ${opts.failureReason ?? "refunded to wallet"}`,
-        is_released: true
-      });
-    }
-  }
-  await updatePayoutTxnDescription2(
-    supabase,
-    payoutId,
-    `Payout failed \u2014 ${opts.failureReason ?? "not processed"}`
-  );
-  await reconcilePendingPayout2(supabase, payout.wallet_id);
-  return data;
-}
-async function applyRazorpayPayoutStatus2(supabase, entity, webhookEvent) {
-  const razorpayId = entity.id;
-  const referenceId = entity.reference_id;
-  let payout = (razorpayId ? await getPayoutByRazorpayId2(supabase, razorpayId) : null) ?? (referenceId ? await getPayoutById2(supabase, referenceId) : null);
-  if (!payout) return null;
-  const normalized = (entity.status ?? "").toLowerCase();
-  if (normalized === "processed" || webhookEvent === "payout.processed" || webhookEvent === "payout.updated.processed") {
-    const done = await completePayout2(supabase, payout.id, {
-      razorpayPayoutId: razorpayId ?? payout.razorpay_payout_id ?? void 0,
-      razorpayFundAccountId: entity.fund_account_id ?? void 0,
-      webhookEvent
-    });
-    return { payoutId: done.id, status: done.status };
-  }
-  if (normalized === "failed" || normalized === "reversed" || normalized === "cancelled" || webhookEvent.includes("failed") || webhookEvent.includes("reversed")) {
-    const failed = await failPayout2(supabase, payout.id, {
-      failureReason: entity.failure_reason ?? normalized,
-      razorpayPayoutId: razorpayId ?? void 0,
-      webhookEvent
-    });
-    return { payoutId: failed.id, status: failed.status };
-  }
-  if (normalized === "processing" || normalized === "queued" || normalized === "pending" || webhookEvent === "payout.initiated" || webhookEvent === "payout.queued") {
-    const processing = await markPayoutProcessing2(supabase, payout.id, {
-      razorpayPayoutId: razorpayId ?? void 0,
-      razorpayFundAccountId: entity.fund_account_id ?? void 0,
-      webhookEvent
-    });
-    return { payoutId: processing.id, status: processing.status };
-  }
-  return { payoutId: payout.id, status: payout.status };
-}
-
-// server/services/razorpayX.ts
-import crypto from "node:crypto";
-function getAuthHeader() {
-  const keyId = process.env.RAZORPAYX_KEY_ID ?? process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAYX_KEY_SECRET ?? process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId?.trim() || !keySecret?.trim()) return null;
-  const token = Buffer.from(`${keyId.trim()}:${keySecret.trim()}`).toString("base64");
-  return `Basic ${token}`;
-}
-function isRazorpayConfigured() {
-  return Boolean(getAuthHeader());
-}
-async function createRazorpayPayout(params) {
-  const auth = getAuthHeader();
-  const accountNumber = process.env.RAZORPAYX_ACCOUNT_NUMBER?.trim();
-  const fundAccountId = params.fundAccountId?.trim() ?? process.env.RAZORPAYX_FUND_ACCOUNT_ID?.trim();
-  if (!auth) {
-    return { ok: false, error: "RazorpayX credentials not configured", skipped: true };
-  }
-  if (!accountNumber) {
-    return { ok: false, error: "RAZORPAYX_ACCOUNT_NUMBER is not set" };
-  }
-  if (!fundAccountId) {
-    return { ok: false, error: "RAZORPAYX_FUND_ACCOUNT_ID is not set" };
-  }
-  const amountPaise = Math.round(params.amountInr * 100);
-  if (amountPaise < 100) {
-    return { ok: false, error: "Payout amount below minimum (Rs. 1)" };
-  }
-  const body = {
-    account_number: accountNumber,
-    fund_account_id: fundAccountId,
-    amount: amountPaise,
-    currency: "INR",
-    mode: process.env.RAZORPAYX_PAYOUT_MODE?.trim() || "IMPS",
-    purpose: "payout",
-    queue_if_low_balance: true,
-    reference_id: params.referenceId,
-    narration: params.narration ?? "Nature's Grace seller payout"
-  };
-  try {
-    const res = await fetch("https://api.razorpay.com/v1/payouts", {
-      method: "POST",
-      headers: {
-        Authorization: auth,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(body)
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      const msg = json.error?.description ?? json.error?.reason ?? `RazorpayX HTTP ${res.status}`;
-      return { ok: false, error: msg };
-    }
-    if (!json.id) {
-      return { ok: false, error: "RazorpayX returned no payout id" };
-    }
-    return {
-      ok: true,
-      payoutId: json.id,
-      fundAccountId: json.fund_account_id ?? fundAccountId,
-      status: json.status ?? "processing"
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "RazorpayX request failed"
-    };
-  }
-}
-function verifyWebhookSignature(rawBody, signature) {
-  const secret = process.env.RAZORPAYX_WEBHOOK_SECRET?.trim();
-  if (!secret) {
-    return process.env.NODE_ENV !== "production";
-  }
-  if (!signature) return false;
-  const body = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
-  const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
-  try {
-    return crypto.timingSafeEqual(
-      Buffer.from(expected),
-      Buffer.from(signature)
-    );
-  } catch {
-    return expected === signature;
-  }
 }
 
 // server/middleware/auth.ts
@@ -505,6 +170,31 @@ async function requireRole(req, res, role) {
   return profile;
 }
 
+// server/lib/walletBank.ts
+function isBankAccountLinkedForPayout(label) {
+  const trimmed = label?.trim() ?? "";
+  if (!trimmed) return false;
+  return !trimmed.toLowerCase().includes("not linked");
+}
+function formatBankAccountLabel(bankName, last4) {
+  return `${bankName.trim()} \xB7\xB7\xB7\xB7 ${last4.trim()}`;
+}
+function validateBankDetailsInput(input) {
+  const bankName = input.bankName?.trim() ?? "";
+  const last4 = (input.last4 ?? "").replace(/\D/g, "").slice(-4);
+  const accountHolder = input.accountHolder?.trim() ?? "";
+  if (!accountHolder || accountHolder.length < 2) {
+    return { ok: false, error: "Account holder name is required" };
+  }
+  if (!bankName || bankName.length < 2) {
+    return { ok: false, error: "Bank name is required" };
+  }
+  if (last4.length !== 4) {
+    return { ok: false, error: "Enter the last 4 digits of your account number" };
+  }
+  return { ok: true, label: formatBankAccountLabel(bankName, last4) };
+}
+
 // server/services/sellerWalletLedger.ts
 function netEarning(gross, commissionRate) {
   return Math.round(gross * (1 - commissionRate / 100) * 100) / 100;
@@ -521,7 +211,7 @@ async function getOrCreateSellerWallet(supabase, sellerId, commissionRate) {
   if (error || !data) return null;
   return data;
 }
-async function updateWalletBalances3(supabase, walletId, patch) {
+async function updateWalletBalances2(supabase, walletId, patch) {
   await supabase.from("seller_wallets").update(patch).eq("id", walletId);
 }
 async function hasTransaction(supabase, walletId, orderId, category) {
@@ -549,7 +239,7 @@ async function creditOrderEarning(supabase, order, commissionRate) {
     is_released: false
   });
   if (error) return;
-  await updateWalletBalances3(supabase, wallet.id, {
+  await updateWalletBalances2(supabase, wallet.id, {
     total_earned: Number(wallet.total_earned) + net,
     held_balance: Number(wallet.held_balance) + net
   });
@@ -587,7 +277,7 @@ async function releaseOrderEarning(supabase, order, commissionRate) {
   const { data: fresh } = await supabase.from("seller_wallets").select("*").eq("id", wallet.id).single();
   if (!fresh) return;
   const w = fresh;
-  await updateWalletBalances3(supabase, w.id, {
+  await updateWalletBalances2(supabase, w.id, {
     held_balance: Math.max(0, Number(w.held_balance) - net),
     available_balance: Number(w.available_balance) + net
   });
@@ -621,7 +311,7 @@ async function reverseOrderEarning(supabase, order, commissionRate) {
   } else {
     patch.held_balance = Math.max(0, Number(w.held_balance) - net);
   }
-  await updateWalletBalances3(supabase, w.id, patch);
+  await updateWalletBalances2(supabase, w.id, patch);
 }
 async function syncSellerWalletFromOrders(supabase, sellerId, commissionRate) {
   const { data: orders } = await supabase.from("orders").select("id, order_number, seller_id, status, payment_status, total").eq("seller_id", sellerId);
@@ -638,13 +328,29 @@ async function syncSellerWalletFromOrders(supabase, sellerId, commissionRate) {
     }
   }
 }
+async function updateSellerBankDetails(supabase, sellerId, commissionRate, input) {
+  const validated = validateBankDetailsInput(input);
+  if (!validated.ok) return { error: validated.error };
+  const wallet = await getOrCreateSellerWallet(supabase, sellerId, commissionRate);
+  if (!wallet) return { error: "Wallet not found" };
+  const { error } = await supabase.from("seller_wallets").update({ bank_account_label: validated.label }).eq("id", wallet.id);
+  if (error) return { error: error.message };
+  return {};
+}
 async function requestSellerPayout(supabase, sellerId, amount, commissionRate) {
   const wallet = await getOrCreateSellerWallet(supabase, sellerId, commissionRate);
   if (!wallet) return { error: "Wallet not found" };
-  if (amount <= 0) return { error: "Invalid amount" };
-  if (amount > Number(wallet.available_balance)) {
-    return { error: "Insufficient available balance" };
+  const { data: walletRow } = await supabase.from("seller_wallets").select("bank_account_label").eq("id", wallet.id).maybeSingle();
+  if (!isBankAccountLinkedForPayout(walletRow?.bank_account_label)) {
+    return { error: "Bank account details required before requesting a withdrawal" };
   }
+  if (amount <= 0) return { error: "Invalid amount" };
+  const { data: reservedWallet, error: reserveError } = await supabase.from("seller_wallets").update({
+    available_balance: Number(wallet.available_balance) - amount,
+    pending_payout: Number(wallet.pending_payout) + amount
+  }).eq("id", wallet.id).gte("available_balance", amount).select().maybeSingle();
+  if (reserveError) return { error: reserveError.message };
+  if (!reservedWallet) return { error: "Insufficient available balance" };
   const { data: payout, error: payoutError } = await supabase.from("seller_payouts").insert({
     wallet_id: wallet.id,
     amount,
@@ -652,6 +358,10 @@ async function requestSellerPayout(supabase, sellerId, amount, commissionRate) {
     notes: "Manual withdrawal \u2014 processed by Nature's Grace team within 3\u20137 business days"
   }).select().single();
   if (payoutError || !payout) {
+    await updateWalletBalances2(supabase, wallet.id, {
+      available_balance: Number(reservedWallet.available_balance) + amount,
+      pending_payout: Math.max(0, Number(reservedWallet.pending_payout) - amount)
+    });
     return { error: payoutError?.message ?? "Could not create payout" };
   }
   const { error: txnError } = await supabase.from("wallet_transactions").insert({
@@ -665,12 +375,12 @@ async function requestSellerPayout(supabase, sellerId, amount, commissionRate) {
   });
   if (txnError) {
     await supabase.from("seller_payouts").delete().eq("id", payout.id);
+    await updateWalletBalances2(supabase, wallet.id, {
+      available_balance: Number(reservedWallet.available_balance) + amount,
+      pending_payout: Math.max(0, Number(reservedWallet.pending_payout) - amount)
+    });
     return { error: txnError.message };
   }
-  await updateWalletBalances3(supabase, wallet.id, {
-    available_balance: Number(wallet.available_balance) - amount,
-    pending_payout: Number(wallet.pending_payout) + amount
-  });
   return { payoutId: payout.id };
 }
 async function verifySellerPayoutOwnership(supabase, payoutId, profileId) {
@@ -686,11 +396,10 @@ async function resolveSellerIdForProfile(supabase, profileId) {
   return data?.id ?? null;
 }
 
-// server/lib/payoutDev.ts
-function devAutoCompleteEnabled() {
-  if (process.env.NODE_ENV === "production") return false;
-  return process.env.PAYOUT_DEV_AUTO_COMPLETE === "true" || process.env.PAYOUT_DEV_AUTO_COMPLETE === "1";
-}
+// server/lib/manualPayouts.ts
+var MANUAL_PAYOUT_MESSAGE = "Manual payouts are enabled. Please complete the transfer outside the application.";
+var MANUAL_PAYOUT_STATUS = "Under Review";
+var MANUAL_PAYOUT_NOTES = "Pending manual transfer";
 
 // server/routes/payouts.ts
 function paramId(value) {
@@ -704,104 +413,48 @@ async function handleDispatch(req, res) {
     }
     const payoutId = paramId(req.params.payoutId);
     const supabase = requireSupabaseAdmin();
-    const payout = await getPayoutById(supabase, payoutId);
-    if (!payout) {
-      return res.status(404).json({ error: "Payout not found" });
-    }
     const ownsPayout = await verifySellerPayoutOwnership(supabase, payoutId, user.id);
     if (!ownsPayout) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    if (payout.status !== "Pending") {
+    const existing = await getPayoutById(supabase, payoutId);
+    if (!existing) {
+      return res.status(404).json({ error: "Payout not found" });
+    }
+    if (existing.status !== "Pending") {
       return res.status(200).json({
-        payoutId: payout.id,
-        status: payout.status,
-        message: "Payout already dispatched"
+        payoutId: existing.id,
+        status: existing.status,
+        message: existing.status === MANUAL_PAYOUT_STATUS ? MANUAL_PAYOUT_MESSAGE : "Payout already submitted",
+        manualPayouts: true
       });
     }
-    if (isRazorpayConfigured()) {
-      const result = await createRazorpayPayout({
-        referenceId: payout.id,
-        amountInr: Number(payout.amount),
-        fundAccountId: payout.razorpay_fund_account_id ?? void 0,
-        narration: "NG seller payout"
-      });
-      if (!result.ok) {
-        return res.status(502).json({ error: result.error });
-      }
-      await markPayoutProcessing(supabase, payoutId, {
-        razorpayPayoutId: result.payoutId,
-        razorpayFundAccountId: result.fundAccountId,
-        notes: "Submitted to RazorpayX"
-      });
-      const normalized = (result.status ?? "").toLowerCase();
-      if (normalized === "processed") {
-        const done = await completePayout(supabase, payoutId, {
-          razorpayPayoutId: result.payoutId,
-          razorpayFundAccountId: result.fundAccountId
-        });
-        return res.json({
-          payoutId: done.id,
-          status: done.status,
-          razorpayPayoutId: done.razorpay_payout_id
-        });
-      }
-      return res.json({
-        payoutId,
-        status: "Processing",
-        razorpayPayoutId: result.payoutId,
-        message: "Payout submitted to RazorpayX"
+    const { data: updated, error } = await supabase.from("seller_payouts").update({
+      status: MANUAL_PAYOUT_STATUS,
+      notes: MANUAL_PAYOUT_NOTES
+    }).eq("id", payoutId).eq("status", "Pending").select().maybeSingle();
+    if (error) {
+      throw new Error(error.message);
+    }
+    if (!updated) {
+      const latest = await getPayoutById(supabase, payoutId);
+      return res.status(200).json({
+        payoutId: latest?.id ?? payoutId,
+        status: latest?.status ?? MANUAL_PAYOUT_STATUS,
+        message: MANUAL_PAYOUT_MESSAGE,
+        manualPayouts: true
       });
     }
-    if (devAutoCompleteEnabled()) {
-      const done = await completePayout(supabase, payoutId, {
-        notes: "Dev auto-complete (no RazorpayX keys)",
-        webhookEvent: "dev.auto_complete"
-      });
-      return res.json({
-        payoutId: done.id,
-        status: done.status,
-        message: "Payout auto-completed (dev mode)",
-        devMode: true
-      });
-    }
+    await reconcilePendingPayout(supabase, updated.wallet_id);
     return res.json({
-      payoutId,
-      status: "Pending",
-      message: "Payout queued. Configure RAZORPAYX_* keys or set PAYOUT_DEV_AUTO_COMPLETE=true for local testing.",
-      razorpayConfigured: false
+      payoutId: updated.id,
+      status: MANUAL_PAYOUT_STATUS,
+      message: MANUAL_PAYOUT_MESSAGE,
+      manualPayouts: true
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Dispatch failed";
     console.error("[payouts] dispatch:", err);
-    return res.status(500).json({ error: message });
-  }
-}
-async function handleRazorpayWebhook(req, res) {
-  try {
-    const signature = req.header("x-razorpay-signature");
-    const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body));
-    if (!verifyWebhookSignature(rawBody, signature)) {
-      return res.status(401).json({ error: "Invalid webhook signature" });
-    }
-    const payload = req.body;
-    const event = payload.event ?? "unknown";
-    const entity = payload.payload?.payout?.entity ?? {};
-    const supabase = requireSupabaseAdmin();
-    const result = await applyRazorpayPayoutStatus(supabase, entity, event) ?? await applyRazorpayPayoutStatus2(supabase, entity, event);
-    if (!result) {
-      return res.status(200).json({ received: true, matched: false });
-    }
-    return res.status(200).json({
-      received: true,
-      matched: true,
-      payoutId: result.payoutId,
-      status: result.status,
-      entity: "seller_or_practitioner"
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Webhook failed";
-    console.error("[payouts] webhook:", err);
     return res.status(500).json({ error: message });
   }
 }
@@ -833,10 +486,37 @@ async function handleDevComplete(req, res) {
 function registerPayoutRoutes(app2) {
   app2.post("/api/payouts/:payoutId/dispatch", handleDispatch);
   app2.post("/api/payouts/:payoutId/dev-complete", handleDevComplete);
-  app2.post("/api/webhooks/razorpayx", handleRazorpayWebhook);
+}
+
+// server/services/practitionerPayoutLifecycle.ts
+async function getPayoutById2(supabase, payoutId) {
+  const { data, error } = await supabase.from("practitioner_payouts").select("*").eq("id", payoutId).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
+}
+async function updateWalletBalances3(supabase, walletId, patch) {
+  const { error } = await supabase.from("practitioner_wallets").update(patch).eq("id", walletId);
+  if (error) throw new Error(error.message);
+}
+async function reconcilePendingPayout2(supabase, walletId) {
+  const { data: payouts, error } = await supabase.from("practitioner_payouts").select("amount, status").eq("wallet_id", walletId).in("status", ["Pending", "Processing", "Under Review"]);
+  if (error) throw new Error(error.message);
+  const pendingSum = (payouts ?? []).reduce(
+    (sum, p) => sum + Number(p.amount),
+    0
+  );
+  await updateWalletBalances3(supabase, walletId, { pending_payout: pendingSum });
 }
 
 // server/services/practitionerWalletLedger.ts
+function isVerifiedBookingPaymentId(paymentId) {
+  const id = paymentId?.trim();
+  if (!id) return false;
+  if (process.env.NODE_ENV === "production" && id.startsWith("pay_dev_")) {
+    return false;
+  }
+  return true;
+}
 function netEarning2(gross, commissionRate) {
   return Math.round(gross * (1 - commissionRate / 100) * 100) / 100;
 }
@@ -860,7 +540,9 @@ async function hasTxn(supabase, walletId, bookingId, category) {
   return Boolean(data);
 }
 async function creditBookingEarning(supabase, booking, commissionRate) {
-  if (booking.payment_status !== "Paid" || !booking.practitioner_id) return;
+  if (booking.payment_status !== "Paid" || !booking.practitioner_id || !isVerifiedBookingPaymentId(booking.razorpay_payment_id)) {
+    return;
+  }
   const wallet = await getOrCreatePractitionerWallet(
     supabase,
     booking.practitioner_id,
@@ -960,20 +642,29 @@ async function reverseBookingEarning(supabase, booking, commissionRate) {
 }
 async function syncPractitionerWalletFromBookings(supabase, practitionerId, commissionRate) {
   const { data: bookings } = await supabase.from("practitioner_bookings").select(
-    "id, booking_number, practitioner_id, booking_status, payment_status, amount, service_name"
+    "id, booking_number, practitioner_id, booking_status, payment_status, amount, service_name, razorpay_payment_id"
   ).eq("practitioner_id", practitionerId);
   for (const row of bookings ?? []) {
     if (row.payment_status === "Refunded" || row.booking_status === "Cancelled") {
       await reverseBookingEarning(supabase, row, commissionRate);
       continue;
     }
-    if (row.payment_status === "Paid") {
+    if (row.payment_status === "Paid" && isVerifiedBookingPaymentId(row.razorpay_payment_id)) {
       await creditBookingEarning(supabase, row, commissionRate);
       if (row.booking_status === "Completed") {
         await releaseBookingEarning(supabase, row, commissionRate);
       }
     }
   }
+}
+async function updatePractitionerBankDetails(supabase, practitionerId, commissionRate, input) {
+  const validated = validateBankDetailsInput(input);
+  if (!validated.ok) return { error: validated.error };
+  const wallet = await getOrCreatePractitionerWallet(supabase, practitionerId, commissionRate);
+  if (!wallet) return { error: "Wallet not found" };
+  const { error } = await supabase.from("practitioner_wallets").update({ bank_account_label: validated.label }).eq("id", wallet.id);
+  if (error) return { error: error.message };
+  return {};
 }
 async function requestPractitionerPayout(supabase, practitionerId, amount, commissionRate) {
   const wallet = await getOrCreatePractitionerWallet(
@@ -982,10 +673,17 @@ async function requestPractitionerPayout(supabase, practitionerId, amount, commi
     commissionRate
   );
   if (!wallet) return { error: "Wallet not found" };
-  if (amount <= 0) return { error: "Invalid amount" };
-  if (amount > Number(wallet.available_balance)) {
-    return { error: "Insufficient available balance" };
+  const { data: walletRow } = await supabase.from("practitioner_wallets").select("bank_account_label").eq("id", wallet.id).maybeSingle();
+  if (!isBankAccountLinkedForPayout(walletRow?.bank_account_label)) {
+    return { error: "Bank account details required before requesting a withdrawal" };
   }
+  if (amount <= 0) return { error: "Invalid amount" };
+  const { data: reservedWallet, error: reserveError } = await supabase.from("practitioner_wallets").update({
+    available_balance: Number(wallet.available_balance) - amount,
+    pending_payout: Number(wallet.pending_payout) + amount
+  }).eq("id", wallet.id).gte("available_balance", amount).select().maybeSingle();
+  if (reserveError) return { error: reserveError.message };
+  if (!reservedWallet) return { error: "Insufficient available balance" };
   const { data: payout, error: payoutError } = await supabase.from("practitioner_payouts").insert({
     wallet_id: wallet.id,
     amount,
@@ -993,6 +691,10 @@ async function requestPractitionerPayout(supabase, practitionerId, amount, commi
     notes: "Manual withdrawal \u2014 processed by Nature's Grace team within 3\u20137 business days"
   }).select().single();
   if (payoutError || !payout) {
+    await updateWallet(supabase, wallet.id, {
+      available_balance: Number(reservedWallet.available_balance) + amount,
+      pending_payout: Math.max(0, Number(reservedWallet.pending_payout) - amount)
+    });
     return { error: payoutError?.message ?? "Could not create payout" };
   }
   const { error: txnError } = await supabase.from("practitioner_wallet_transactions").insert({
@@ -1006,12 +708,12 @@ async function requestPractitionerPayout(supabase, practitionerId, amount, commi
   });
   if (txnError) {
     await supabase.from("practitioner_payouts").delete().eq("id", payout.id);
+    await updateWallet(supabase, wallet.id, {
+      available_balance: Number(reservedWallet.available_balance) + amount,
+      pending_payout: Math.max(0, Number(reservedWallet.pending_payout) - amount)
+    });
     return { error: txnError.message };
   }
-  await updateWallet(supabase, wallet.id, {
-    available_balance: Number(wallet.available_balance) - amount,
-    pending_payout: Number(wallet.pending_payout) + amount
-  });
   return { payoutId: payout.id };
 }
 async function verifyPractitionerPayoutOwnership(supabase, payoutId, profileId) {
@@ -1067,67 +769,42 @@ async function handleDispatch2(req, res) {
     if (!user) return res.status(401).json({ error: "Unauthorized" });
     const payoutId = paramId2(req.params.payoutId);
     const supabase = requireSupabaseAdmin();
-    const payout = await getPayoutById2(supabase, payoutId);
-    if (!payout) return res.status(404).json({ error: "Payout not found" });
     const ownsPayout = await verifyPractitionerPayoutOwnership(supabase, payoutId, user.id);
     if (!ownsPayout) {
       return res.status(403).json({ error: "Forbidden" });
     }
-    if (payout.status !== "Pending") {
+    const existing = await getPayoutById2(supabase, payoutId);
+    if (!existing) return res.status(404).json({ error: "Payout not found" });
+    if (existing.status !== "Pending") {
       return res.status(200).json({
-        payoutId: payout.id,
-        status: payout.status,
-        message: "Payout already dispatched"
+        payoutId: existing.id,
+        status: existing.status,
+        message: existing.status === MANUAL_PAYOUT_STATUS ? MANUAL_PAYOUT_MESSAGE : "Payout already submitted",
+        manualPayouts: true
       });
     }
-    if (isRazorpayConfigured()) {
-      const result = await createRazorpayPayout({
-        referenceId: payout.id,
-        amountInr: Number(payout.amount),
-        fundAccountId: payout.razorpay_fund_account_id ?? void 0,
-        narration: "NG practitioner payout"
-      });
-      if (!result.ok) return res.status(502).json({ error: result.error });
-      await markPayoutProcessing2(supabase, payoutId, {
-        razorpayPayoutId: result.payoutId,
-        razorpayFundAccountId: result.fundAccountId,
-        notes: "Submitted to RazorpayX"
-      });
-      if ((result.status ?? "").toLowerCase() === "processed") {
-        const done = await completePayout2(supabase, payoutId, {
-          razorpayPayoutId: result.payoutId,
-          razorpayFundAccountId: result.fundAccountId
-        });
-        return res.json({
-          payoutId: done.id,
-          status: done.status,
-          razorpayPayoutId: done.razorpay_payout_id
-        });
-      }
-      return res.json({
-        payoutId,
-        status: "Processing",
-        razorpayPayoutId: result.payoutId,
-        message: "Payout submitted to RazorpayX"
+    const { data: updated, error } = await supabase.from("practitioner_payouts").update({
+      status: MANUAL_PAYOUT_STATUS,
+      notes: MANUAL_PAYOUT_NOTES
+    }).eq("id", payoutId).eq("status", "Pending").select().maybeSingle();
+    if (error) {
+      throw new Error(error.message);
+    }
+    if (!updated) {
+      const latest = await getPayoutById2(supabase, payoutId);
+      return res.status(200).json({
+        payoutId: latest?.id ?? payoutId,
+        status: latest?.status ?? MANUAL_PAYOUT_STATUS,
+        message: MANUAL_PAYOUT_MESSAGE,
+        manualPayouts: true
       });
     }
-    if (devAutoCompleteEnabled()) {
-      const done = await completePayout2(supabase, payoutId, {
-        notes: "Dev auto-complete (no RazorpayX keys)",
-        webhookEvent: "dev.auto_complete"
-      });
-      return res.json({
-        payoutId: done.id,
-        status: done.status,
-        message: "Payout auto-completed (dev mode)",
-        devMode: true
-      });
-    }
+    await reconcilePendingPayout2(supabase, updated.wallet_id);
     return res.json({
-      payoutId,
-      status: "Pending",
-      message: "Payout queued. Configure RAZORPAYX_* or PAYOUT_DEV_AUTO_COMPLETE.",
-      razorpayConfigured: false
+      payoutId: updated.id,
+      status: MANUAL_PAYOUT_STATUS,
+      message: MANUAL_PAYOUT_MESSAGE,
+      manualPayouts: true
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Dispatch failed";
@@ -1140,10 +817,10 @@ function registerPractitionerPayoutRoutes(app2) {
 }
 
 // server/services/razorpayCheckout.ts
-import crypto2 from "node:crypto";
-function getAuthHeader2() {
-  const keyId = process.env.RAZORPAY_KEY_ID ?? process.env.RAZORPAYX_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET ?? process.env.RAZORPAYX_KEY_SECRET;
+import crypto from "node:crypto";
+function getAuthHeader() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId?.trim() || !keySecret?.trim()) return null;
   const token = Buffer.from(`${keyId.trim()}:${keySecret.trim()}`).toString("base64");
   return `Basic ${token}`;
@@ -1152,7 +829,7 @@ function isProduction() {
   return process.env.NODE_ENV === "production";
 }
 async function createBookingOrder(params) {
-  const auth = getAuthHeader2();
+  const auth = getAuthHeader();
   const amountPaise = Math.round(params.amountInr * 100);
   if (amountPaise < 100) {
     return { ok: false, error: "Amount below minimum (Rs. 1)" };
@@ -1205,12 +882,12 @@ async function createBookingOrder(params) {
   }
 }
 function verifyPaymentSignature(params) {
-  const secret = process.env.RAZORPAY_KEY_SECRET ?? process.env.RAZORPAYX_KEY_SECRET;
+  const secret = process.env.RAZORPAY_KEY_SECRET;
   if (!secret?.trim()) return false;
   const body = `${params.orderId}|${params.paymentId}`;
-  const expected = crypto2.createHmac("sha256", secret.trim()).update(body).digest("hex");
+  const expected = crypto.createHmac("sha256", secret.trim()).update(body).digest("hex");
   try {
-    return crypto2.timingSafeEqual(Buffer.from(expected), Buffer.from(params.signature));
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(params.signature));
   } catch {
     return expected === params.signature;
   }
@@ -1698,7 +1375,7 @@ async function handleCreateOrder(req, res) {
         { ...body.booking, amountInr: validated.amountInr }
       );
     }
-    const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? process.env.RAZORPAYX_KEY_ID?.trim() ?? null;
+    const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? null;
     return res.json({
       orderId: result.orderId,
       amountPaise: result.amountPaise,
@@ -1774,10 +1451,14 @@ async function decrementOrderStock(supabase, orderId) {
     const productId = item.product_id;
     const qty = Number(item.quantity) || 0;
     if (!productId || qty <= 0) continue;
-    const { data: product } = await supabase.from("products").select("stock").eq("id", productId).maybeSingle();
+    const { data: product } = await supabase.from("products").select("stock").eq("id", productId).gte("stock", qty).maybeSingle();
     if (!product) continue;
-    const nextStock = Math.max(0, Number(product.stock) - qty);
-    await supabase.from("products").update({ stock: nextStock }).eq("id", productId);
+    const currentStock = Number(product.stock);
+    const nextStock = currentStock - qty;
+    const { data: updated } = await supabase.from("products").update({ stock: nextStock }).eq("id", productId).eq("stock", currentStock).select("id").maybeSingle();
+    if (!updated) {
+      console.warn(`[orderFulfillment] stock race for product ${productId}, order ${orderId}`);
+    }
   }
 }
 async function restoreOrderStock(supabase, orderId) {
@@ -1852,42 +1533,323 @@ async function fulfillStoreOrderPayment(params) {
   if (order.payment_status !== "Pending") {
     return { ok: false, error: "Order is not awaiting payment" };
   }
-  const { error: updateError } = await supabase.from("orders").update({
+  const { data: updated, error: updateError } = await supabase.from("orders").update({
     payment_status: "Paid",
     razorpay_order_id: razorpayOrderId,
     razorpay_payment_id: paymentId
-  }).eq("id", storeOrderId).eq("payment_status", "Pending");
+  }).eq("id", storeOrderId).eq("payment_status", "Pending").select(
+    "id, order_number, user_id, payment_status, status, seller_id, total, seller_promo_id, platform_promo_id"
+  ).maybeSingle();
   if (updateError) {
     return { ok: false, error: updateError.message };
   }
+  if (!updated) {
+    const { data: recheck } = await supabase.from("orders").select("order_number, payment_status").eq("id", storeOrderId).maybeSingle();
+    if (recheck?.payment_status === "Paid") {
+      return {
+        ok: true,
+        orderNumber: recheck.order_number,
+        alreadyPaid: true
+      };
+    }
+    return { ok: false, error: "Order is not awaiting payment" };
+  }
+  const orderAfterPay = updated;
   const commissionRate = params.commissionRate ?? await fetchCommissionRate(supabase);
-  await incrementPromoUsage(supabase, order);
+  await incrementPromoUsage(supabase, orderAfterPay);
   await decrementOrderStock(supabase, storeOrderId);
   await creditOrderEarning(
     supabase,
     {
-      id: order.id,
-      order_number: order.order_number,
-      seller_id: order.seller_id,
-      status: order.status,
+      id: orderAfterPay.id,
+      order_number: orderAfterPay.order_number,
+      seller_id: orderAfterPay.seller_id,
+      status: orderAfterPay.status,
       payment_status: "Paid",
-      total: Number(order.total)
+      total: Number(orderAfterPay.total)
     },
     commissionRate
   );
   await dispatchUserNotification(supabase, {
-    userId: order.user_id,
+    userId: orderAfterPay.user_id,
     event: "order_confirmed",
-    message: `Order ${order.order_number} confirmed. Payment received.`,
+    message: `Order ${orderAfterPay.order_number} confirmed. Payment received.`,
     linkRoute: "OrderDetail",
-    linkTargetId: order.id,
+    linkTargetId: orderAfterPay.id,
     emailVars: {
-      orderNumber: order.order_number,
-      total: `\u20B9${Number(order.total).toLocaleString("en-IN")}`
+      orderNumber: orderAfterPay.order_number,
+      total: `\u20B9${Number(orderAfterPay.total).toLocaleString("en-IN")}`
     }
   });
-  await notifySellerNewOrder(supabase, order);
-  return { ok: true, orderNumber: order.order_number, alreadyPaid: false };
+  await notifySellerNewOrder(supabase, orderAfterPay);
+  return {
+    ok: true,
+    orderNumber: orderAfterPay.order_number,
+    alreadyPaid: false
+  };
+}
+
+// server/services/storeOrderCreation.ts
+var DEFAULT_DELIVERY = {
+  standard: { enabled: true, price: 0 },
+  express: { enabled: false, price: 99 },
+  overnight: { enabled: false, price: 199 }
+};
+function parseDeliverySettings(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ...DEFAULT_DELIVERY };
+  }
+  const o = raw;
+  const parseTier = (key, fallback) => {
+    const tier = o[key];
+    if (!tier || typeof tier !== "object" || Array.isArray(tier)) {
+      return { ...fallback };
+    }
+    const t = tier;
+    return {
+      enabled: key === "standard" ? t.enabled !== false : t.enabled === true,
+      price: Math.max(0, Number(t.price) || fallback.price)
+    };
+  };
+  return {
+    standard: parseTier("standard", DEFAULT_DELIVERY.standard),
+    express: parseTier("express", DEFAULT_DELIVERY.express),
+    overnight: parseTier("overnight", DEFAULT_DELIVERY.overnight)
+  };
+}
+function deliveryFeeForOption(settings, optionId) {
+  const id = optionId;
+  if (id === "standard" || id === "express" || id === "overnight") {
+    return settings[id].enabled ? settings[id].price : 0;
+  }
+  return settings.standard.enabled ? settings.standard.price : 0;
+}
+function computeSellerPromoDiscount(subtotal, row) {
+  if (row.status !== "Active") return { ok: false, error: "Promo is not active" };
+  if (row.starts_at) {
+    const st = new Date(row.starts_at);
+    if (!Number.isNaN(st.getTime()) && st.getTime() > Date.now()) {
+      return { ok: false, error: "Promo is not valid yet" };
+    }
+  }
+  if (row.expires_at) {
+    const ex = new Date(row.expires_at);
+    if (!Number.isNaN(ex.getTime()) && ex.getTime() < Date.now()) {
+      return { ok: false, error: "Promo has expired" };
+    }
+  }
+  if (row.usage_limit != null && row.usage_count >= row.usage_limit) {
+    return { ok: false, error: "Promo usage limit reached" };
+  }
+  if (row.min_order != null && subtotal < Number(row.min_order)) {
+    return { ok: false, error: "Order does not meet promo minimum" };
+  }
+  const discount = row.discount_type === "percentage" ? Math.min(subtotal, Math.round(subtotal * Number(row.discount_value) / 100)) : Math.min(subtotal, Number(row.discount_value));
+  if (discount <= 0) return { ok: false, error: "No discount applies" };
+  return { ok: true, discount };
+}
+function computePlatformPromoDiscount(subtotal, row) {
+  return computeSellerPromoDiscount(subtotal, row);
+}
+async function generateOrderNumber(supabase) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = `#NG-${Math.floor(1e3 + Math.random() * 9e3)}`;
+    const { data } = await supabase.from("orders").select("id").eq("order_number", candidate).maybeSingle();
+    if (!data) return candidate;
+  }
+  return `#NG-${Date.now().toString().slice(-8)}`;
+}
+async function createValidatedStoreOrder(input) {
+  const supabase = requireSupabaseAdmin();
+  if (!input.items.length) {
+    return { ok: false, error: "Cart is empty" };
+  }
+  const productIds = [...new Set(input.items.map((i) => i.productId))];
+  const { data: products, error: productsError } = await supabase.from("products").select("id, name, category, price, stock, seller_id, approval_status").in("id", productIds);
+  if (productsError || !products?.length) {
+    return { ok: false, error: "Products not found" };
+  }
+  const productMap = new Map(
+    products.map((p) => [p.id, p])
+  );
+  const sellerIds = /* @__PURE__ */ new Set();
+  let subtotal = 0;
+  const resolvedItems = [];
+  for (const item of input.items) {
+    const qty = Math.floor(Number(item.quantity));
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return { ok: false, error: "Invalid quantity" };
+    }
+    const product = productMap.get(item.productId);
+    if (!product) {
+      return { ok: false, error: "A product in your cart is no longer available" };
+    }
+    if (product.approval_status !== "Approved") {
+      return { ok: false, error: `${product.name} is not available for purchase` };
+    }
+    if (!product.seller_id) {
+      return { ok: false, error: "Product seller not found" };
+    }
+    if (Number(product.stock) < qty) {
+      return { ok: false, error: `${product.name} is out of stock` };
+    }
+    sellerIds.add(product.seller_id);
+    const unitPrice = Number(product.price);
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      return { ok: false, error: "Invalid product price" };
+    }
+    const lineTotal = unitPrice * qty;
+    subtotal += lineTotal;
+    resolvedItems.push({
+      productId: product.id,
+      productName: product.name,
+      productCategory: product.category,
+      quantity: qty,
+      unitPrice,
+      lineTotal
+    });
+  }
+  if (sellerIds.size !== 1) {
+    return { ok: false, error: "Checkout must contain items from a single seller" };
+  }
+  const sellerId = [...sellerIds][0];
+  const { data: sellerRow } = await supabase.from("sellers").select("delivery_settings").eq("id", sellerId).maybeSingle();
+  const deliverySettings = parseDeliverySettings(
+    sellerRow?.delivery_settings
+  );
+  const deliveryOption = input.deliveryOption?.trim() || "standard";
+  const deliveryFee = deliveryFeeForOption(deliverySettings, deliveryOption);
+  let promoDiscount = 0;
+  let sellerPromoId = null;
+  let platformPromoId = null;
+  if (input.sellerPromoId) {
+    const { data: promo } = await supabase.from("seller_promos").select("*").eq("id", input.sellerPromoId).eq("seller_id", sellerId).maybeSingle();
+    if (!promo) {
+      return { ok: false, error: "Promo code is not valid" };
+    }
+    const validated = computeSellerPromoDiscount(subtotal, promo);
+    if (!validated.ok) return { ok: false, error: validated.error };
+    promoDiscount = validated.discount;
+    sellerPromoId = input.sellerPromoId;
+  } else if (input.platformPromoId) {
+    const { data: promo } = await supabase.from("platform_promo_codes").select("*").eq("id", input.platformPromoId).maybeSingle();
+    if (!promo) {
+      return { ok: false, error: "Promo code is not valid" };
+    }
+    const validated = computePlatformPromoDiscount(subtotal, promo);
+    if (!validated.ok) return { ok: false, error: validated.error };
+    promoDiscount = validated.discount;
+    platformPromoId = input.platformPromoId;
+  }
+  const total = Math.max(0, subtotal - promoDiscount + deliveryFee);
+  const orderNumber = await generateOrderNumber(supabase);
+  const { data: orderRow, error: orderError } = await supabase.from("orders").insert({
+    order_number: orderNumber,
+    seller_id: sellerId,
+    user_id: input.userId,
+    customer_name: input.customerName,
+    customer_email: input.customerEmail ?? null,
+    status: "Pending",
+    payment_status: "Pending",
+    delivery_status: "Pending",
+    delivery_option: deliveryOption,
+    subtotal,
+    delivery_fee: deliveryFee,
+    total,
+    notes: input.notes ?? null,
+    promo_discount: promoDiscount,
+    seller_promo_id: sellerPromoId,
+    platform_promo_id: platformPromoId
+  }).select("id, order_number, total, subtotal, delivery_fee, promo_discount").single();
+  if (orderError || !orderRow) {
+    return { ok: false, error: orderError?.message ?? "Could not create order" };
+  }
+  const itemRows = resolvedItems.map((item) => ({
+    order_id: orderRow.id,
+    product_id: item.productId,
+    product_name: item.productName,
+    product_category: item.productCategory,
+    quantity: item.quantity,
+    unit_price: item.unitPrice,
+    line_total: item.lineTotal
+  }));
+  const { error: itemsError } = await supabase.from("order_items").insert(itemRows);
+  if (itemsError) {
+    await supabase.from("orders").delete().eq("id", orderRow.id);
+    return { ok: false, error: itemsError.message };
+  }
+  return {
+    ok: true,
+    orderId: orderRow.id,
+    orderNumber: orderRow.order_number,
+    subtotal: Number(orderRow.subtotal),
+    deliveryFee: Number(orderRow.delivery_fee),
+    promoDiscount: Number(orderRow.promo_discount),
+    total: Number(orderRow.total)
+  };
+}
+async function validatePendingStoreOrderTotal(supabase, storeOrderId) {
+  const { data: order, error: orderError } = await supabase.from("orders").select("id, payment_status, seller_promo_id, platform_promo_id, delivery_option, seller_id").eq("id", storeOrderId).maybeSingle();
+  if (orderError || !order) {
+    return { ok: false, error: "Store order not found" };
+  }
+  if (order.payment_status !== "Pending") {
+    return { ok: false, error: "Order is not awaiting payment" };
+  }
+  const { data: items } = await supabase.from("order_items").select("product_id, quantity, unit_price").eq("order_id", storeOrderId);
+  if (!items?.length) {
+    return { ok: false, error: "Order has no items" };
+  }
+  const productIds = items.map((i) => i.product_id).filter(Boolean);
+  const { data: products } = await supabase.from("products").select("id, price").in("id", productIds);
+  const priceMap = new Map(
+    (products ?? []).map((p) => [p.id, Number(p.price)])
+  );
+  let subtotal = 0;
+  for (const item of items) {
+    const row = item;
+    const dbPrice = row.product_id ? priceMap.get(row.product_id) : void 0;
+    if (dbPrice == null) {
+      return { ok: false, error: "Product price could not be verified" };
+    }
+    if (Math.abs(Number(row.unit_price) - dbPrice) > 0.01) {
+      return { ok: false, error: "Order pricing is out of date. Please create a new order." };
+    }
+    subtotal += dbPrice * Number(row.quantity);
+  }
+  let promoDiscount = 0;
+  if (order.seller_promo_id) {
+    const { data: promo } = await supabase.from("seller_promos").select("*").eq("id", order.seller_promo_id).maybeSingle();
+    if (promo) {
+      const v = computeSellerPromoDiscount(subtotal, promo);
+      if (v.ok) promoDiscount = v.discount;
+    }
+  } else if (order.platform_promo_id) {
+    const { data: promo } = await supabase.from("platform_promo_codes").select("*").eq("id", order.platform_promo_id).maybeSingle();
+    if (promo) {
+      const v = computePlatformPromoDiscount(subtotal, promo);
+      if (v.ok) promoDiscount = v.discount;
+    }
+  }
+  const { data: sellerRow } = await supabase.from("sellers").select("delivery_settings").eq("id", order.seller_id).maybeSingle();
+  const deliverySettings = parseDeliverySettings(
+    sellerRow?.delivery_settings
+  );
+  const deliveryFee = deliveryFeeForOption(
+    deliverySettings,
+    order.delivery_option || "standard"
+  );
+  const authoritativeTotal = Math.max(0, subtotal - promoDiscount + deliveryFee);
+  const { error: patchError } = await supabase.from("orders").update({
+    subtotal,
+    delivery_fee: deliveryFee,
+    promo_discount: promoDiscount,
+    total: authoritativeTotal
+  }).eq("id", storeOrderId).eq("payment_status", "Pending");
+  if (patchError) {
+    return { ok: false, error: patchError.message };
+  }
+  return { ok: true, amountInr: authoritativeTotal };
 }
 
 // server/services/storeOrderPayment.ts
@@ -1903,10 +1865,11 @@ async function createStoreRazorpayOrder(params) {
   if (order.payment_status !== "Pending") {
     return { ok: false, error: "Order is not awaiting payment" };
   }
-  const amountInr = Number(order.total);
-  if (!Number.isFinite(amountInr) || amountInr <= 0) {
-    return { ok: false, error: "Invalid order total" };
+  const validated = await validatePendingStoreOrderTotal(supabase, params.storeOrderId);
+  if (!validated.ok) {
+    return { ok: false, error: validated.error };
   }
+  const amountInr = validated.amountInr;
   const result = await createBookingOrder({
     amountInr,
     receipt: params.storeOrderId.replace(/-/g, "").slice(0, 40),
@@ -1916,7 +1879,7 @@ async function createStoreRazorpayOrder(params) {
     return { ok: false, error: result.error };
   }
   await supabase.from("orders").update({ razorpay_order_id: result.orderId }).eq("id", params.storeOrderId).eq("payment_status", "Pending");
-  const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? process.env.RAZORPAYX_KEY_ID?.trim() ?? null;
+  const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? null;
   return {
     ok: true,
     razorpayOrderId: result.orderId,
@@ -1969,6 +1932,40 @@ async function confirmStoreOrderPayment(params) {
 }
 
 // server/routes/storeCheckout.ts
+async function handleCreateOrder2(req, res) {
+  try {
+    const user = await requireBearerUser(req, res);
+    if (!user) return;
+    const body = req.body;
+    if (!body.items?.length) {
+      return res.status(400).json({ error: "items are required" });
+    }
+    const result = await createValidatedStoreOrder({
+      userId: user.id,
+      customerName: body.customerName?.trim() || user.email?.split("@")[0] || "Guest",
+      customerEmail: body.customerEmail ?? user.email ?? void 0,
+      items: body.items,
+      deliveryOption: body.deliveryOption,
+      notes: body.notes,
+      sellerPromoId: body.sellerPromoId ?? null,
+      platformPromoId: body.platformPromoId ?? null
+    });
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error });
+    }
+    return res.json({
+      orderId: result.orderId,
+      orderNumber: result.orderNumber,
+      subtotal: result.subtotal,
+      deliveryFee: result.deliveryFee,
+      promoDiscount: result.promoDiscount,
+      total: result.total
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Create order failed";
+    return res.status(500).json({ error: message });
+  }
+}
 async function handleCreatePayment(req, res) {
   try {
     const user = await requireBearerUser(req, res);
@@ -2028,6 +2025,7 @@ async function handleConfirmPayment2(req, res) {
   }
 }
 function registerStoreCheckoutRoutes(app2) {
+  app2.post("/api/store/checkout/create-order", handleCreateOrder2);
   app2.post("/api/store/checkout/create-payment", handleCreatePayment);
   app2.post("/api/store/checkout/confirm-payment", handleConfirmPayment2);
 }
@@ -2047,6 +2045,31 @@ async function handleSellerSync(req, res) {
     return res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed";
+    return res.status(500).json({ error: message });
+  }
+}
+async function handleSellerBankDetails(req, res) {
+  try {
+    const profile = await requireRole(req, res, "Seller");
+    if (!profile) return;
+    const { bankName, last4, accountHolder } = req.body;
+    const supabase = requireSupabaseAdmin();
+    const sellerId = await resolveSellerIdForProfile(supabase, profile.id);
+    if (!sellerId) {
+      return res.status(404).json({ error: "Seller profile not found" });
+    }
+    const commissionRate = await fetchCommissionRate(supabase);
+    const result = await updateSellerBankDetails(supabase, sellerId, commissionRate, {
+      bankName: bankName ?? "",
+      last4: last4 ?? "",
+      accountHolder: accountHolder ?? ""
+    });
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not save bank details";
     return res.status(500).json({ error: message });
   }
 }
@@ -2107,6 +2130,36 @@ async function handlePractitionerSync(req, res) {
     return res.status(500).json({ error: message });
   }
 }
+async function handlePractitionerBankDetails(req, res) {
+  try {
+    const profile = await requireRole(req, res, "Practitioner");
+    if (!profile) return;
+    const { bankName, last4, accountHolder } = req.body;
+    const supabase = requireSupabaseAdmin();
+    const practitionerId = await resolvePractitionerIdForProfile(supabase, profile.id);
+    if (!practitionerId) {
+      return res.status(404).json({ error: "Practitioner profile not found" });
+    }
+    const commissionRate = await fetchCommissionRate(supabase);
+    const result = await updatePractitionerBankDetails(
+      supabase,
+      practitionerId,
+      commissionRate,
+      {
+        bankName: bankName ?? "",
+        last4: last4 ?? "",
+        accountHolder: accountHolder ?? ""
+      }
+    );
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
+    }
+    return res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Could not save bank details";
+    return res.status(500).json({ error: message });
+  }
+}
 async function handlePractitionerRequestPayout(req, res) {
   try {
     const profile = await requireRole(req, res, "Practitioner");
@@ -2145,8 +2198,10 @@ async function handlePractitionerRequestPayout(req, res) {
 }
 function registerWalletLedgerRoutes(app2) {
   app2.post("/api/wallet/seller/sync", handleSellerSync);
+  app2.post("/api/wallet/seller/bank-details", handleSellerBankDetails);
   app2.post("/api/wallet/seller/request-payout", handleSellerRequestPayout);
   app2.post("/api/wallet/practitioner/sync", handlePractitionerSync);
+  app2.post("/api/wallet/practitioner/bank-details", handlePractitionerBankDetails);
   app2.post("/api/wallet/practitioner/request-payout", handlePractitionerRequestPayout);
 }
 
@@ -2165,15 +2220,15 @@ async function insertActivityLog(supabase, params) {
 }
 
 // server/services/razorpayRefund.ts
-function getAuthHeader3() {
-  const keyId = process.env.RAZORPAY_KEY_ID ?? process.env.RAZORPAYX_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET ?? process.env.RAZORPAYX_KEY_SECRET;
+function getAuthHeader2() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
   if (!keyId?.trim() || !keySecret?.trim()) return null;
   const token = Buffer.from(`${keyId.trim()}:${keySecret.trim()}`).toString("base64");
   return `Basic ${token}`;
 }
 async function createRazorpayRefund(params) {
-  const auth = getAuthHeader3();
+  const auth = getAuthHeader2();
   if (!auth) {
     return { ok: false, error: "Razorpay is not configured" };
   }
@@ -2346,6 +2401,10 @@ function registerAdminOperationsRoutes(app2) {
     if (fetchError || !existing) {
       return res.status(404).json({ error: "Refund request not found" });
     }
+    const existingStatus = String(existing.status);
+    if (existingStatus === "approved" || existingStatus === "rejected") {
+      return res.status(409).json({ error: `Refund already ${existingStatus}` });
+    }
     const userId = existing.user_id;
     const orderId = existing.order_id;
     const bookingId = existing.booking_id;
@@ -2494,6 +2553,25 @@ function registerAdminOperationsRoutes(app2) {
   });
 }
 
+// server/lib/rateLimit.ts
+var buckets = /* @__PURE__ */ new Map();
+function checkRateLimit(key, maxRequests, windowMs) {
+  const now = Date.now();
+  const bucket = buckets.get(key);
+  if (!bucket || now >= bucket.resetAt) {
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true };
+  }
+  if (bucket.count >= maxRequests) {
+    return {
+      allowed: false,
+      retryAfterSec: Math.ceil((bucket.resetAt - now) / 1e3)
+    };
+  }
+  bucket.count += 1;
+  return { allowed: true };
+}
+
 // server/routes/transactionalHooks.ts
 var AUTH_TEMPLATES = [
   "account_created",
@@ -2516,6 +2594,14 @@ function registerTransactionalHooksRoutes(app2) {
   app2.post("/api/hooks/password-reset-requested", async (req, res) => {
     const { email } = req.body;
     if (!email?.trim()) return res.status(400).json({ error: "Email required" });
+    const rateKey = `password-reset:${req.ip ?? "unknown"}:${email.trim().toLowerCase()}`;
+    const limit = checkRateLimit(rateKey, 3, 15 * 60 * 1e3);
+    if (!limit.allowed) {
+      return res.status(429).json({
+        error: "Too many password reset requests. Try again later.",
+        retryAfterSec: limit.retryAfterSec
+      });
+    }
     const result = await sendTransactionalEmail("password_reset_requested", email.trim(), {
       name: "there"
     });
@@ -2561,17 +2647,17 @@ function registerTransactionalHooksRoutes(app2) {
 }
 
 // server/services/paymentWebhooks.ts
-import crypto3 from "node:crypto";
+import crypto2 from "node:crypto";
 function verifyPaymentWebhookSignature(rawBody, signature) {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ?? process.env.RAZORPAYX_WEBHOOK_SECRET?.trim();
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
   if (!secret) {
-    return process.env.NODE_ENV !== "production";
+    return false;
   }
   if (!signature) return false;
   const body = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
-  const expected = crypto3.createHmac("sha256", secret).update(body).digest("hex");
+  const expected = crypto2.createHmac("sha256", secret).update(body).digest("hex");
   try {
-    return crypto3.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    return crypto2.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
   } catch {
     return expected === signature;
   }
@@ -2649,6 +2735,34 @@ function registerPaymentWebhookRoutes(app2) {
 
 // server/routes/account.ts
 function registerAccountRoutes(app2) {
+  const performAccountDeletion = async (supabase, userId) => {
+    await supabase.from("profiles").update({
+      full_name: "Deleted User",
+      email: `deleted+${userId.slice(0, 8)}@deleted.local`,
+      phone: null,
+      status: "Deleted",
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("id", userId);
+    await supabase.from("account_deletion_requests").update({
+      status: "completed",
+      processed_at: (/* @__PURE__ */ new Date()).toISOString()
+    }).eq("user_id", userId);
+    const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
+    if (deleteError) {
+      return { error: deleteError.message };
+    }
+    return {};
+  };
+  app2.post("/api/account/delete", async (req, res) => {
+    const user = await requireBearerUser(req, res);
+    if (!user) return;
+    const supabase = requireSupabaseAdmin();
+    const result = await performAccountDeletion(supabase, user.id);
+    if (result.error) {
+      return res.status(500).json({ error: result.error });
+    }
+    return res.json({ ok: true });
+  });
   app2.post("/api/account/request-deletion", async (req, res) => {
     const user = await requireBearerUser(req, res);
     if (!user) return;
@@ -2681,30 +2795,9 @@ function registerAccountRoutes(app2) {
     if (!admin) return;
     const userId = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const supabase = requireSupabaseAdmin();
-    const { data: openOrders } = await supabase.from("orders").select("id").eq("user_id", userId).in("status", ["Pending", "Processing", "Shipped"]).limit(1);
-    if (openOrders?.length) {
-      return res.status(409).json({ error: "User has open orders. Resolve them before deletion." });
-    }
-    const { data: openBookings } = await supabase.from("practitioner_bookings").select("id").eq("user_id", userId).in("booking_status", ["Pending", "Confirmed"]).limit(1);
-    if (openBookings?.length) {
-      return res.status(409).json({
-        error: "User has upcoming sessions. Cancel them before deletion."
-      });
-    }
-    await supabase.from("profiles").update({
-      full_name: "Deleted User",
-      email: `deleted+${userId.slice(0, 8)}@deleted.local`,
-      phone: null,
-      status: "Deleted",
-      updated_at: (/* @__PURE__ */ new Date()).toISOString()
-    }).eq("id", userId);
-    await supabase.from("account_deletion_requests").update({
-      status: "completed",
-      processed_at: (/* @__PURE__ */ new Date()).toISOString()
-    }).eq("user_id", userId);
-    const { error: deleteError } = await supabase.auth.admin.deleteUser(userId);
-    if (deleteError) {
-      return res.status(500).json({ error: deleteError.message });
+    const result = await performAccountDeletion(supabase, userId);
+    if (result.error) {
+      return res.status(500).json({ error: result.error });
     }
     await insertActivityLog(supabase, {
       actorId: admin.id,
@@ -2764,7 +2857,7 @@ function setupCors(app2) {
       }
     }
     const origin = req.header("origin");
-    const isLocalhost = origin?.startsWith("http://localhost:") || origin?.startsWith("http://127.0.0.1:");
+    const isLocalhost = process.env.NODE_ENV !== "production" && (origin?.startsWith("http://localhost:") || origin?.startsWith("http://127.0.0.1:"));
     if (origin && (origins.has(origin) || isLocalhost)) {
       res.header("Access-Control-Allow-Origin", origin);
       res.header(

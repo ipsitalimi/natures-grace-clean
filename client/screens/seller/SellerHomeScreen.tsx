@@ -3,11 +3,19 @@ import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "reac
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
+import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing } from "@/constants/theme";
-import AppHeader from "@/components/AppHeader";
-import SellerDrawer from "@/components/SellerDrawer";
+import { Colors, Shadows } from "@/constants/theme";
+import { CardTokens, Layout, LayoutSpacing } from "@/constants/layout";
+import ScreenHeader from "@/components/layout/ScreenHeader";
+import {
+  DashboardWelcomeCard,
+  DashboardSectionTitle,
+  DashboardQuickActionGrid,
+  getTimeGreeting,
+} from "@/components/dashboard";
+import { useDrawer } from "@/context/DrawerContext";
 import type { SellerPromo } from "@/data/sellerMockData";
 import {
   fetchSellerStorefrontByProfileId,
@@ -30,51 +38,14 @@ import {
   type SellerPromoRow,
 } from "@/services/commerce/sellerPromosService";
 
-const ICON_SIZE = 22;
-const ICON_WRAP = 48;
-const CARD_RADIUS = 16;
-const CARD_SHADOW = {
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.04,
-  shadowRadius: 3,
-  elevation: 2,
-};
+const ICON_SIZE = 20;
+const ICON_WRAP = 36;
+const CARD_SHADOW = Shadows.soft;
 
 function InsightIcon({ name }: { name: React.ComponentProps<typeof Feather>["name"] }) {
   return (
     <View style={styles.iconCircle}>
       <Feather name={name} size={ICON_SIZE} color={Colors.light.accent} />
-    </View>
-  );
-}
-
-/** Matches CommunityScreen heroBanner / heroOverlay — dark green card, white copy. */
-function SellerHeroCard({
-  monthlyAmount,
-  growthPct,
-}: {
-  monthlyAmount: number;
-  growthPct: number;
-}) {
-  return (
-    <View style={styles.sellerHeroBanner}>
-      <View style={styles.sellerHeroOverlay}>
-        <ThemedText style={styles.sellerHeroEyebrow}>Earnings this month</ThemedText>
-        <ThemedText style={styles.sellerHeroAmount}>{formatInr(monthlyAmount)}</ThemedText>
-        <View style={styles.sellerHeroGrowthRow}>
-          <Feather
-            name={growthPct >= 0 ? "trending-up" : "trending-down"}
-            size={18}
-            color="#FFFFFF"
-          />
-          <ThemedText style={styles.sellerHeroGrowthText}>
-            {growthPct >= 0 ? "+" : ""}
-            {growthPct.toFixed(1)}% from last month
-          </ThemedText>
-        </View>
-        <ThemedText style={styles.sellerHeroClosing}>Your wellness store is growing beautifully.</ThemedText>
-      </View>
     </View>
   );
 }
@@ -169,35 +140,10 @@ function PromoSummaryRow({
   );
 }
 
-function QuickActionCard({
-  icon,
-  label,
-  onPress,
-  testID,
-}: {
-  icon: keyof typeof Feather.glyphMap;
-  label: string;
-  onPress: () => void;
-  testID?: string;
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.quickCard, pressed && styles.quickCardPressed]}
-      onPress={onPress}
-      testID={testID}
-    >
-      <View style={styles.quickIconWrap}>
-        <Feather name={icon} size={ICON_SIZE} color={Colors.light.accent} />
-      </View>
-      <ThemedText style={styles.quickLabel}>{label}</ThemedText>
-    </Pressable>
-  );
-}
-
 export default function SellerHomeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
+  const { openDrawer } = useDrawer();
   const { session } = useAuth();
   const [promoRows, setPromoRows] = useState<SellerPromoView[]>([]);
   const [promoLoading, setPromoLoading] = useState(false);
@@ -326,33 +272,52 @@ export default function SellerHomeScreen() {
 
   const codesSummaryBody = `${activeStandardCount} active · ${standardPromos.length} total codes`;
 
+  const storeDisplayName = storefrontLoading
+    ? "…"
+    : storefront?.storeName?.trim()
+      ? storefront.storeName
+      : isSupabaseConfigured()
+        ? "—"
+        : "Your store";
+  const greeting = getTimeGreeting();
+  const earningsMeta = `${formatInr(monthlyAmount)} this month · ${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}% growth`;
+
   return (
     <View style={styles.container}>
-      <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
+      <ScreenHeader
+        variant="title"
+        title={storeDisplayName}
+        showNotifications
+        leftAction={
+          <Pressable
+            style={styles.headerIconBtn}
+            onPress={() => openDrawer("seller")}
+            testID="button-profile"
+          >
+            <Svg width={Layout.headerIconSize} height={Layout.headerIconSize} viewBox="0 0 24 24" fill="none">
+              <Circle cx="12" cy="8" r="4" fill={Colors.light.accent} opacity={0.8} />
+              <Path
+                d="M4 20C4 16 8 14 12 14C16 14 20 16 20 20"
+                stroke={Colors.light.accent}
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </Svg>
+          </Pressable>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 36 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + LayoutSpacing.lg }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.sellerTitleSection}>
-          <ThemedText
-            style={[
-              styles.sellerPageTitle,
-              !storefrontLoading && storefront && !storefront.storeName ? styles.sellerTitleMuted : undefined,
-            ]}
-            testID="text-seller-store-name"
-          >
-            {storefrontLoading
-              ? "…"
-              : storefront?.storeName?.trim()
-                ? storefront.storeName
-                : isSupabaseConfigured()
-                  ? "—"
-                  : "Your store"}
-          </ThemedText>
-        </View>
+        <DashboardWelcomeCard
+          greeting={greeting}
+          subtitle="Revenue, orders, and storefront activity at a glance."
+          meta={earningsMeta}
+        />
 
         {storefrontError ? (
           <Pressable onPress={() => void loadStorefront()} testID="button-storefront-retry">
@@ -360,9 +325,7 @@ export default function SellerHomeScreen() {
           </Pressable>
         ) : null}
 
-        <SellerHeroCard monthlyAmount={monthlyAmount} growthPct={growthPct} />
-
-        <ThemedText style={styles.sectionEyebrow}>At a glance</ThemedText>
+        <DashboardSectionTitle style="eyebrow">At a glance</DashboardSectionTitle>
         <View style={styles.keyMetricsRow}>
           <KeyMetricCard
             label="Revenue"
@@ -402,7 +365,7 @@ export default function SellerHomeScreen() {
         ) : null}
 
         {!isSupabaseConfigured() ? null : (
-          <Pressable style={[styles.softCard, CARD_SHADOW]} testID="card-promo-summary" onPress={() => navigation.navigate("SellerPromotions")}>
+          <Pressable style={styles.softCard} testID="card-promo-summary" onPress={() => navigation.navigate("SellerPromotions")}>
             <View style={styles.cardTopRow}>
               <View style={styles.promoSummaryHeaderLeft}>
                 <Feather name="tag" size={18} color={Colors.light.accent} />
@@ -436,7 +399,7 @@ export default function SellerHomeScreen() {
           </Pressable>
         )}
 
-        <View style={[styles.softCard, CARD_SHADOW]}>
+        <View style={styles.softCard}>
           <View style={styles.cardTopRow}>
             <View>
               <ThemedText style={styles.sectionTitleLg}>Weekly rhythm</ThemedText>
@@ -451,51 +414,56 @@ export default function SellerHomeScreen() {
           <WeeklyRhythmChart data={weeklyRevenue} />
         </View>
 
-        <ThemedText style={styles.sectionEyebrow}>Tend to your store</ThemedText>
-        <View style={styles.quickGrid}>
-          <View style={styles.quickRow}>
-            <QuickActionCard
-              icon="plus-circle"
-              label="Add product"
-              onPress={() => navigation.navigate("AddEditProductListing", {})}
-              testID="quick-action-add-product"
-            />
-            <QuickActionCard
-              icon="package"
-              label="Orders"
-              onPress={() => navigation.navigate("SellerOrders")}
-              testID="quick-action-orders"
-            />
-            <QuickActionCard
-              icon="credit-card"
-              label="Wallet"
-              onPress={() => navigation.navigate("SellerWallet")}
-              testID="quick-action-wallet"
-            />
-          </View>
-          <View style={styles.quickRow}>
-            <QuickActionCard
-              icon="bar-chart-2"
-              label="Analytics"
-              onPress={() => navigation.navigate("SellerAnalytics")}
-              testID="quick-action-analytics"
-            />
-            <QuickActionCard
-              icon="tag"
-              label="Offers"
-              onPress={() => navigation.navigate("SellerPromotions")}
-              testID="quick-action-offers"
-            />
-            <QuickActionCard
-              icon="edit-3"
-              label="Edit store"
-              onPress={() => navigation.navigate("SellerStoreCustomization")}
-              testID="quick-action-edit-store"
-            />
-          </View>
-        </View>
+        <DashboardSectionTitle style="eyebrow">Tend to your store</DashboardSectionTitle>
+        <DashboardQuickActionGrid
+          columns={3}
+          actions={[
+            {
+              id: "add-product",
+              icon: "plus-circle",
+              label: "Add product",
+              onPress: () => navigation.navigate("AddEditProductListing", {}),
+              testID: "quick-action-add-product",
+            },
+            {
+              id: "orders",
+              icon: "package",
+              label: "Orders",
+              onPress: () => navigation.navigate("SellerOrders"),
+              testID: "quick-action-orders",
+            },
+            {
+              id: "wallet",
+              icon: "credit-card",
+              label: "Wallet",
+              onPress: () => navigation.navigate("SellerWallet"),
+              testID: "quick-action-wallet",
+            },
+            {
+              id: "analytics",
+              icon: "bar-chart-2",
+              label: "Analytics",
+              onPress: () => navigation.navigate("SellerAnalytics"),
+              testID: "quick-action-analytics",
+            },
+            {
+              id: "offers",
+              icon: "tag",
+              label: "Offers",
+              onPress: () => navigation.navigate("SellerPromotions"),
+              testID: "quick-action-offers",
+            },
+            {
+              id: "edit-store",
+              icon: "edit-3",
+              label: "Edit store",
+              onPress: () => navigation.navigate("SellerStoreCustomization"),
+              testID: "quick-action-edit-store",
+            },
+          ]}
+        />
 
-        <View style={[styles.softCard, CARD_SHADOW]}>
+        <View style={styles.softCard}>
           <ThemedText style={styles.sectionTitleLg}>Notes for you</ThemedText>
           <ThemedText style={styles.notesLead}>Small signals that reward your care.</ThemedText>
 
@@ -551,7 +519,7 @@ export default function SellerHomeScreen() {
           </View>
         </View>
 
-        <View style={[styles.softCard, CARD_SHADOW]}>
+        <View style={styles.softCard}>
           <View style={styles.cardTopRow}>
             <ThemedText style={styles.sectionTitleLg}>Recent orders</ThemedText>
             <Pressable onPress={() => navigation.navigate("SellerOrders")} testID="button-all-orders">
@@ -600,96 +568,28 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  scrollView: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    gap: 0,
-  },
-  /** Same as CommunityScreen title / titleSection */
-  sellerTitleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg + 8,
-  },
-  sellerPageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-    textAlign: "center",
-  },
-  /** Same treatment as CommunityScreen heroBanner + heroOverlay */
-  sellerHeroBanner: {
-    borderRadius: 16,
-    backgroundColor: Colors.light.accent,
-    overflow: "hidden",
-    marginBottom: Spacing["2xl"],
-  },
-  sellerHeroOverlay: {
-    backgroundColor: "rgba(6, 46, 3, 0.7)",
-    padding: Spacing.xl,
-    alignItems: "center",
-  },
-  sellerHeroEyebrow: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.88)",
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  sellerHeroAmount: {
-    fontSize: 28,
-    fontFamily: "Nunito_700Bold",
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginBottom: Spacing.md,
-  },
-  sellerHeroGrowthRow: {
-    flexDirection: "row",
+  headerIconBtn: {
+    padding: Layout.headerIconPadding,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginBottom: Spacing.lg,
   },
-  sellerHeroGrowthText: {
-    fontSize: 15,
-    fontFamily: "Nunito_700Bold",
-    color: "#FFFFFF",
-  },
-  sellerHeroSubtitle: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.85)",
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: Spacing.md,
-  },
-  sellerHeroClosing: {
-    fontSize: 14,
-    fontFamily: "ui-serif",
-    fontStyle: "italic",
-    color: "rgba(255, 255, 255, 0.92)",
-    textAlign: "center",
-    lineHeight: 21,
-  },
-  sectionEyebrow: {
-    fontSize: 11,
-    fontFamily: "Nunito_700Bold",
-    letterSpacing: 1.5,
-    color: Colors.light.textMuted,
-    textTransform: "uppercase",
-    marginBottom: Spacing.md,
+  scrollView: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: Layout.gutter,
+    paddingTop: LayoutSpacing.sm,
+    gap: 0,
   },
   keyMetricsRow: {
     flexDirection: "row",
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   keyMetricCard: {
     flex: 1,
     backgroundColor: Colors.light.cardBackground,
-    borderRadius: 14,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.sm,
+    borderRadius: CardTokens.radius,
+    paddingVertical: LayoutSpacing.sm,
+    paddingHorizontal: LayoutSpacing.xs,
     alignItems: "center",
     ...CARD_SHADOW,
   },
@@ -700,7 +600,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   keyMetricValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
     textAlign: "center",
@@ -717,8 +617,8 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: Colors.light.textMuted,
     textAlign: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.sm,
+    marginBottom: LayoutSpacing.md,
+    paddingHorizontal: LayoutSpacing.sm,
     opacity: 0.95,
   },
   promoSummaryHint: {
@@ -726,22 +626,22 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: Colors.light.textMuted,
     textAlign: "center",
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.sm,
+    marginBottom: LayoutSpacing.md,
+    paddingHorizontal: LayoutSpacing.sm,
   },
   promoSummaryHeaderLeft: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: Spacing.sm,
+    gap: LayoutSpacing.sm,
     flex: 1,
-    marginRight: Spacing.sm,
+    marginRight: LayoutSpacing.sm,
   },
   promoSummaryTitles: {
     flexShrink: 1,
     gap: 4,
   },
   promoSummaryRow: {
-    paddingVertical: Spacing.md,
+    paddingVertical: LayoutSpacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: `${Colors.light.divider}28`,
   },
@@ -767,34 +667,31 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Nunito_700Bold",
     color: "#8B3A3A",
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
     lineHeight: 19,
-  },
-  sellerTitleMuted: {
-    fontStyle: "italic",
-    color: Colors.light.textSecondary,
   },
   analyticsError: {
     fontSize: 13,
     color: "#8B3A3A",
     textAlign: "center",
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    marginBottom: LayoutSpacing.md,
+    paddingHorizontal: LayoutSpacing.lg,
   },
   softCard: {
     backgroundColor: Colors.light.cardBackground,
-    borderRadius: CARD_RADIUS,
-    padding: Spacing.xl,
-    marginBottom: Spacing["2xl"],
+    borderRadius: CardTokens.radius,
+    padding: LayoutSpacing.md,
+    marginBottom: LayoutSpacing.md,
+    ...CARD_SHADOW,
   },
   cardTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.sm,
   },
   sectionTitleLg: {
-    fontSize: 20,
+    fontSize: 17,
     fontFamily: "ui-serif",
     fontWeight: "600",
     color: Colors.light.text,
@@ -811,15 +708,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   revenueSum: {
-    fontSize: 28,
+    fontSize: 22,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   revenueCaption: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.light.textMuted,
-    marginBottom: Spacing.xl,
+    marginBottom: LayoutSpacing.md,
   },
   chartRow: {
     flexDirection: "row",
@@ -827,7 +724,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     height: 100,
     gap: 6,
-    paddingTop: Spacing.sm,
+    paddingTop: LayoutSpacing.sm,
   },
   chartCol: {
     flex: 1,
@@ -854,61 +751,24 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
   },
-  quickGrid: {
-    gap: Spacing.md,
-    marginBottom: Spacing["2xl"],
-  },
-  quickRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  quickCard: {
-    flex: 1,
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: 14,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.sm,
-    alignItems: "center",
-    gap: 10,
-    ...CARD_SHADOW,
-  },
-  quickCardPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  quickIconWrap: {
-    width: ICON_WRAP,
-    height: ICON_WRAP,
-    borderRadius: 16,
-    backgroundColor: `${Colors.light.accent}10`,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quickLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.light.text,
-    textAlign: "center",
-    lineHeight: 15,
-  },
   notesLead: {
-    fontSize: 14,
+    fontSize: 13,
     fontStyle: "italic",
     fontFamily: "ui-serif",
     color: Colors.light.brown,
-    marginBottom: Spacing.lg,
-    lineHeight: 20,
+    marginBottom: LayoutSpacing.sm,
+    lineHeight: 18,
   },
   insightTouch: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: Spacing.md,
-    paddingVertical: Spacing.lg,
+    gap: LayoutSpacing.sm,
+    paddingVertical: LayoutSpacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: `${Colors.light.divider}30`,
   },
   insightQuiet: {
-    paddingVertical: Spacing.lg,
+    paddingVertical: LayoutSpacing.sm,
   },
   insightLast: {
     borderBottomWidth: 0,
@@ -917,7 +777,7 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: ICON_WRAP,
     height: ICON_WRAP,
-    borderRadius: 16,
+    borderRadius: 12,
     backgroundColor: `${Colors.light.accent}10`,
     justifyContent: "center",
     alignItems: "center",
@@ -927,20 +787,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   insightTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
   },
   insightBodyText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: Colors.light.textMuted,
   },
   orderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: Spacing.lg,
+    paddingVertical: LayoutSpacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: `${Colors.light.divider}28`,
   },
@@ -950,7 +810,7 @@ const styles = StyleSheet.create({
   },
   orderLeft: {
     flex: 1,
-    marginRight: Spacing.lg,
+    marginRight: LayoutSpacing.lg,
   },
   orderName: {
     fontSize: 15,

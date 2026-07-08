@@ -8,11 +8,9 @@ export function verifyPaymentWebhookSignature(
   rawBody: Buffer | string,
   signature: string | undefined
 ): boolean {
-  const secret =
-    process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ??
-    process.env.RAZORPAYX_WEBHOOK_SECRET?.trim();
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
   if (!secret) {
-    return process.env.NODE_ENV !== "production";
+    return false;
   }
   if (!signature) return false;
 

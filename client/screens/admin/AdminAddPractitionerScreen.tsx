@@ -5,6 +5,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
 import { fetchProfileByEmail } from "@/services/profileService";
+import PractitionerCategoryFields from "@/components/PractitionerCategoryFields";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 export default function AdminAddPractitionerScreen({
@@ -16,7 +17,7 @@ export default function AdminAddPractitionerScreen({
   const [profileEmail, setProfileEmail] = useState("");
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
-  const [subcategory, setSubcategory] = useState("");
+  const [subcategories, setSubcategories] = useState<string[]>([]);
   const [experience, setExperience] = useState("");
   const [certifications, setCertifications] = useState("");
   const [price, setPrice] = useState("");
@@ -28,8 +29,8 @@ export default function AdminAddPractitionerScreen({
   const handleSave = async () => {
     if (saving) return;
     setError("");
-    if (!profileEmail.trim() || !name.trim() || !category.trim()) {
-      setError("User email, name, and category are required.");
+    if (!profileEmail.trim() || !name.trim() || !category.trim() || subcategories.length === 0) {
+      setError("User email, name, category, and at least one subcategory are required.");
       return;
     }
     if (!isSupabaseConfigured()) {
@@ -49,7 +50,11 @@ export default function AdminAddPractitionerScreen({
       profileId: profile.id,
       name: name.trim(),
       category: category.trim(),
-      subcategory: subcategory.trim() || category.trim(),
+      subcategory: subcategories[0]?.trim() ?? "",
+      specialties: subcategories.map((subcategory) => ({
+        category: category.trim(),
+        subcategory: subcategory.trim(),
+      })),
       bio: bio.trim() || `${name.trim()} is a dedicated wellness practitioner specializing in ${category.trim()}.`,
       experience: experience.trim() || "1+ years",
       certifications: certifications
@@ -113,29 +118,14 @@ export default function AdminAddPractitionerScreen({
         />
       </View>
 
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>Category *</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={category}
-          onChangeText={setCategory}
-          placeholder="e.g., Healings, Counseling..."
-          placeholderTextColor={Colors.light.textSecondary}
-          testID="input-category"
-        />
-      </View>
-
-      <View style={styles.formGroup}>
-        <ThemedText style={styles.label}>Subcategory</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={subcategory}
-          onChangeText={setSubcategory}
-          placeholder="e.g., Reiki, Yoga..."
-          placeholderTextColor={Colors.light.textSecondary}
-          testID="input-subcategory"
-        />
-      </View>
+      <PractitionerCategoryFields
+        category={category}
+        subcategories={subcategories}
+        onCategoryChange={setCategory}
+        onSubcategoriesChange={setSubcategories}
+        categoryLabel="Category"
+        subcategoryLabel="Subcategories"
+      />
 
       <View style={styles.formGroup}>
         <ThemedText style={styles.label}>Bio</ThemedText>

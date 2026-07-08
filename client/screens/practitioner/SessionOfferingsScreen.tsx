@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { View, ScrollView, StyleSheet, Pressable, Alert, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { LayoutSpacing } from "@/constants/layout";
 import type { SessionOffering } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 function getDurationLabel(minutes: number): string {
   if (minutes === 60) return "1 hour";
@@ -35,7 +36,7 @@ function getTypeColor(type: string): { bg: string; text: string } {
 }
 
 export default function SessionOfferingsScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(30);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
 
@@ -67,16 +68,12 @@ export default function SessionOfferingsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Session Offerings</ThemedText>
-      </View>
+      <BackHeader showNotifications={false} />
+      <BelowHeaderTitle>Session Offerings</BelowHeaderTitle>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         {loading ? (
@@ -181,42 +178,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: LayoutSpacing.md + 4,
   },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.md,
     paddingVertical: 14,
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
     marginBottom: Spacing.md,
+    minHeight: 52,
   },
   addIconCircle: {
     width: 28,

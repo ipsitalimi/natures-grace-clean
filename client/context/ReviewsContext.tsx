@@ -51,6 +51,7 @@ interface ReviewsContextType {
   sellerReviewsError: string | null;
   refreshSellerReviews: () => Promise<void>;
   saveSellerReply: (reviewId: string, reply: string) => Promise<boolean>;
+  savePractitionerReply: (reviewId: string, reply: string) => Promise<boolean>;
 }
 
 const ReviewsContext = createContext<ReviewsContextType | null>(null);
@@ -245,6 +246,11 @@ export function ReviewsProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const savePractitionerReply = useCallback(async (reviewId: string, reply: string) => {
+    if (!isSupabaseConfigured()) return false;
+    return reviewsService.savePractitionerReply(reviewId, reply);
+  }, []);
+
   return (
     <ReviewsContext.Provider
       value={{
@@ -268,6 +274,7 @@ export function ReviewsProvider({ children }: { children: React.ReactNode }) {
         sellerReviewsError,
         refreshSellerReviews,
         saveSellerReply,
+        savePractitionerReply,
       }}
     >
       {children}

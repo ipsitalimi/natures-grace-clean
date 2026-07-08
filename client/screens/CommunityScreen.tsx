@@ -1,7 +1,6 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import React from "react";
+import { View, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
@@ -10,16 +9,15 @@ import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import AppHeader from "@/components/AppHeader";
-import ProfileDrawer from "@/components/ProfileDrawer";
-import SellerDrawer from "@/components/SellerDrawer";
-import PractitionerDrawer from "@/components/PractitionerDrawer";
+import { Colors, BorderRadius } from "@/constants/theme";
+import { LayoutSpacing } from "@/constants/layout";
+import { PageLayout } from "@/components/layout";
+import { useDrawer } from "@/context/DrawerContext";
 import { useIsSellerTabContext } from "@/hooks/useIsSellerTabContext";
 import { useIsPractitionerTabContext } from "@/hooks/useIsPractitionerTabContext";
 import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useAuth } from "@/context/AuthContext";
 
 type CommunityStackParamList = {
   EventDetail: { eventId: string };
@@ -104,14 +102,15 @@ function EventCard({ icon, title, description, onPress }: EventCardProps) {
 
 export default function CommunityScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
+  const { openDrawerForRole } = useDrawer();
   const isSellerTab = useIsSellerTabContext();
   const isPractitionerTab = useIsPractitionerTabContext();
   const isRoleTab = isSellerTab || isPractitionerTab;
-  const { events, discussions, discussionsLoading, discussionsError } = useDataContext();
+  const { events, discussions, discussionsLoading, discussionsError, dataError, dataLoading, refreshContent } =
+    useDataContext();
   const { settings } = usePlatformConfig();
+  const { session } = useAuth();
   const activeEvents = events.filter(
     (e) => e.status === "Active" && e.isVisible !== false
   );
@@ -124,44 +123,32 @@ export default function CommunityScreen() {
     navigation.navigate("DiscussionThread", { discussionId });
   };
 
+  const navigateToCreateDiscussion = () => {
+    if (!session?.user) {
+      return;
+    }
+    navigation.navigate("CreateDiscussion");
+  };
+
   const goBackToHome = () => {
     navigation.navigate("HomeTab");
   };
 
   return (
-    <View style={styles.container}>
-      {isSellerTab ? (
-        <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      ) : isPractitionerTab ? (
-        <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      ) : (
-        <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      )}
-      {isRoleTab ? (
-        <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
-      ) : (
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-      )}
-
-      <View style={styles.content}>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.title}>Community</ThemedText>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
-        showsVerticalScrollIndicator={false}
-      >
+    <PageLayout
+      title="Community"
+      titleInHeader
+      header={isRoleTab ? "compact" : "title"}
+      headerProps={
+        isRoleTab
+          ? {
+              onProfilePress: () =>
+                openDrawerForRole({ isSeller: isSellerTab, isPractitioner: isPractitionerTab }),
+            }
+          : { onBackPress: goBackToHome }
+      }
+      footerInset={tabBarHeight}
+    >
         <View style={styles.heroBanner}>
           <View style={styles.heroOverlay}>
             <ThemedText style={styles.heroTitle}>
@@ -177,6 +164,20 @@ export default function CommunityScreen() {
           <ThemedText style={styles.sectionTitle}>Events ({activeEvents.length})</ThemedText>
         </View>
 
+        {dataLoading ? (
+          <View style={styles.emptySection}>
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+            <ThemedText style={styles.emptyText}>Loading events…</ThemedText>
+          </View>
+        ) : dataError ? (
+          <View style={styles.emptySection}>
+            <ThemedText style={styles.emptyText}>{dataError}</ThemedText>
+            <Pressable style={styles.retryButton} onPress={() => void refreshContent()}>
+              <ThemedText style={styles.retryButtonText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        ) : (
+          <>
         {activeEvents.map((event) => (
           <EventCard
             key={event.id}
@@ -192,17 +193,17 @@ export default function CommunityScreen() {
             <ThemedText style={styles.emptyText}>No events available right now.</ThemedText>
           </View>
         ) : null}
+          </>
+        )}
 
-        <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+        <View style={[styles.sectionHeader, { marginTop: LayoutSpacing.lg }]}>
           <ThemedText style={styles.sectionTitle}>Discussions</ThemedText>
-          <Pressable
-            style={styles.startDiscussionButton}
-            onPress={() => navigation.navigate("CreateDiscussion")}
-            testID="button-start-discussion"
-          >
-            <Feather name="plus" size={16} color={Colors.light.accent} />
-            <ThemedText style={styles.startDiscussionText}>New</ThemedText>
-          </Pressable>
+          {session?.user ? (
+            <Pressable style={styles.startDiscussionButton} onPress={navigateToCreateDiscussion}>
+              <Feather name="plus" size={14} color="#FFFFFF" />
+              <ThemedText style={styles.startDiscussionText}>Start Discussion</ThemedText>
+            </Pressable>
+          ) : null}
         </View>
 
         {discussionsLoading ? (
@@ -213,6 +214,9 @@ export default function CommunityScreen() {
         ) : discussionsError ? (
           <View style={styles.emptySection}>
             <ThemedText style={styles.emptyText}>{discussionsError}</ThemedText>
+            <Pressable style={styles.retryButton} onPress={() => void refreshContent()}>
+              <ThemedText style={styles.retryButtonText}>Try again</ThemedText>
+            </Pressable>
           </View>
         ) : (
           <>
@@ -251,75 +255,24 @@ export default function CommunityScreen() {
             ) : null}
           </>
         )}
-      </ScrollView>
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: Spacing.lg,
-  },
-  topBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.xs,
-  },
-  profileButton: {
-    padding: 6,
-  },
-  bellButton: {
-    padding: 6,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg + 8,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
   heroBanner: {
     height: 160,
-    borderRadius: 16,
+    borderRadius: BorderRadius.md,
     backgroundColor: Colors.light.accent,
     overflow: "hidden",
-    marginBottom: 20,
+    marginBottom: LayoutSpacing.lg,
   },
   heroOverlay: {
     flex: 1,
     backgroundColor: "rgba(6, 46, 3, 0.7)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: LayoutSpacing.lg,
   },
   heroTitle: {
     fontSize: 22,
@@ -345,20 +298,21 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "600",
     color: Colors.light.text,
+    flex: 1,
   },
   startDiscussionButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    gap: 6,
+    backgroundColor: Colors.light.button,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: `${Colors.light.accent}10`,
   },
   startDiscussionText: {
-    fontSize: 14,
-    color: Colors.light.accent,
+    fontSize: 13,
     fontWeight: "600",
+    color: "#FFFFFF",
   },
   viewAllButton: {
     flexDirection: "row",
@@ -481,7 +435,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   emptySection: {
-    paddingVertical: Spacing.xl,
+    paddingVertical: LayoutSpacing.xl,
     alignItems: "center",
   },
   emptyText: {
@@ -489,5 +443,17 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     fontStyle: "italic",
     textAlign: "center",
+  },
+  retryButton: {
+    marginTop: LayoutSpacing.sm,
+    paddingHorizontal: LayoutSpacing.md,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.light.accent,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

@@ -14,7 +14,7 @@ type Props = {
 };
 
 export default function RequireRole({ role, children }: Props) {
-  const { profile, session, loading } = useAuth();
+  const { profile, session, loading, signOut } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   useEffect(() => {
@@ -25,23 +25,23 @@ export default function RequireRole({ role, children }: Props) {
       return;
     }
 
-    if (profile.role !== role) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: homeRouteForRole(profile.role) }],
-      });
-      return;
-    }
-
     const blockedStatus = profile.status as string;
     if (
       blockedStatus === "Suspended" ||
       blockedStatus === "Deletion Requested" ||
       blockedStatus === "Deleted"
     ) {
-      navigation.reset({ index: 0, routes: [{ name: "Main" }] });
+      void signOut();
+      return;
     }
-  }, [loading, session, profile, role, navigation]);
+
+    if (profile.role !== role) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: homeRouteForRole(profile.role) }],
+      });
+    }
+  }, [loading, session, profile, role, navigation, signOut]);
 
   const blockedProfile = ["Suspended", "Deletion Requested", "Deleted"].includes(
     (profile?.status as string | undefined) ?? ""

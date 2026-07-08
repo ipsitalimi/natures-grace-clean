@@ -104,6 +104,7 @@ export type PractitionerHomeReview = {
   rating: number;
   text: string;
   date: string;
+  providerReply?: string;
 };
 
 export type OfferingAvailabilityInput = {

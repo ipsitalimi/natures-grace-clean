@@ -1,14 +1,16 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { View, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { PractitionerWalletTransaction } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { useAuth } from "@/context/AuthContext";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import BankDetailsCard from "@/components/wallet/BankDetailsCard";
+import { updatePractitionerBankDetails } from "@/services/walletLedgerApi";
 import { formatInr, formatInrSigned } from "@/lib/formatCurrency";
 import {
   BANK_NOT_LINKED_NOTICE,
@@ -39,9 +41,9 @@ function TransactionRow({ txn }: { txn: PractitionerWalletTransaction }) {
 }
 
 export default function PractitionerWalletScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
-  const { snapshot, requestPayout } = usePractitionerContext();
+  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { snapshot, requestPayout, loading, loadError, refresh } = usePractitionerContext();
+  const { session } = useAuth();
   const [withdrawing, setWithdrawing] = useState(false);
 
   const bankLinked = isBankAccountLinked(snapshot.bankAccountLabel);
@@ -69,27 +71,55 @@ export default function PractitionerWalletScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Wallet & Earnings</ThemedText>
-        <View style={{ width: 38 }} />
-      </View>
+    <View style={styles.container}>
+      <BackHeader showNotifications={false} />
+      <BelowHeaderTitle>Wallet & Earnings</BelowHeaderTitle>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
       >
+        {loading ? (
+          <View style={styles.stateBlock}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.stateText}>Loading wallet…</ThemedText>
+          </View>
+        ) : loadError ? (
+          <View style={styles.stateBlock}>
+            <Feather name="alert-circle" size={24} color={Colors.light.textMuted} />
+            <ThemedText style={styles.stateText}>{loadError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => void refresh()}>
+              <ThemedText style={styles.retryBtnText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        ) : (
+          <>
         <View style={styles.disclosureCard}>
           <Feather name="info" size={16} color={Colors.light.accent} />
           <ThemedText style={styles.disclosureText}>{MANUAL_PAYOUT_NOTICE}</ThemedText>
         </View>
 
+        <BankDetailsCard
+          bankAccountLabel={snapshot.bankAccountLabel}
+          onSave={async (input) => {
+            if (!session?.access_token) {
+              return { error: "Sign in to save bank details." };
+            }
+            const result = await updatePractitionerBankDetails(input, session.access_token);
+            if (result.error) return result;
+            await refresh();
+            return {};
+          }}
+        />
+
         <View style={styles.balanceCard}>
           <ThemedText style={styles.balanceLabel}>Available Balance</ThemedText>
-          <ThemedText style={styles.balanceAmount}>
+          <ThemedText
+            style={styles.balanceAmount}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.5}
+          >
             {formatInr(snapshot.availableBalance)}
           </ThemedText>
           <Pressable
@@ -161,6 +191,8 @@ export default function PractitionerWalletScreen() {
             <TransactionRow key={txn.id} txn={txn} />
           ))}
         </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -168,26 +200,6 @@ export default function PractitionerWalletScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.light.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.text,
-  },
   content: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing.lg,
@@ -223,16 +235,22 @@ const styles = StyleSheet.create({
     fontSize: 36,
     fontFamily: "Nunito_700Bold",
     color: "#FFFFFF",
+    width: "100%",
+    textAlign: "center",
+    paddingHorizontal: Spacing.md,
   },
   withdrawBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     gap: 6,
     backgroundColor: "rgba(255,255,255,0.2)",
     paddingHorizontal: Spacing.xl,
     paddingVertical: 10,
     borderRadius: BorderRadius.full,
     marginTop: Spacing.sm,
+    minHeight: 44,
+    width: "100%",
   },
   withdrawBtnText: {
     fontSize: 14,
@@ -341,5 +359,29 @@ const styles = StyleSheet.create({
   txnAmount: {
     fontSize: 14,
     fontFamily: "Nunito_700Bold",
+  },
+  stateBlock: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.xl * 2,
+  },
+  stateText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    paddingHorizontal: Spacing.lg,
+  },
+  retryBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.light.accent,
+  },
+  retryBtnText: {
+    fontSize: 14,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
   },
 });

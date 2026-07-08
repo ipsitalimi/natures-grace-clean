@@ -1,17 +1,18 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import React from "react";
+import { View, StyleSheet, Pressable } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
+import { Colors } from "@/constants/theme";
+import { LayoutSpacing } from "@/constants/layout";
+import { PageLayout } from "@/components/layout";
 import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { getCategoryById } from "@/data/practitioners";
+import { countPractitionersInSubcategory } from "@/lib/practitionerSpecialties";
 
 type ParamList = {
   Subcategory: { categoryId: string };
@@ -22,159 +23,95 @@ type SubcategoryRouteProp = RouteProp<ParamList, "Subcategory">;
 type NavigationProp = NativeStackNavigationProp<ParamList>;
 
 export default function SubcategoryScreen() {
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<SubcategoryRouteProp>();
   const { categoryId } = route.params;
-  const [drawerVisible, setDrawerVisible] = useState(false);
 
   const { practitionerCategories } = useDataContext();
   const { filterApprovedPractitioners } = usePlatformConfig();
-  const category = practitionerCategories.find((c) => c.id === categoryId);
+  const category =
+    practitionerCategories.find((c) => c.id === categoryId) ?? getCategoryById(categoryId);
   const approvedPractitioners = category
     ? filterApprovedPractitioners(category.practitioners)
     : [];
 
   if (!category) {
     return (
-      <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
+      <PageLayout title="Wellness" titleInHeader header="title" footerInset={tabBarHeight}>
         <ThemedText style={styles.errorText}>Category not found</ThemedText>
-      </View>
+      </PageLayout>
     );
   }
 
   const subcategories = category.subcategories || [];
 
   return (
-    <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+    <PageLayout
+      title={category.name}
+      subtitle={category.subtitle}
+      titleInHeader
+      header="title"
+      footerInset={tabBarHeight}
+      contentContainerStyle={styles.content}
+    >
+      <ThemedText style={styles.description}>{category.description}</ThemedText>
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.title}>{category.name}</ThemedText>
-        <ThemedText style={styles.subtitle}>{category.subtitle}</ThemedText>
-      </View>
+      <ThemedText style={styles.sectionHeading}>Choose a Service</ThemedText>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <ThemedText style={styles.description}>{category.description}</ThemedText>
+      {subcategories.map((sub) => {
+        const practitionerCount = countPractitionersInSubcategory(
+          approvedPractitioners,
+          category.name,
+          sub.name
+        );
 
-        <ThemedText style={styles.sectionTitle}>Choose a Service</ThemedText>
-
-        {subcategories.map((sub) => {
-          const practitionerCount = approvedPractitioners.filter(
-            (p) => p.subcategory === sub.name
-          ).length;
-
-          return (
-            <Pressable
-              key={sub.id}
-              style={styles.subcategoryCard}
-              onPress={() =>
-                navigation.navigate("CategoryDetail", {
-                  categoryId: category.id,
-                  subcategoryName: sub.name,
-                })
-              }
-              testID={`subcategory-${sub.id}`}
-            >
-              <View style={styles.subcategoryIconContainer}>
-                <Feather name={sub.icon as any} size={22} color={Colors.light.accent} />
-              </View>
-              <View style={styles.subcategoryInfo}>
-                <ThemedText style={styles.subcategoryName}>{sub.name}</ThemedText>
-                <ThemedText style={styles.subcategoryCount}>
-                  {practitionerCount > 0
-                    ? `${practitionerCount} practitioner${practitionerCount > 1 ? "s" : ""}`
-                    : "Coming soon"}
-                </ThemedText>
-              </View>
-              <Feather name="chevron-right" size={18} color={Colors.light.textMuted} />
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </View>
+        return (
+          <Pressable
+            key={sub.id}
+            style={styles.subcategoryCard}
+            onPress={() =>
+              navigation.navigate("CategoryDetail", {
+                categoryId: category.id,
+                subcategoryName: sub.name,
+              })
+            }
+            testID={`subcategory-${sub.id}`}
+          >
+            <View style={styles.subcategoryInfo}>
+              <ThemedText style={styles.subcategoryName}>{sub.name}</ThemedText>
+              <ThemedText style={styles.subcategoryCount}>
+                {practitionerCount > 0
+                  ? `${practitionerCount} practitioner${practitionerCount > 1 ? "s" : ""}`
+                  : "Coming soon"}
+              </ThemedText>
+            </View>
+            <Feather name="chevron-right" size={18} color={Colors.light.textMuted} />
+          </Pressable>
+        );
+      })}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: Colors.light.textMuted,
-    marginTop: 4,
-    fontFamily: "Nunito_400Regular",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: 12,
+  content: {
+    paddingTop: LayoutSpacing.xs,
   },
   description: {
     fontSize: 14,
     color: Colors.light.textSecondary,
     lineHeight: 21,
-    marginBottom: 20,
+    marginBottom: LayoutSpacing.lg,
     textAlign: "center",
   },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: Colors.light.text,
-    marginBottom: 14,
+  sectionHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+    textAlign: "center",
+    marginBottom: LayoutSpacing.md,
   },
   subcategoryCard: {
     flexDirection: "row",
@@ -183,15 +120,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     marginBottom: 10,
-  },
-  subcategoryIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: Colors.light.backgroundRoot,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
   },
   subcategoryInfo: {
     flex: 1,

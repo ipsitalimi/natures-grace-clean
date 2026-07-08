@@ -1,13 +1,13 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors } from "@/constants/theme";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { fetchSupportCopyMap, formatSupportCopyForDisplay, getSupportCopyKey } from "@/services/content/helpSupportService";
 
@@ -26,7 +26,6 @@ const supportNavItems = [
 ];
 
 export default function SupportScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const [copyMap, setCopyMap] = useState<Record<string, string> | null>(null);
   const [copyLoading, setCopyLoading] = useState(false);
@@ -74,50 +73,31 @@ export default function SupportScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+    <PageLayout title="Support" titleInHeader header="back" contentContainerStyle={styles.content}>
+      {!isSupabaseConfigured() ? (
+        <ThemedText style={styles.hintText}>Connect Supabase to sync support hub copy.</ThemedText>
+      ) : null}
+
+      {copyLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.hintText}>Loading…</ThemedText>
+        </View>
+      ) : null}
+
+      {copyError ? (
+        <Pressable onPress={() => void loadCopy()} testID="button-support-copy-retry">
+          <ThemedText style={styles.errorText}>{copyError} — tap to retry</ThemedText>
         </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      ) : null}
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Support</ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {!isSupabaseConfigured() ? (
-          <ThemedText style={styles.hintText}>Connect Supabase to sync support hub copy.</ThemedText>
-        ) : null}
-
-        {copyLoading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={Colors.light.accent} />
-            <ThemedText style={styles.hintText}>Loading…</ThemedText>
-          </View>
-        ) : null}
-
-        {copyError ? (
-          <Pressable onPress={() => void loadCopy()} testID="button-support-copy-retry">
-            <ThemedText style={styles.errorText}>{copyError} — tap to retry</ThemedText>
-          </Pressable>
-        ) : null}
-
-        {cards.map((item) => (
-          <Pressable
-            key={item.id}
-            style={styles.card}
-            onPress={() => navigation.navigate(item.screen)}
-            testID={`button-support-${item.id}`}
-          >
+      {cards.map((item) => (
+        <Card
+          key={item.id}
+          onPress={() => navigation.navigate(item.screen)}
+          testID={`button-support-${item.id}`}
+        >
+          <View style={styles.cardRow}>
             <View style={styles.cardIcon}>
               <Feather name={item.icon} size={22} color={Colors.light.accent} />
             </View>
@@ -126,71 +106,35 @@ export default function SupportScreen() {
               <ThemedText style={[styles.cardDescription, item.descMuted && styles.cardDescMuted]}>{item.description}</ThemedText>
             </View>
             <Feather name="chevron-right" size={18} color={Colors.light.textSecondary} />
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
+          </View>
+        </Card>
+      ))}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    gap: 10,
+  content: {
+    gap: LayoutSpacing.sm,
+    paddingTop: LayoutSpacing.xs,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   hintText: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   errorText: {
     fontSize: 14,
     color: "#8B3A3A",
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
-  card: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
+  cardRow: {
     flexDirection: "row",
     alignItems: "center",
   },
@@ -201,7 +145,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.light.accent}10`,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: Spacing.md,
+    marginRight: LayoutSpacing.md,
   },
   cardContent: {
     flex: 1,

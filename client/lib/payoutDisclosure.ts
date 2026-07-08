@@ -13,7 +13,7 @@ export function formatNextPayoutDate(value: string | null | undefined): string {
 }
 
 export const MANUAL_PAYOUT_NOTICE =
-  "Withdrawals are reviewed manually by the Nature's Grace team (typically 3–7 business days). Per-user bank verification is not wired in the app yet — contact support to register payout details.";
+  "Withdrawals are reviewed manually by the Nature's Grace team (typically 3–7 business days). Save your bank details below before requesting a withdrawal.";
 
 export const BANK_NOT_LINKED_NOTICE =
-  "Add your bank details via Support before withdrawing. Withdrawal requests are held until an admin verifies your account.";
+  "Save your bank account details below before requesting a withdrawal. Payouts are verified by the Nature's Grace team.";

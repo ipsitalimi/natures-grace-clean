@@ -23,6 +23,7 @@ export async function insertPractitioner(
   practitioner: Omit<Practitioner, "id" | "photo" | "localPhoto" | "reviewCount" | "availability"> & {
     id?: string;
     profileId?: string;
+    specialties?: Practitioner["specialties"];
   }
 ): Promise<Practitioner | null> {
   const supabase = getSupabase();
@@ -32,6 +33,14 @@ export async function insertPractitioner(
     name: practitioner.name,
     category: practitioner.category,
     subcategory: practitioner.subcategory ?? "",
+    specialties:
+      practitioner.specialties?.map((s) => ({
+        category: s.category,
+        subcategory: s.subcategory,
+      })) ??
+      (practitioner.category && practitioner.subcategory
+        ? [{ category: practitioner.category, subcategory: practitioner.subcategory }]
+        : []),
     bio: practitioner.bio ?? "",
     experience: practitioner.experience,
     certifications: practitioner.certifications ?? [],

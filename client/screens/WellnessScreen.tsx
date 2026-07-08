@@ -1,18 +1,18 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { View, StyleSheet, Pressable, Image, ActivityIndicator, ImageSourcePropType } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
+import { Colors, BorderRadius } from "@/constants/theme";
+import { CardTokens, LayoutSpacing } from "@/constants/layout";
+import { PageLayout } from "@/components/layout";
 import { useDataContext } from "@/context/DataContext";
-import { getHeaderPaddingTop } from "@/lib/layoutInsets";
+import { useAuth } from "@/context/AuthContext";
 
 import healingsIcon from "../../assets/images/icons/healings-icon.png";
 import therapiesIcon from "../../assets/images/icons/therapies-icon.png";
@@ -25,46 +25,64 @@ import animalHealingIcon from "../../assets/images/icons/animal-healing-icon.png
 const ICON_MAP: Record<string, ImageSourcePropType> = {
   healings: healingsIcon,
   therapies: therapiesIcon,
+  "spiritual-guidance": spiritualIcon,
   spiritual_guidance: spiritualIcon,
   counseling: counselingIcon,
+  "financial-guidance": financialIcon,
   financial_guidance: financialIcon,
   "nutrition-diet": nutritionIcon,
   diet_nutrition: nutritionIcon,
   "animal-healing": animalHealingIcon,
 };
 
-const CATEGORY_ORDER: string[] = [
+/** Display order matching the Wellness screen design (2-column grid). */
+const WELLNESS_DISPLAY_ORDER: string[] = [
   "healings",
-  "spiritual_guidance",
-  "spiritual-guidance",
   "counseling",
   "therapies",
-  "animal-healing",
-  "diet_nutrition",
-  "nutrition-diet",
-  "financial_guidance",
+  "spiritual-guidance",
   "financial-guidance",
+  "nutrition-diet",
+  "animal-healing",
 ];
 
 function getCategoryOrder(id: string): number {
-  const idx = CATEGORY_ORDER.indexOf(id);
+  const normalized = id.replace(/_/g, "-");
+  const idx = WELLNESS_DISPLAY_ORDER.indexOf(normalized);
   return idx === -1 ? 99 : idx;
 }
 
 const BUTTON_TEXT_MAP: Record<string, string> = {
   healings: "Explore",
-  spiritual_guidance: "Seek Now",
   counseling: "Find Help",
   therapies: "View All",
+  "spiritual-guidance": "Seek Now",
+  spiritual_guidance: "Seek Now",
+  "financial-guidance": "Get Advice",
   financial_guidance: "Get Advice",
   "nutrition-diet": "Learn More",
   diet_nutrition: "Learn More",
   "animal-healing": "Explore",
 };
 
+/** Short card copy from the Wellness screen design. */
+const CARD_DESCRIPTION_MAP: Record<string, string> = {
+  healings: "Reiki, chakra healing, and energy balancing.",
+  counseling: "Emotional support and guided conversations.",
+  therapies: "Naturopathy and holistic wellness treatments",
+  "spiritual-guidance": "Tarot readings and intuitive insight sessions.",
+  spiritual_guidance: "Tarot readings and intuitive insight sessions.",
+  "financial-guidance": "Mindful money management",
+  financial_guidance: "Mindful money management",
+  "nutrition-diet": "Balanced wholesome meals",
+  diet_nutrition: "Balanced wholesome meals",
+  "animal-healing": "healings for animals",
+};
+
 interface WellnessCategory {
   id: string;
   name: string;
+  description: string;
 }
 
 type WellnessStackParamList = {
@@ -86,20 +104,31 @@ type WellnessNavigationProp = CompositeNavigationProp<
 interface CategoryCardProps {
   icon: React.ReactNode;
   title: string;
+  description: string;
   buttonText: string;
   onPress: () => void;
 }
 
-function CategoryCard({ icon, title, buttonText, onPress }: CategoryCardProps) {
+function CategoryCard({ icon, title, description, buttonText, onPress }: CategoryCardProps) {
   return (
     <View style={styles.categoryCard}>
-      <View style={styles.categoryIconContainer}>{icon}</View>
-      <ThemedText style={styles.categoryTitle} numberOfLines={2}>
-        {title}
-      </ThemedText>
-      <Pressable style={styles.categoryButton} onPress={onPress}>
+      <View style={styles.categoryCardBody}>
+        <View style={styles.categoryIconContainer}>{icon}</View>
+        <ThemedText style={styles.categoryTitle} numberOfLines={2}>
+          {title}
+        </ThemedText>
+        <View style={styles.categoryDescriptionWrap}>
+          <ThemedText style={styles.categoryDescription} numberOfLines={3}>
+            {description}
+          </ThemedText>
+        </View>
+      </View>
+      <Pressable
+        style={({ pressed }) => [styles.categoryButton, pressed && styles.categoryButtonPressed]}
+        onPress={onPress}
+      >
         <ThemedText style={styles.categoryButtonText}>{buttonText}</ThemedText>
-        <Feather name="chevron-right" size={10} color="#FFFFFF" />
+        <Feather name="chevron-right" size={14} color="#FFFFFF" />
       </Pressable>
     </View>
   );
@@ -107,14 +136,28 @@ function CategoryCard({ icon, title, buttonText, onPress }: CategoryCardProps) {
 
 export default function WellnessScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<WellnessNavigationProp>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const { practitionerCategories, practitionersLoading, dataError, refreshContent } = useDataContext();
+  const { profile } = useAuth();
+  const showPractitionerApplication =
+    profile?.role !== "Practitioner" && profile?.role !== "Seller";
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void refreshContent({ silent: true });
+    }, [refreshContent])
+  );
 
   const categories = useMemo<WellnessCategory[]>(() => {
     return [...practitionerCategories]
-      .map((c) => ({ id: c.id, name: c.name }))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        description:
+          CARD_DESCRIPTION_MAP[c.id] ??
+          CARD_DESCRIPTION_MAP[c.id.replace(/_/g, "-")] ??
+          c.subtitle,
+      }))
       .sort((a, b) => getCategoryOrder(a.id) - getCategoryOrder(b.id));
   }, [practitionerCategories]);
 
@@ -126,56 +169,35 @@ export default function WellnessScreen() {
     navigation.navigate("HomeTab");
   };
 
-  const renderCategoryRows = () => {
-    const rows: WellnessCategory[][] = [];
-    for (let i = 0; i < categories.length; i += 2) {
-      rows.push(categories.slice(i, i + 2));
-    }
-    return rows.map((row, rowIndex) => (
-      <View key={rowIndex} style={styles.categoriesRow}>
-        {row.map((cat) => (
-          <CategoryCard
-            key={cat.id}
-            icon={
-              <Image
-                source={ICON_MAP[cat.id] || healingsIcon}
-                style={styles.categoryIconImage}
-                resizeMode="contain"
-              />
-            }
-            title={cat.name}
-            buttonText={BUTTON_TEXT_MAP[cat.id] || "Explore"}
-            onPress={() => navigateToCategory(cat.id)}
+  const renderCategoryGrid = () =>
+    categories.map((cat) => (
+      <CategoryCard
+        key={cat.id}
+        icon={
+          <Image
+            source={ICON_MAP[cat.id] || ICON_MAP[cat.id.replace(/_/g, "-")] || healingsIcon}
+            style={styles.categoryIconImage}
+            resizeMode="cover"
           />
-        ))}
-        {row.length === 1 ? <View style={{ flex: 1 }} /> : null}
-      </View>
+        }
+        title={cat.name}
+        buttonText={BUTTON_TEXT_MAP[cat.id] ?? BUTTON_TEXT_MAP[cat.id.replace(/_/g, "-")] ?? "Explore"}
+        description={cat.description}
+        onPress={() => navigateToCategory(cat.id)}
+      />
     ));
-  };
 
   return (
-    <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Notifications" as never)}
-          testID="button-notifications"
-        >
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
-
-      <View style={[styles.mainContent, { paddingBottom: tabBarHeight + 8 }]}>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.title}>Wellness</ThemedText>
-          <ThemedText style={styles.subtitle}>What kind of support feels right for you today?</ThemedText>
-        </View>
-
+    <PageLayout
+      title="Wellness"
+      titleInHeader
+      subtitle="What kind of support feels right for you today?"
+      header="title"
+      headerProps={{ onBackPress: goBackToHome }}
+      scrollable
+      footerInset={tabBarHeight}
+      contentContainerStyle={styles.mainContent}
+    >
         {practitionersLoading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={Colors.light.accent} />
@@ -188,60 +210,46 @@ export default function WellnessScreen() {
               <ThemedText style={styles.retryText}>Try again</ThemedText>
             </Pressable>
           </View>
-        ) : categories.length === 0 ? (
-          <View style={styles.loadingContainer}>
-            <ThemedText style={styles.errorText}>No wellness categories available yet.</ThemedText>
-          </View>
         ) : (
-          <View style={styles.categoriesGrid}>{renderCategoryRows()}</View>
+          <>
+            <ThemedText style={styles.sectionHeading}>Explore Our Services</ThemedText>
+            <View style={styles.categoriesGrid}>{renderCategoryGrid()}</View>
+          </>
         )}
 
-        <Pressable
-          style={styles.becomePractitionerButton}
-          onPress={() => navigation.navigate("PractitionerApplication" as never)}
-          testID="button-become-practitioner"
-        >
-          <Feather name="briefcase" size={15} color={Colors.light.accent} />
-          <ThemedText style={styles.becomePractitionerText}>Become a Practitioner</ThemedText>
-        </Pressable>
-      </View>
-    </View>
+        {showPractitionerApplication ? (
+          <Pressable
+            style={styles.becomePractitionerButton}
+            onPress={() => navigation.navigate("PractitionerApplication" as never)}
+            testID="button-become-practitioner"
+          >
+            <Feather name="briefcase" size={15} color={Colors.light.accent} />
+            <ThemedText style={styles.becomePractitionerText}>Become a Practitioner</ThemedText>
+          </Pressable>
+        ) : null}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 4,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
   mainContent: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
+    flexGrow: 1,
+    paddingTop: LayoutSpacing.xs,
   },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: 10,
+  sectionHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+    textAlign: "center",
+    marginBottom: LayoutSpacing.md,
   },
   loadingContainer: {
     flex: 1,
+    minHeight: 200,
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
-    paddingHorizontal: Spacing.lg,
+    gap: LayoutSpacing.sm,
   },
   errorText: {
     fontSize: 15,
@@ -249,9 +257,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   retryBtn: {
-    marginTop: 4,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    marginTop: LayoutSpacing.xs,
+    paddingHorizontal: LayoutSpacing.md,
+    paddingVertical: LayoutSpacing.sm,
     borderRadius: BorderRadius.md,
     backgroundColor: Colors.light.accent,
   },
@@ -260,78 +268,92 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: Colors.light.textMuted,
-    textAlign: "center",
-  },
   categoriesGrid: {
-    flex: 1,
-    marginBottom: 8,
-  },
-  categoriesRow: {
-    flex: 1,
     flexDirection: "row",
-    gap: 8,
-    marginBottom: 8,
+    flexWrap: "wrap",
+    columnGap: LayoutSpacing.sm,
+    rowGap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.md,
   },
   categoryCard: {
-    flex: 1,
+    width: "47.5%",
+    height: 224,
     backgroundColor: Colors.light.cardBackground,
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
+    borderRadius: CardTokens.radius,
+    padding: LayoutSpacing.md,
+    paddingBottom: LayoutSpacing.sm,
     alignItems: "center",
     justifyContent: "space-between",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  categoryCardBody: {
+    flex: 1,
+    width: "100%",
+    alignItems: "center",
   },
   categoryIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 5,
+    marginBottom: LayoutSpacing.xs,
+    backgroundColor: "#FFFFFF",
     overflow: "hidden",
   },
   categoryIconImage: {
-    width: 54,
-    height: 54,
+    width: "100%",
+    height: "100%",
+    transform: [{ scale: 1.3 }],
   },
   categoryTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Colors.light.text,
-    marginBottom: 5,
+    fontSize: 15,
+    fontWeight: "600",
+    fontFamily: "ui-serif",
+    color: Colors.light.accent,
+    marginBottom: LayoutSpacing.xs,
     textAlign: "center",
-    lineHeight: 17,
+    lineHeight: 19,
+    minHeight: 38,
+  },
+  categoryDescriptionWrap: {
+    flex: 1,
+    width: "100%",
+    justifyContent: "flex-start",
+    minHeight: 45,
+  },
+  categoryDescription: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontFamily: "ui-serif",
+    color: Colors.light.accent,
+    textAlign: "center",
+    opacity: 0.85,
+    minHeight: 45,
   },
   categoryButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.light.button,
-    borderRadius: 8,
-    paddingVertical: 5,
+    backgroundColor: Colors.light.accent,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: LayoutSpacing.sm,
     width: "100%",
-    gap: 3,
+    gap: LayoutSpacing.xs,
+    marginTop: LayoutSpacing.xs,
+  },
+  categoryButtonPressed: {
+    opacity: 0.9,
   },
   categoryButtonText: {
-    fontSize: 11,
+    fontSize: 12,
     color: "#FFFFFF",
-    fontWeight: "500",
+    fontWeight: "600",
+    fontFamily: "Nunito_700Bold",
   },
   becomePractitionerButton: {
     flexDirection: "row",
@@ -342,8 +364,8 @@ const styles = StyleSheet.create({
     borderColor: Colors.light.accent,
     borderRadius: BorderRadius.sm,
     paddingVertical: 9,
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.sm,
+    paddingHorizontal: LayoutSpacing.xl,
+    gap: LayoutSpacing.sm,
     marginTop: 4,
   },
   becomePractitionerText: {

@@ -7,3 +7,12 @@ export function getApiBaseUrl(): string {
   if (__DEV__) return "http://localhost:5000";
   throw new Error("EXPO_PUBLIC_API_URL is not configured");
 }
+
+/** Returns null in production when API URL is unset instead of throwing. */
+export function tryGetApiBaseUrl(): string | null {
+  try {
+    return getApiBaseUrl();
+  } catch {
+    return null;
+  }
+}

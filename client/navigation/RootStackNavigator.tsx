@@ -27,6 +27,8 @@ import ContactScreen from "@/screens/ContactScreen";
 import AboutScreen from "@/screens/AboutScreen";
 import LegalDocumentScreen from "@/screens/LegalDocumentScreen";
 import SignupLegalScreen from "@/screens/SignupLegalScreen";
+import VerifyEmailScreen from "@/screens/VerifyEmailScreen";
+import AuthCallbackScreen from "@/screens/AuthCallbackScreen";
 import LegalReacceptanceScreen from "@/screens/LegalReacceptanceScreen";
 import UserLegalSettingsScreen from "@/screens/UserLegalSettingsScreen";
 import SupportScreen from "@/screens/SupportScreen";
@@ -38,6 +40,7 @@ import SessionOfferingsScreen from "@/screens/practitioner/SessionOfferingsScree
 import AddEditOfferingScreen from "@/screens/practitioner/AddEditOfferingScreen";
 import PractitionerWalletScreen from "@/screens/practitioner/PractitionerWalletScreen";
 import PractitionerAnalyticsScreen from "@/screens/practitioner/PractitionerAnalyticsScreen";
+import PractitionerReviewsScreen from "@/screens/practitioner/PractitionerReviewsScreen";
 import SellerTabNavigator from "@/navigation/SellerTabNavigator";
 import SellerProductDetailScreen from "@/screens/seller/SellerProductDetailScreen";
 import ProductListingsScreen from "@/screens/seller/ProductListingsScreen";
@@ -48,7 +51,9 @@ import SellerWalletScreen from "@/screens/seller/SellerWalletScreen";
 import SellerPromotionsScreen from "@/screens/seller/SellerPromotionsScreen";
 import SellerReviewsScreen from "@/screens/seller/SellerReviewsScreen";
 import SellerStoreCustomizationScreen from "@/screens/seller/SellerStoreCustomizationScreen";
+import SellerDeliverySettingsScreen from "@/screens/seller/SellerDeliverySettingsScreen";
 import SellerOnboardingScreen from "@/screens/seller/SellerOnboardingScreen";
+import PractitionerOnboardingScreen from "@/screens/practitioner/PractitionerOnboardingScreen";
 import KnowYourAdminScreen from "@/screens/KnowYourAdminScreen";
 import FirebaseDebugScreen from "@/screens/FirebaseDebugScreen";
 import NGBuddyScreen from "@/screens/NGBuddyScreen";
@@ -70,6 +75,7 @@ const GuardedSessionOfferings = withRequireRole(SessionOfferingsScreen, "Practit
 const GuardedAddEditOffering = withRequireRole(AddEditOfferingScreen, "Practitioner");
 const GuardedPractitionerWallet = withRequireRole(PractitionerWalletScreen, "Practitioner");
 const GuardedPractitionerAnalytics = withRequireRole(PractitionerAnalyticsScreen, "Practitioner");
+const GuardedPractitionerReviews = withRequireRole(PractitionerReviewsScreen, "Practitioner");
 const GuardedSellerProductDetail = withRequireRole(SellerProductDetailScreen, "Seller");
 const GuardedProductListings = withRequireRole(ProductListingsScreen, "Seller");
 const GuardedAddEditProductListing = withRequireRole(AddEditProductListingScreen, "Seller");
@@ -79,12 +85,16 @@ const GuardedSellerWallet = withRequireRole(SellerWalletScreen, "Seller");
 const GuardedSellerPromotions = withRequireRole(SellerPromotionsScreen, "Seller");
 const GuardedSellerReviews = withRequireRole(SellerReviewsScreen, "Seller");
 const GuardedSellerStoreCustomization = withRequireRole(SellerStoreCustomizationScreen, "Seller");
+const GuardedSellerDeliverySettings = withRequireRole(SellerDeliverySettingsScreen, "Seller");
 const GuardedSellerOnboarding = withRequireRole(SellerOnboardingScreen, "Seller");
+const GuardedPractitionerOnboarding = withRequireRole(PractitionerOnboardingScreen, "Practitioner");
 
 export type RootStackParamList = {
   Login: undefined;
   Signup: undefined;
   SignupLegal: { name: string; email: string; password: string };
+  VerifyEmail: { email: string };
+  AuthCallback: undefined;
   LegalReacceptance: undefined;
   ForgotPassword: undefined;
   Main: undefined;
@@ -134,8 +144,10 @@ export type RootStackParamList = {
   AddEditOffering: { offeringId: string | null };
   PractitionerWallet: undefined;
   PractitionerAnalytics: undefined;
+  PractitionerReviews: undefined;
   SellerMain: undefined;
   SellerOnboarding: undefined;
+  PractitionerOnboarding: undefined;
   SellerProductDetail: { productId: string };
   ProductListings: undefined;
   AddEditProductListing: { listingId?: string | null; prefill?: any };
@@ -145,6 +157,7 @@ export type RootStackParamList = {
   SellerPromotions: undefined;
   SellerReviews: undefined;
   SellerStoreCustomization: undefined;
+  SellerDeliverySettings: undefined;
   KnowYourAdmin: undefined;
   FirebaseDebug: undefined;
   NGBuddy: undefined;
@@ -173,6 +186,16 @@ export default function RootStackNavigator() {
         name="SignupLegal"
         component={SignupLegalScreen}
         options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="VerifyEmail"
+        component={VerifyEmailScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="AuthCallback"
+        component={AuthCallbackScreen}
+        options={{ headerShown: false, gestureEnabled: false }}
       />
       <Stack.Screen
         name="LegalReacceptance"
@@ -343,6 +366,11 @@ export default function RootStackNavigator() {
         options={{ headerShown: false }}
       />
       <Stack.Screen
+        name="PractitionerOnboarding"
+        component={GuardedPractitionerOnboarding}
+        options={{ headerShown: false, gestureEnabled: false }}
+      />
+      <Stack.Screen
         name="PractitionerSessionDetail"
         component={GuardedPractitionerSessionDetail}
         options={{ headerShown: false }}
@@ -370,6 +398,11 @@ export default function RootStackNavigator() {
       <Stack.Screen
         name="PractitionerAnalytics"
         component={GuardedPractitionerAnalytics}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="PractitionerReviews"
+        component={GuardedPractitionerReviews}
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -425,6 +458,11 @@ export default function RootStackNavigator() {
       <Stack.Screen
         name="SellerStoreCustomization"
         component={GuardedSellerStoreCustomization}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerDeliverySettings"
+        component={GuardedSellerDeliverySettings}
         options={{ headerShown: false }}
       />
       <Stack.Screen

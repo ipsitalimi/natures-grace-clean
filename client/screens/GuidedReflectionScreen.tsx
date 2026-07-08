@@ -1,30 +1,38 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, StyleSheet, Pressable, Animated, Easing, Alert } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Pressable,
+  Animated,
+  Easing,
+  Alert,
+  ScrollView,
+} from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useJournal } from "@/context/JournalContext";
 import { useGratitude } from "@/context/GratitudeContext";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { getMoodColor } from "@/lib/journalMoods";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 type MoodStackParamList = {
   JournalEditor: { prompt?: string };
   GuidedReflection: undefined;
 };
 
-
 export default function GuidedReflectionScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(tabBarHeight);
   const navigation = useNavigation<NativeStackNavigationProp<MoodStackParamList>>();
-  const { selectedMood } = useJournal();
+  const { selectedMoods } = useJournal();
   const { getActivePrompts, promptsLoading } = useGratitude();
   const { session } = useAuth();
 
@@ -66,7 +74,7 @@ export default function GuidedReflectionScreen() {
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [breatheAnim]);
 
   const handleStartWriting = () => {
     navigation.replace("JournalEditor", {
@@ -76,30 +84,33 @@ export default function GuidedReflectionScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <View style={styles.headerIconButton} />
-      </View>
+      <BackHeader showNotifications={false} />
+      <BelowHeaderTitle>Guided Reflection</BelowHeaderTitle>
 
-      <View style={[styles.content, { paddingBottom: tabBarHeight + 20 }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <Animated.View style={[styles.breatheCircle, { transform: [{ scale: breatheAnim }] }]}>
           <View style={styles.breatheInner}>
             <Feather name="wind" size={28} color={Colors.light.accent} />
           </View>
         </Animated.View>
 
-        <ThemedText style={styles.title}>Guided Reflection</ThemedText>
         <ThemedText style={styles.subtitle}>
           Take a deep breath. Choose a prompt that speaks to you.
         </ThemedText>
 
-        {selectedMood ? (
-          <View style={styles.moodChip}>
-            <View style={[styles.moodDot, { backgroundColor: getMoodColor(selectedMood) }]} />
-            <ThemedText style={styles.moodChipText}>Feeling {selectedMood.toLowerCase()}</ThemedText>
+        {selectedMoods.length > 0 ? (
+          <View style={styles.moodChipRow}>
+            {selectedMoods.map((mood) => (
+              <View key={mood} style={styles.moodChip}>
+                <View style={[styles.moodDot, { backgroundColor: getMoodColor(mood) }]} />
+                <ThemedText style={styles.moodChipText}>{mood}</ThemedText>
+              </View>
+            ))}
           </View>
         ) : null}
 
@@ -125,17 +136,21 @@ export default function GuidedReflectionScreen() {
                 testID={`prompt-card-${index}`}
               >
                 <View style={styles.promptNumber}>
-                  <ThemedText style={[
-                    styles.promptNumberText,
-                    selectedPrompt === prompt && styles.promptNumberTextSelected,
-                  ]}>
+                  <ThemedText
+                    style={[
+                      styles.promptNumberText,
+                      selectedPrompt === prompt && styles.promptNumberTextSelected,
+                    ]}
+                  >
                     {index + 1}
                   </ThemedText>
                 </View>
-                <ThemedText style={[
-                  styles.promptText,
-                  selectedPrompt === prompt && styles.promptTextSelected,
-                ]}>
+                <ThemedText
+                  style={[
+                    styles.promptText,
+                    selectedPrompt === prompt && styles.promptTextSelected,
+                  ]}
+                >
                   {prompt}
                 </ThemedText>
                 {selectedPrompt === prompt ? (
@@ -156,19 +171,9 @@ export default function GuidedReflectionScreen() {
             {selectedPrompt ? "Start Writing" : "Write Freely"}
           </ThemedText>
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
-}
-
-function getMoodColor(mood: string): string {
-  switch (mood) {
-    case "Peaceful": return "#7BA68A";
-    case "Grateful": return "#C4A97A";
-    case "Anxious": return "#C47A7A";
-    case "Hopeful": return "#7AAEC4";
-    default: return Colors.light.accent;
-  }
 }
 
 const styles = StyleSheet.create({
@@ -176,22 +181,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-  },
-  headerIconButton: {
-    padding: 8,
-    width: 40,
-  },
-  headerCenter: {
+  scroll: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
     paddingHorizontal: Spacing.xl,
     alignItems: "center",
   },
@@ -202,7 +195,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.light.accent}10`,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   breatheInner: {
     width: 56,
@@ -212,14 +205,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    marginBottom: 8,
-    textAlign: "center",
-  },
   subtitle: {
     fontSize: 15,
     color: Colors.light.textSecondary,
@@ -227,6 +212,13 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: Spacing.lg,
     opacity: 0.7,
+  },
+  moodChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: Spacing.lg,
   },
   moodChip: {
     flexDirection: "row",
@@ -236,7 +228,6 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     gap: 8,
-    marginBottom: Spacing.xl,
   },
   moodDot: {
     width: 8,

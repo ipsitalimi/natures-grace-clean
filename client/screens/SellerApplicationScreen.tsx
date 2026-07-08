@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { View, ScrollView, StyleSheet, TextInput, Pressable, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
+import { ScreenHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 import { useAuth } from "@/context/AuthContext";
@@ -20,12 +20,14 @@ import { submitRoleApplication } from "@/services/platform/roleApplicationsServi
 import { uploadApplicationDocuments } from "@/services/platform/applicationDocumentsService";
 import ApplicationDocumentsSection from "@/components/ApplicationDocumentsSection";
 import type { LocalFile } from "@/lib/storageUpload";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
-const PRODUCT_CATEGORIES = ["Wellness Essentials", "Herbal & Organic", "Mindfulness Tools", "Skincare & Body", "Nutrition & Supplements", "Home & Living"];
+import { getStoreCategoryNames } from "@/data/storeCategories";
+
+const PRODUCT_CATEGORIES = getStoreCategoryNames();
 
 export default function SellerApplicationScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(30);
   const navigation = useNavigation();
   const { appNameDisplay } = useAppBrandCopy();
   const { session, profile, refreshProfile } = useAuth();
@@ -145,16 +147,20 @@ export default function SellerApplicationScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) + Spacing.sm }]}>
-        <Pressable style={styles.backButton} onPress={handleReturn} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.screenTitle}>Become a Seller</ThemedText>
-      </View>
+      <ScreenHeader
+        variant="back"
+        showNotifications={false}
+        onBackPress={handleReturn}
+        center={
+          <ThemedText style={styles.screenTitle} numberOfLines={1} adjustsFontSizeToFit>
+            Become a Seller
+          </ThemedText>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <ThemedText style={styles.introText}>
@@ -316,21 +322,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
   },
   screenTitle: {
     fontSize: 20,

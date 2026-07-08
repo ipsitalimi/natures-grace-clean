@@ -2,23 +2,21 @@ import React, { useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   TextInput,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useReviews } from "@/context/ReviewsContext";
 import type { Review } from "@/data/reviews";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 function StarRating({
   rating,
@@ -117,7 +115,7 @@ function ReviewCard({
   };
 
   return (
-    <View style={styles.card} testID={`review-card-${review.id}`}>
+    <Card testID={`review-card-${review.id}`}>
       <View style={styles.cardHeader}>
         <View style={styles.cardInfo}>
           <ThemedText style={styles.practitionerName}>{title}</ThemedText>
@@ -184,122 +182,60 @@ function ReviewCard({
       ) : null}
 
       {actionError ? <ThemedText style={styles.actionError}>{actionError}</ThemedText> : null}
-    </View>
+    </Card>
   );
 }
 
 export default function MyReviewsScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const { session } = useAuth();
   const { myReviews, reviewsLoading, reviewsError, updateMyReview, deleteMyReview } = useReviews();
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Notifications" as never)}
-          testID="button-notifications"
-        >
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+    <PageLayout title="My Reviews" titleInHeader header="back" contentContainerStyle={styles.content}>
+      {reviewsLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading your reviews…</ThemedText>
+        </View>
+      ) : null}
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>My Reviews</ThemedText>
-      </View>
+      {reviewsError ? (
+        <ThemedText style={styles.errorText}>{reviewsError}</ThemedText>
+      ) : null}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {reviewsLoading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={Colors.light.accent} />
-            <ThemedText style={styles.loadingText}>Loading your reviews…</ThemedText>
-          </View>
-        ) : null}
+      {!session?.user && isSupabaseConfigured() ? (
+        <ThemedText style={styles.errorText}>Sign in to view your reviews.</ThemedText>
+      ) : null}
 
-        {reviewsError ? (
-          <ThemedText style={styles.errorText}>{reviewsError}</ThemedText>
-        ) : null}
+      {!reviewsLoading && !reviewsError && myReviews.length === 0 ? (
+        <ThemedText style={styles.emptyText}>
+          You have not written any reviews yet. Complete a session and share your experience
+          from Session History.
+        </ThemedText>
+      ) : null}
 
-        {!session?.user && isSupabaseConfigured() ? (
-          <ThemedText style={styles.errorText}>Sign in to view your reviews.</ThemedText>
-        ) : null}
-
-        {!reviewsLoading && !reviewsError && myReviews.length === 0 ? (
-          <ThemedText style={styles.emptyText}>
-            You have not written any reviews yet. Complete a session and share your experience
-            from Session History.
-          </ThemedText>
-        ) : null}
-
-        {myReviews.map((review) => (
-          <ReviewCard
-            key={review.id}
-            review={review}
-            onUpdate={updateMyReview}
-            onDelete={deleteMyReview}
-          />
-        ))}
-      </ScrollView>
-    </View>
+      {myReviews.map((review) => (
+        <ReviewCard
+          key={review.id}
+          review={review}
+          onUpdate={updateMyReview}
+          onDelete={deleteMyReview}
+        />
+      ))}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    gap: 10,
+  content: {
+    gap: LayoutSpacing.sm,
+    paddingTop: LayoutSpacing.xs,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.md,
   },
   loadingText: {
     fontSize: 14,
@@ -309,7 +245,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#8B3A3A",
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   emptyText: {
     fontSize: 14,
@@ -317,16 +253,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
   },
-  card: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-  },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   cardInfo: {
     flex: 1,
@@ -349,17 +280,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.light.text,
     lineHeight: 20,
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   editInput: {
     minHeight: 80,
     backgroundColor: Colors.light.backgroundRoot,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
+    padding: LayoutSpacing.md,
     fontSize: 14,
     color: Colors.light.text,
     lineHeight: 20,
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   cardFooter: {
     flexDirection: "row",
@@ -376,8 +307,8 @@ const styles = StyleSheet.create({
   },
   actionsRow: {
     flexDirection: "row",
-    gap: 10,
-    marginTop: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginTop: LayoutSpacing.md,
   },
   actionButton: {
     flex: 1,
@@ -407,6 +338,6 @@ const styles = StyleSheet.create({
   actionError: {
     fontSize: 12,
     color: "#8B3A3A",
-    marginTop: Spacing.sm,
+    marginTop: LayoutSpacing.sm,
   },
 });

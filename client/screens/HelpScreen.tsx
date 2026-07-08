@@ -1,12 +1,12 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { View, StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors } from "@/constants/theme";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { fetchPublishedFaqSections, type PublishedFaqSection } from "@/services/content/helpSupportService";
 
@@ -16,9 +16,9 @@ function FAQItem({ item }: { item: FaqItemDisplay }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Pressable
-      style={styles.faqCard}
+    <Card
       onPress={() => setExpanded(!expanded)}
+      style={styles.faqCard}
       testID={`faq-item-${item.id}`}
     >
       <View style={styles.faqHeader}>
@@ -32,13 +32,11 @@ function FAQItem({ item }: { item: FaqItemDisplay }) {
       {expanded ? (
         <ThemedText style={styles.answer}>{item.answer}</ThemedText>
       ) : null}
-    </Pressable>
+    </Card>
   );
 }
 
 export default function HelpScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const [sections, setSections] = useState<PublishedFaqSection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,137 +69,84 @@ export default function HelpScreen() {
   const flatCount = sections.reduce((n, s) => n + s.items.length, 0);
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+    <PageLayout title="Help" titleInHeader header="back" contentContainerStyle={styles.content}>
+      {!isSupabaseConfigured() ? (
+        <ThemedText style={styles.hintText}>Connect Supabase to load FAQs.</ThemedText>
+      ) : null}
+
+      {loading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.hintText}>Loading questions…</ThemedText>
+        </View>
+      ) : null}
+
+      {error ? (
+        <Pressable onPress={() => void load()} testID="button-help-retry">
+          <ThemedText style={styles.errorText}>{error} — tap to retry</ThemedText>
         </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      ) : null}
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Help</ThemedText>
-      </View>
+      {isSupabaseConfigured() && !loading && !error ? (
+        <ThemedText style={styles.sectionTitle}>Frequently Asked Questions</ThemedText>
+      ) : null}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {!isSupabaseConfigured() ? (
-          <ThemedText style={styles.hintText}>Connect Supabase to load FAQs.</ThemedText>
-        ) : null}
+      {isSupabaseConfigured() && !loading && !error && flatCount === 0 ? (
+        <ThemedText style={styles.emptyText}>No published FAQs yet.</ThemedText>
+      ) : null}
 
-        {loading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={Colors.light.accent} />
-            <ThemedText style={styles.hintText}>Loading questions…</ThemedText>
+      {sections.map((section) =>
+        section.items.length > 0 ? (
+          <View key={section.id} style={styles.sectionBlock}>
+            {sections.length > 1 ? (
+              <ThemedText style={styles.categoryTitle}>{section.title}</ThemedText>
+            ) : null}
+            {section.items.map((item) => (
+              <FAQItem key={item.id} item={item} />
+            ))}
           </View>
-        ) : null}
-
-        {error ? (
-          <Pressable onPress={() => void load()} testID="button-help-retry">
-            <ThemedText style={styles.errorText}>{error} — tap to retry</ThemedText>
-          </Pressable>
-        ) : null}
-
-        {isSupabaseConfigured() && !loading && !error ? (
-          <ThemedText style={styles.sectionTitle}>Frequently Asked Questions</ThemedText>
-        ) : null}
-
-        {isSupabaseConfigured() && !loading && !error && flatCount === 0 ? (
-          <ThemedText style={styles.emptyText}>No published FAQs yet.</ThemedText>
-        ) : null}
-
-        {sections.map((section) =>
-          section.items.length > 0 ? (
-            <View key={section.id} style={styles.sectionBlock}>
-              {sections.length > 1 ? (
-                <ThemedText style={styles.categoryTitle}>{section.title}</ThemedText>
-              ) : null}
-              {section.items.map((item) => (
-                <FAQItem key={item.id} item={item} />
-              ))}
-            </View>
-          ) : null
-        )}
-      </ScrollView>
-    </View>
+        ) : null
+      )}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
+  content: {
+    gap: LayoutSpacing.sm,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.md,
   },
   hintText: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   errorText: {
     fontSize: 14,
     color: "#8B3A3A",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   emptyText: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   sectionBlock: {
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   categoryTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: Colors.light.textMuted,
-    marginBottom: Spacing.sm,
-    marginLeft: 4,
+    marginBottom: LayoutSpacing.sm,
+    marginLeft: LayoutSpacing.xs,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
   },
   sectionTitle: {
     fontSize: 14,
@@ -209,14 +154,11 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: Spacing.sm,
-    marginLeft: 4,
+    marginBottom: LayoutSpacing.sm,
+    marginLeft: LayoutSpacing.xs,
   },
   faqCard: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    marginBottom: 10,
+    marginBottom: LayoutSpacing.sm,
   },
   faqHeader: {
     flexDirection: "row",
@@ -228,12 +170,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.light.text,
     flex: 1,
-    marginRight: Spacing.sm,
+    marginRight: LayoutSpacing.sm,
   },
   answer: {
     fontSize: 14,
     color: Colors.light.textSecondary,
     lineHeight: 21,
-    marginTop: Spacing.md,
+    marginTop: LayoutSpacing.md,
   },
 });

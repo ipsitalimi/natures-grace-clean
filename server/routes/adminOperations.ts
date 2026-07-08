@@ -245,6 +245,11 @@ export function registerAdminOperationsRoutes(app: Express) {
       return res.status(404).json({ error: "Refund request not found" });
     }
 
+    const existingStatus = String((existing as { status: string }).status);
+    if (existingStatus === "approved" || existingStatus === "rejected") {
+      return res.status(409).json({ error: `Refund already ${existingStatus}` });
+    }
+
     const userId = (existing as { user_id: string }).user_id;
     const orderId = (existing as { order_id?: string | null }).order_id;
     const bookingId = (existing as { booking_id?: string | null }).booking_id;

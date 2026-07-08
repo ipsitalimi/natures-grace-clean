@@ -84,6 +84,7 @@ export interface PlatformSettings {
   };
   twoFactorEnabled: boolean;
   sessionTimeoutMinutes: number;
+  youtubeChannelUrl?: string;
 }
 
 export interface HomeContent {

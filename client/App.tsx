@@ -1,9 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import { StyleSheet, View } from "react-native";
 import { DefaultTheme, NavigationContainer, NavigationContainerRef } from "@react-navigation/native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 
@@ -33,7 +33,11 @@ import { ReviewsProvider } from "@/context/ReviewsContext";
 import { ModerationProvider } from "@/context/ModerationContext";
 import { AdminSessionsProvider } from "@/context/AdminSessionsContext";
 import { PlatformConfigProvider } from "@/context/PlatformConfigContext";
+import { DrawerProvider } from "@/context/DrawerContext";
 import MaintenanceOverlay from "@/components/MaintenanceOverlay";
+import { navigationLinking } from "@/lib/navigationLinking";
+import { usePushNotificationHandlers } from "@/hooks/usePushNotificationHandlers";
+import { useAuth } from "@/context/AuthContext";
 import { getProductionConfigError } from "@/lib/productionConfig";
 import { ThemedText } from "@/components/ThemedText";
 
@@ -52,16 +56,35 @@ const navigationTheme = {
 
 function AppShell() {
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
+  const drawerCloseRef = useRef<(() => void) | null>(null);
+  const { profile } = useAuth();
+
+  usePushNotificationHandlers(navigationRef, profile?.role);
+
+  const registerNavigationCloseHandler = useCallback((handler: (() => void) | null) => {
+    drawerCloseRef.current = handler;
+  }, []);
+
+  const handleNavigationStateChange = useCallback(() => {
+    drawerCloseRef.current?.();
+  }, []);
 
   return (
     <SafeAreaProvider>
       <GestureHandlerRootView style={styles.root}>
         <KeyboardProvider>
-          <NavigationContainer ref={navigationRef} theme={navigationTheme}>
-            <SafeAreaView style={styles.root} edges={["top", "left", "right"]}>
-              <RootNavigation navigationRef={navigationRef} />
+          <NavigationContainer
+            ref={navigationRef}
+            theme={navigationTheme}
+            linking={navigationLinking}
+            onStateChange={handleNavigationStateChange}
+          >
+            <View style={styles.root}>
+              <DrawerProvider registerNavigationCloseHandler={registerNavigationCloseHandler}>
+                <RootNavigation navigationRef={navigationRef} />
+              </DrawerProvider>
               <MaintenanceOverlay />
-            </SafeAreaView>
+            </View>
           </NavigationContainer>
           <StatusBar style="dark" />
         </KeyboardProvider>

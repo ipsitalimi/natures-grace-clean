@@ -1,16 +1,18 @@
 import React from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useJournal } from "@/context/JournalContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import type { MoodStackParamList } from "@/navigation/MoodStackNavigator";
+
+import { getMoodColor, parseMoodsFromStorage } from "@/lib/journalMoods";
 
 type RouteParams = {
   JournalEntryView: { entryId: string };
@@ -18,19 +20,9 @@ type RouteParams = {
 
 type NavigationProp = NativeStackNavigationProp<MoodStackParamList, "JournalEntryView">;
 
-function getMoodColor(mood: string): string {
-  switch (mood) {
-    case "Peaceful": return "#7BA68A";
-    case "Grateful": return "#C4A97A";
-    case "Anxious": return "#C47A7A";
-    case "Hopeful": return "#7AAEC4";
-    default: return Colors.light.accent;
-  }
-}
-
 export default function JournalEntryViewScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(tabBarHeight);
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProp<RouteParams, "JournalEntryView">>();
   const { entryId } = route.params;
@@ -41,12 +33,7 @@ export default function JournalEntryViewScreen() {
   if (journalLoading) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-        </View>
+        <BackHeader showNotifications={false} />
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={Colors.light.accent} />
           <ThemedText style={styles.emptyText}>Loading entry…</ThemedText>
@@ -58,12 +45,7 @@ export default function JournalEntryViewScreen() {
   if (journalError) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-        </View>
+        <BackHeader showNotifications={false} />
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>{journalError}</ThemedText>
         </View>
@@ -74,16 +56,8 @@ export default function JournalEntryViewScreen() {
   if (!entry) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <View style={styles.headerIconButton} />
-        </View>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Entry</ThemedText>
-        </View>
+        <BackHeader showNotifications={false} />
+        <BelowHeaderTitle>Entry</BelowHeaderTitle>
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>Entry not found.</ThemedText>
         </View>
@@ -91,29 +65,28 @@ export default function JournalEntryViewScreen() {
     );
   }
 
+  const entryMoods = parseMoodsFromStorage(entry.mood);
+
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("JournalEditor", { entryId })}
-          testID="button-edit-entry"
-        >
-          <Feather name="edit-2" size={20} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader
+        showNotifications={false}
+        rightAction={
+          <Pressable
+            style={styles.headerIconButton}
+            onPress={() => navigation.navigate("JournalEditor", { entryId })}
+            testID="button-edit-entry"
+          >
+            <Feather name="edit-2" size={20} color={Colors.light.accent} />
+          </Pressable>
+        }
+      />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Entry</ThemedText>
-      </View>
+      <BelowHeaderTitle>Entry</BelowHeaderTitle>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.metaRow}>
@@ -121,10 +94,14 @@ export default function JournalEntryViewScreen() {
             <Feather name="calendar" size={16} color={Colors.light.accent} />
             <ThemedText style={styles.dateText}>{entry.date}</ThemedText>
           </View>
-          {entry.mood ? (
-            <View style={styles.moodChip}>
-              <View style={[styles.moodDot, { backgroundColor: getMoodColor(entry.mood) }]} />
-              <ThemedText style={styles.moodText}>{entry.mood}</ThemedText>
+          {entryMoods.length > 0 ? (
+            <View style={styles.moodChipRow}>
+              {entryMoods.map((mood) => (
+                <View key={mood} style={styles.moodChip}>
+                  <View style={[styles.moodDot, { backgroundColor: getMoodColor(mood) }]} />
+                  <ThemedText style={styles.moodText}>{mood}</ThemedText>
+                </View>
+              ))}
             </View>
           ) : null}
         </View>
@@ -148,32 +125,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
   headerIconButton: {
     padding: 8,
     width: 40,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
     alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,
@@ -194,6 +149,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
     marginBottom: Spacing.lg,
   },
   dateContainer: {
@@ -205,6 +162,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "500",
     color: Colors.light.accent,
+  },
+  moodChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    justifyContent: "flex-end",
+    flex: 1,
   },
   moodChip: {
     flexDirection: "row",

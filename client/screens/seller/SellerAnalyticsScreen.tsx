@@ -6,13 +6,12 @@ import {
   Pressable,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { BackHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr, formatInrCompact } from "@/lib/formatCurrency";
 import { useReviews } from "@/context/ReviewsContext";
 import { useSellerAnalytics } from "@/context/SellerAnalyticsContext";
@@ -54,8 +53,7 @@ function BarChart({ data, period }: { data: { label: string; amount: number }[];
 }
 
 export default function SellerAnalyticsScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const { scrollPaddingBottom } = useLayoutInsets(32);
   const { sellerStoreStats } = useReviews();
   const {
     stats,
@@ -81,21 +79,12 @@ export default function SellerAnalyticsScreen() {
     stats.revenue >= 1000 ? formatInrCompact(stats.revenue) : formatInr(stats.revenue);
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerTitleBlock}>
-          <ThemedText style={styles.headerKicker}>Your practice</ThemedText>
-          <ThemedText style={styles.headerTitle}>Analytics</ThemedText>
-        </View>
-        <View style={{ width: 38 }} />
-      </View>
+    <View style={styles.container}>
+      <BackHeader title="Analytics" showNotifications={false} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
       >
         <ThemedText style={styles.introLine}>A quiet view of how your store breathes.</ThemedText>
 
@@ -247,38 +236,6 @@ const ELEV = {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.lg,
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.light.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitleBlock: {
-    alignItems: "center",
-  },
-  headerKicker: {
-    fontSize: 10,
-    letterSpacing: 1.5,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.textMuted,
-    textTransform: "uppercase",
-    marginBottom: 2,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontFamily: "ui-serif",
-    fontWeight: "600",
-    color: Colors.light.text,
-  },
   content: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing["2xl"],

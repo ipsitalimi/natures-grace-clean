@@ -105,7 +105,7 @@ export default function OrderConfirmationScreen() {
           <View style={styles.orderDetailRow}>
             <Feather name="truck" size={14} color={Colors.light.textSecondary} />
             <ThemedText style={styles.orderDetailText}>
-              {DELIVERY_LABELS[deliveryOption] || "Standard Delivery"}
+              {DELIVERY_LABELS[deliveryOption] || deliveryOption || "Standard Delivery"}
             </ThemedText>
           </View>
 
@@ -125,9 +125,9 @@ export default function OrderConfirmationScreen() {
         </View>
 
         <View style={styles.infoCard}>
-          <Feather name="mail" size={16} color={Colors.light.accent} />
+          <Feather name="bell" size={16} color={Colors.light.accent} />
           <ThemedText style={styles.infoText}>
-            A confirmation email with your order details and tracking information will be sent to your registered email address.
+            Track your order in Order History and Notifications. Shipping and delivery updates appear there as your seller fulfills the order.
           </ThemedText>
         </View>
 

@@ -3,19 +3,18 @@ import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "reac
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
 import { useEventRegistrations } from "@/context/EventRegistrationsContext";
 import { useAuth } from "@/context/AuthContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr } from "@/lib/formatCurrency";
 import { eventRegistrationNote, isEventRegistrationFree } from "@/lib/eventPricing";
 
@@ -66,12 +65,11 @@ function CheckIcon({ size = 16, color = Colors.light.accent }: { size?: number; 
 }
 
 export default function EventDetailScreen() {
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const { scrollPaddingBottom } = useLayoutInsets(tabBarHeight);
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<EventDetailRouteProp>();
   const { eventId } = route.params;
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const { events } = useDataContext();
   const { isRegisteredForEvent, registrationsLoading } = useEventRegistrations();
@@ -98,18 +96,8 @@ export default function EventDetailScreen() {
   if (!event) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Event</ThemedText>
-        </View>
+        <BackHeader />
+        <BelowHeaderTitle>Event</BelowHeaderTitle>
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>Event details not available.</ThemedText>
         </View>
@@ -126,36 +114,36 @@ export default function EventDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => void handleToggleFavorite()}
-          disabled={favoriteBusy}
-          testID="button-toggle-favorite"
-        >
-          {favoriteBusy ? (
-            <ActivityIndicator size="small" color={Colors.light.accent} />
-          ) : (
-            <Feather
-              name="heart"
-              size={22}
-              color={favorited ? "#D4534A" : Colors.light.accent}
-            />
-          )}
-        </Pressable>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader
+        showNotifications={false}
+        rightAction={
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.headerIconButton}
+              onPress={() => void handleToggleFavorite()}
+              disabled={favoriteBusy}
+              testID="button-toggle-favorite"
+            >
+              {favoriteBusy ? (
+                <ActivityIndicator size="small" color={Colors.light.accent} />
+              ) : (
+                <Feather
+                  name="heart"
+                  size={22}
+                  color={favorited ? "#D4534A" : Colors.light.accent}
+                />
+              )}
+            </Pressable>
+            <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+              <Feather name="bell" size={22} color={Colors.light.accent} />
+            </Pressable>
+          </View>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
@@ -225,28 +213,26 @@ export default function EventDetailScreen() {
             </View>
           ))}
         </View>
-      </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
-        {registered ? (
-          <ThemedText style={styles.registeredLabel} testID="text-event-registered">
-            You&apos;re registered for this event
-          </ThemedText>
-        ) : null}
-        <Pressable style={styles.ctaButton} onPress={handleJoin}>
-          <ThemedText style={styles.ctaButtonText}>
-            {registered ? "View registration" : event.ctaText}
-          </ThemedText>
-        </Pressable>
-        {registrationsLoading && !registered ? (
-          <ThemedText style={styles.bottomNote}>Checking registration…</ThemedText>
-        ) : null}
-        {event.bottomNote ? (
-          <ThemedText style={styles.bottomNote}>
-            {event.bottomNote}
-          </ThemedText>
-        ) : null}
-      </View>
+        <View style={styles.actionSection}>
+          {registered ? (
+            <ThemedText style={styles.registeredLabel} testID="text-event-registered">
+              You&apos;re registered for this event
+            </ThemedText>
+          ) : null}
+          <Pressable style={styles.ctaButton} onPress={handleJoin}>
+            <ThemedText style={styles.ctaButtonText}>
+              {registered ? "View registration" : event.ctaText}
+            </ThemedText>
+          </Pressable>
+          {registrationsLoading && !registered ? (
+            <ThemedText style={styles.bottomNote}>Checking registration…</ThemedText>
+          ) : null}
+          {event.bottomNote ? (
+            <ThemedText style={styles.bottomNote}>{event.bottomNote}</ThemedText>
+          ) : null}
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -256,31 +242,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
   },
   headerIconButton: {
     padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,
@@ -369,23 +336,16 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     paddingTop: 2,
   },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.light.backgroundRoot,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.divider,
+  actionSection: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.lg,
   },
   ctaButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.sm,
     paddingVertical: 14,
     alignItems: "center",
-    marginBottom: 8,
+    marginTop: Spacing.sm,
   },
   ctaButtonText: {
     fontSize: 16,
@@ -397,12 +357,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.light.accent,
     textAlign: "center",
-    marginBottom: 8,
   },
   bottomNote: {
     fontSize: 12,
     color: Colors.light.textSecondary,
     textAlign: "center",
+    marginTop: Spacing.sm,
   },
   registrationBanner: {
     flexDirection: "row",

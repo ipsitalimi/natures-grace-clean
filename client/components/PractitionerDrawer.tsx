@@ -1,11 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import {
   View,
   StyleSheet,
   Pressable,
-  Animated,
-  Dimensions,
-  Modal,
   ScrollView,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +12,7 @@ import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import SideDrawerShell, { DEFAULT_DRAWER_WIDTH } from "@/components/SideDrawerShell";
 import { Colors, Spacing } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { usePractitionerContext } from "@/context/PractitionerContext";
@@ -29,13 +27,14 @@ type RootStackParamList = {
   Support: undefined;
   MyReviews: undefined;
   PractitionerWallet: undefined;
+  PractitionerAnalytics: undefined;
+  PractitionerReviews: undefined;
   Login: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const DRAWER_WIDTH = SCREEN_WIDTH * 0.8;
+const DRAWER_WIDTH = DEFAULT_DRAWER_WIDTH;
 
 interface MenuItemProps {
   icon: string;
@@ -76,8 +75,6 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
   const navigation = useNavigation<NavigationProp>();
   const signOut = useSignOut();
   const { profile } = useAuth();
-  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
   const { offerings, stats, dashboard, practiceName } = usePractitionerContext();
   const offeringsCount = offerings.length;
   const displayName =
@@ -85,22 +82,6 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
     profile?.email?.split("@")[0] ||
     "Practitioner";
   const displayEmail = profile?.email ?? "";
-
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, { toValue: -DRAWER_WIDTH, duration: 200, useNativeDriver: true }),
-        Animated.timing(fadeAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
-      ]).start();
-    }
-  }, [visible, slideAnim, fadeAnim]);
-
-  if (!visible) return null;
 
   const go = (screen: keyof RootStackParamList) => {
     navigateAfterDrawerClose(onClose, () => navigation.navigate(screen as never));
@@ -111,22 +92,22 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
   };
 
   return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.drawer,
-            {
-              transform: [{ translateX: slideAnim }],
-              paddingTop: getHeaderPaddingTop(insets.top),
-              paddingBottom: getScrollBottomPadding(insets.bottom, 20),
-            },
-          ]}
-        >
+    <SideDrawerShell
+      visible={visible}
+      onClose={onClose}
+      width={DRAWER_WIDTH}
+      testID="practitioner-drawer"
+      drawerStyle={styles.drawerPanel}
+    >
+      <View
+        style={[
+          styles.drawerInner,
+          {
+            paddingTop: getHeaderPaddingTop(insets.top),
+            paddingBottom: getScrollBottomPadding(insets.bottom, 20),
+          },
+        ]}
+      >
           <View style={styles.drawerHeader}>
             <Pressable style={styles.closeButton} onPress={onClose}>
               <Feather name="x" size={22} color={Colors.light.text} />
@@ -183,7 +164,8 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
               />
               <MenuItem icon="layers" title="Session Offerings" onPress={() => go("SessionOfferings")} />
               <MenuItem icon="credit-card" title="Wallet & Earnings" onPress={() => go("PractitionerWallet")} />
-              <MenuItem icon="star" title="Reviews" onPress={() => go("MyReviews")} />
+              <MenuItem icon="bar-chart-2" title="Analytics" onPress={() => go("PractitionerAnalytics")} />
+              <MenuItem icon="star" title="Client Reviews" onPress={() => go("PractitionerReviews")} />
             </View>
 
             <View style={styles.section}>
@@ -206,24 +188,17 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
               />
             </View>
           </ScrollView>
-        </Animated.View>
       </View>
-    </Modal>
+    </SideDrawerShell>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1 },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  drawerPanel: {
+    backgroundColor: Colors.light.backgroundRoot,
   },
-  drawer: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: DRAWER_WIDTH,
+  drawerInner: {
+    flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
     paddingHorizontal: Spacing.lg,
   },

@@ -1,23 +1,23 @@
 import React, { useEffect, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useDataContext } from "@/context/DataContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useReviews } from "@/context/ReviewsContext";
+import { fetchOfferingsForPractitioner } from "@/services/content/practitionerOfferingsService";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import ProfileDrawer from "@/components/ProfileDrawer";
 import VerifiedBadge, { isVerifiedPractitioner } from "@/components/VerifiedBadge";
 import TrustIndicators from "@/components/TrustIndicators";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 type RootStackParamList = {
   PractitionerProfile: { practitionerId: string };
@@ -55,12 +55,11 @@ function getCategoryLabel(category: string): string {
 
 export default function PractitionerProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(tabBarHeight);
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<PractitionerProfileRouteProp>();
   const { practitionerId } = route.params;
   const [bioExpanded, setBioExpanded] = useState(false);
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [favoriteError, setFavoriteError] = useState<string | null>(null);
 
@@ -70,20 +69,13 @@ export default function PractitionerProfileScreen() {
   const { getPractitionerStats } = useReviews();
   const [liveRating, setLiveRating] = useState<number | null>(null);
   const [liveReviewCount, setLiveReviewCount] = useState<number | null>(null);
+  const [hasOfferings, setHasOfferings] = useState<boolean | null>(null);
   const practitioner = practitionerCategories.flatMap((c) => c.practitioners).find((p) => p.id === practitionerId);
 
   if (!practitioner) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
+        <BackHeader />
         <ThemedText style={styles.errorText}>Practitioner not found</ThemedText>
       </View>
     );
@@ -103,6 +95,20 @@ export default function PractitionerProfileScreen() {
       setLiveReviewCount(stats.reviewCount);
     });
   }, [practitionerId, getPractitionerStats]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setHasOfferings(null);
+      return;
+    }
+    let cancelled = false;
+    fetchOfferingsForPractitioner(practitionerId).then((rows) => {
+      if (!cancelled) setHasOfferings(rows.length > 0);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [practitionerId]);
 
   const displayRating =
     liveReviewCount != null && liveReviewCount > 0
@@ -137,38 +143,36 @@ export default function PractitionerProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <View style={styles.headerActions}>
-          <Pressable
-            style={styles.headerIconButton}
-            onPress={handleToggleFavorite}
-            disabled={favoriteBusy}
-            testID="button-toggle-favorite"
-          >
-            {favoriteBusy ? (
-              <ActivityIndicator size="small" color={Colors.light.accent} />
-            ) : (
-              <Feather
-                name="heart"
-                size={22}
-                color={favorited ? "#D4534A" : Colors.light.accent}
-              />
-            )}
-          </Pressable>
-          <Pressable
-            style={styles.headerIconButton}
-            onPress={() => navigation.navigate("Notifications" as never)}
-            testID="button-notifications"
-          >
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-      </View>
+      <BackHeader
+        showNotifications={false}
+        rightAction={
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.headerIconButton}
+              onPress={handleToggleFavorite}
+              disabled={favoriteBusy}
+              testID="button-toggle-favorite"
+            >
+              {favoriteBusy ? (
+                <ActivityIndicator size="small" color={Colors.light.accent} />
+              ) : (
+                <Feather
+                  name="heart"
+                  size={22}
+                  color={favorited ? "#D4534A" : Colors.light.accent}
+                />
+              )}
+            </Pressable>
+            <Pressable
+              style={styles.headerIconButton}
+              onPress={() => navigation.navigate("Notifications" as never)}
+              testID="button-notifications"
+            >
+              <Feather name="bell" size={22} color={Colors.light.accent} />
+            </Pressable>
+          </View>
+        }
+      />
 
       {favoriteError ? (
         <ThemedText style={styles.favoriteError}>{favoriteError}</ThemedText>
@@ -176,7 +180,7 @@ export default function PractitionerProfileScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 24 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.identityBlock}>
@@ -255,11 +259,18 @@ export default function PractitionerProfileScreen() {
           </View>
 
           <Pressable
-            style={styles.bookButton}
+            style={[styles.bookButton, hasOfferings === false && styles.bookButtonMuted]}
             onPress={() => navigation.navigate("BookSession", { practitionerId })}
           >
-            <ThemedText style={styles.bookButtonText}>Book Session</ThemedText>
+            <ThemedText style={styles.bookButtonText}>
+              {hasOfferings === false ? "Unavailable at the moment" : "Book Session"}
+            </ThemedText>
           </Pressable>
+          {hasOfferings === false ? (
+            <ThemedText style={styles.unavailableHint}>
+              This practitioner has not published session offerings yet.
+            </ThemedText>
+          ) : null}
         </View>
 
         <ThemedText style={styles.availabilityHint}>
@@ -275,23 +286,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  headerIconButton: {
+    padding: 8,
   },
   favoriteError: {
     fontSize: 13,
@@ -299,18 +299,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.sm,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,
@@ -443,10 +431,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: Spacing.md,
   },
+  bookButtonMuted: {
+    opacity: 0.65,
+  },
   bookButtonText: {
     fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  unavailableHint: {
+    fontSize: 12,
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    marginTop: Spacing.sm,
   },
   availabilityHint: {
     fontSize: 13,

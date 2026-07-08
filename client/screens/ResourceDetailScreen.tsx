@@ -1,29 +1,27 @@
 import React, { useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
 import { useAuth } from "@/context/AuthContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useResourceEnrollments } from "@/context/ResourceEnrollmentsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 type ParamList = {
   ResourceDetail: { resourceId: string };
 };
 
 export default function ResourceDetailScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(32);
   const navigation = useNavigation();
   const route = useRoute<RouteProp<ParamList, "ResourceDetail">>();
   const { resourceId } = route.params;
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [enrollBusy, setEnrollBusy] = useState(false);
   const [enrollError, setEnrollError] = useState<string | null>(null);
@@ -70,18 +68,8 @@ export default function ResourceDetailScreen() {
   if (!resource) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Resource</ThemedText>
-        </View>
+        <BackHeader />
+        <BelowHeaderTitle>Resource</BelowHeaderTitle>
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>Resource not found.</ThemedText>
         </View>
@@ -93,40 +81,38 @@ export default function ResourceDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => void handleToggleFavorite()}
-          disabled={favoriteBusy}
-          testID="button-toggle-favorite"
-        >
-          {favoriteBusy ? (
-            <ActivityIndicator size="small" color={Colors.light.accent} />
-          ) : (
-            <Feather
-              name="heart"
-              size={22}
-              color={favorited ? "#D4534A" : Colors.light.accent}
-            />
-          )}
-        </Pressable>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader
+        showNotifications={false}
+        rightAction={
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.headerIconButton}
+              onPress={() => void handleToggleFavorite()}
+              disabled={favoriteBusy}
+              testID="button-toggle-favorite"
+            >
+              {favoriteBusy ? (
+                <ActivityIndicator size="small" color={Colors.light.accent} />
+              ) : (
+                <Feather
+                  name="heart"
+                  size={22}
+                  color={favorited ? "#D4534A" : Colors.light.accent}
+                />
+              )}
+            </Pressable>
+            <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+              <Feather name="bell" size={22} color={Colors.light.accent} />
+            </Pressable>
+          </View>
+        }
+      />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>{resource.section}</ThemedText>
-      </View>
+      <BelowHeaderTitle>{resource.section}</BelowHeaderTitle>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         {isCourse ? (
@@ -266,30 +252,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
   },
   headerIconButton: {
     padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 22,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-    letterSpacing: 0.3,
   },
   scrollView: {
     flex: 1,

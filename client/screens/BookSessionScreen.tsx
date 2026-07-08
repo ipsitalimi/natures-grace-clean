@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
@@ -22,8 +22,6 @@ import {
   getTimeSlotsForDate,
   isDateBookable,
 } from "@/lib/bookingSlots";
-import ProfileDrawer from "@/components/ProfileDrawer";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   BookSession: { practitionerId: string };
@@ -134,8 +132,7 @@ function DurationIcon({ size = 20, color = Colors.light.accent }: { size?: numbe
 }
 
 export default function BookSessionScreen() {
-  const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const { scrollPaddingBottom } = useLayoutInsets(Spacing.xl);
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<BookSessionRouteProp>();
   const { practitionerId } = route.params;
@@ -143,9 +140,10 @@ export default function BookSessionScreen() {
   const [selectedDateIndex, setSelectedDateIndex] = useState<number | null>(null);
   const [selectedTimeIndex, setSelectedTimeIndex] = useState<number | null>(null);
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<number | null>(null);
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [offerings, setOfferings] = useState<SessionOffering[]>([]);
-  const [availability, setAvailability] = useState<OfferingAvailabilityState | null>(null);
+  const [availabilityByOfferingId, setAvailabilityByOfferingId] = useState<
+    Record<string, OfferingAvailabilityState>
+  >({});
   const [loadingSchedule, setLoadingSchedule] = useState(true);
 
   const { practitionerCategories } = useDataContext();
@@ -161,18 +159,20 @@ export default function BookSessionScreen() {
     return unique.map((o) => ({ minutes: o.duration, label: `${o.duration} mins` }));
   }, [offerings]);
 
-  const selectedDate = selectedDateIndex !== null ? dates[selectedDateIndex] : null;
-  const timeSlots = useMemo(() => {
-    if (!selectedDate || !availability) return [];
-    return getTimeSlotsForDate(selectedDate.isoDate, availability);
-  }, [selectedDate, availability]);
-
   const selectedOffering = useMemo(() => {
     if (selectedDurationIndex === null) return null;
     const minutes = durationOptions[selectedDurationIndex]?.minutes;
     if (!minutes) return null;
     return offerings.find((o) => o.duration === minutes) ?? null;
   }, [selectedDurationIndex, durationOptions, offerings]);
+  const selectedAvailability = selectedOffering
+    ? availabilityByOfferingId[selectedOffering.id] ?? null
+    : null;
+  const selectedDate = selectedDateIndex !== null ? dates[selectedDateIndex] : null;
+  const timeSlots = useMemo(() => {
+    if (!selectedDate || !selectedAvailability) return [];
+    return getTimeSlotsForDate(selectedDate.isoDate, selectedAvailability);
+  }, [selectedDate, selectedAvailability]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,9 +181,16 @@ export default function BookSessionScreen() {
       const rows = await fetchOfferingsForPractitioner(practitionerId);
       if (cancelled) return;
       setOfferings(rows);
-      if (rows[0]) {
-        const avail = await fetchAvailabilityForOffering(rows[0].id);
-        if (!cancelled) setAvailability(avail);
+      if (rows.length > 0) {
+        const entries = await Promise.all(
+          rows.map(async (offering) => [
+            offering.id,
+            await fetchAvailabilityForOffering(offering.id),
+          ] as const)
+        );
+        if (!cancelled) {
+          setAvailabilityByOfferingId(Object.fromEntries(entries));
+        }
       }
       if (!cancelled) setLoadingSchedule(false);
     })();
@@ -197,24 +204,16 @@ export default function BookSessionScreen() {
   }, [selectedDateIndex]);
 
   const bookableDates = useMemo(() => {
-    if (!availability) return dates.map((_, i) => i);
+    if (!selectedAvailability) return dates.map((_, i) => i);
     return dates
-      .map((d, i) => (isDateBookable(d.isoDate, availability) ? i : -1))
+      .map((d, i) => (isDateBookable(d.isoDate, selectedAvailability) ? i : -1))
       .filter((i) => i >= 0);
-  }, [dates, availability]);
+  }, [dates, selectedAvailability]);
 
   if (!practitioner) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
+        <BackHeader />
         <ThemedText style={styles.errorText}>Practitioner not found</ThemedText>
       </View>
     );
@@ -227,7 +226,7 @@ export default function BookSessionScreen() {
     timeSlots.length > 0 &&
     !loadingSchedule &&
     offerings.length > 0 &&
-    availability !== null;
+    selectedAvailability !== null;
 
   const selectedTime = selectedTimeIndex !== null ? timeSlots[selectedTimeIndex] : null;
   const selectedDuration = selectedDurationIndex !== null ? durationOptions[selectedDurationIndex] : null;
@@ -262,20 +261,11 @@ export default function BookSessionScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.practitionerCard}>
@@ -297,15 +287,15 @@ export default function BookSessionScreen() {
         {!loadingSchedule && offerings.length === 0 ? (
           <View style={styles.emptyScheduleCard}>
             <ThemedText style={styles.emptyScheduleText}>
-              This practitioner has not published session offerings yet. Please check back later.
+              Unavailable at the moment — this practitioner has not published session offerings yet.
             </ThemedText>
           </View>
         ) : null}
 
-        {!loadingSchedule && offerings.length > 0 && !availability ? (
+        {!loadingSchedule && offerings.length > 0 && selectedOffering && !selectedAvailability ? (
           <View style={styles.emptyScheduleCard}>
             <ThemedText style={styles.emptyScheduleText}>
-              No availability is configured for this practitioner yet.
+              No availability is configured for this session type yet.
             </ThemedText>
           </View>
         ) : null}
@@ -327,7 +317,7 @@ export default function BookSessionScreen() {
             contentContainerStyle={styles.datesContainer}
           >
             {dates.map((day, index) => {
-              const disabled = availability ? !bookableDates.includes(index) : false;
+              const disabled = selectedAvailability ? !bookableDates.includes(index) : false;
               return (
               <Pressable
                 key={index}
@@ -432,9 +422,7 @@ export default function BookSessionScreen() {
             ))}
           </View>
         </View>
-      </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
         <Pressable
           style={[styles.confirmButton, !canContinue && styles.confirmButtonDisabled]}
           onPress={canContinue ? handleContinue : undefined}
@@ -445,7 +433,7 @@ export default function BookSessionScreen() {
             {canContinue ? "Continue" : "Select Date, Time & Duration"}
           </ThemedText>
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -455,37 +443,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
   },
   errorText: {
     fontSize: 16,
@@ -657,22 +620,12 @@ const styles = StyleSheet.create({
   durationTextSelected: {
     color: "#FFFFFF",
   },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.light.backgroundRoot,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.divider,
-  },
   confirmButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.md,
     paddingVertical: 16,
     alignItems: "center",
+    marginTop: Spacing.md,
   },
   confirmButtonDisabled: {
     backgroundColor: "#B8AF6F",

@@ -1,18 +1,17 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute, RouteProp, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import ProductImageView from "@/components/ProductImageView";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useDataContext } from "@/context/DataContext";
 import { getOrderStatusColor, getPaymentStatusColor } from "@/data/orders";
 import { DELIVERY_LABELS } from "@/constants/deliveryOptions";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { fetchOrderForUser } from "@/services/content/ordersService";
 import type { DbOrderItemRow, DbOrderRow } from "@/services/content/ordersService";
@@ -35,7 +34,6 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function OrderDetailScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<RouteProp<ParamList, "OrderDetail">>();
   const { orderId } = route.params;
@@ -82,19 +80,13 @@ export default function OrderDetailScreen() {
       : order?.delivery_option ?? "—";
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <View style={styles.headerIconButton} />
-      </View>
-
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Order Detail</ThemedText>
-      </View>
-
+    <PageLayout
+      title="Order Detail"
+      titleInHeader
+      header="back"
+      scrollable={Boolean(order && !loading)}
+      contentContainerStyle={styles.content}
+    >
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator color={Colors.light.accent} />
@@ -105,14 +97,7 @@ export default function OrderDetailScreen() {
           <ThemedText style={styles.mutedText}>{error ?? "Order not found."}</ThemedText>
         </View>
       ) : (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
+        <>
           <View style={styles.card}>
             <ThemedText style={styles.orderNumber}>{order.order_number}</ThemedText>
             <View style={styles.badgeRow}>
@@ -218,40 +203,15 @@ export default function OrderDetailScreen() {
               <ThemedText style={styles.totalValue}>₹{Number(order.total).toFixed(0)}</ThemedText>
             </View>
           </View>
-        </ScrollView>
+        </>
       )}
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-  },
-  headerIconButton: { padding: 8, width: 40 },
-  headerCenter: { flex: 1 },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-  },
-  scrollView: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
+  content: {
+    paddingTop: LayoutSpacing.xs,
     gap: 12,
   },
   centered: {

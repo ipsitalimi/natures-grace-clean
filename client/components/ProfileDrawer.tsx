@@ -1,11 +1,8 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import {
   View,
   StyleSheet,
   Pressable,
-  Animated,
-  Dimensions,
-  Modal,
   ScrollView,
   Image,
 } from "react-native";
@@ -16,6 +13,7 @@ import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import SideDrawerShell, { DEFAULT_DRAWER_WIDTH } from "@/components/SideDrawerShell";
 import { Colors, Spacing } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { usePaymentMethods } from "@/context/PaymentMethodsContext";
@@ -37,8 +35,7 @@ type RootStackParamList = {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const DRAWER_WIDTH = SCREEN_WIDTH * 0.8;
+const DRAWER_WIDTH = DEFAULT_DRAWER_WIDTH;
 
 function SessionIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -180,8 +177,6 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
   const { profile, session, refreshProfile } = useAuth();
   const { methods } = usePaymentMethods();
   const signOut = useSignOut();
-  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (!visible || !session?.user?.id) return;
@@ -219,57 +214,23 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
     navigateAfterDrawerClose(onClose, () => navigation.navigate(screen as never));
   };
 
-  useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(fadeAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible, slideAnim, fadeAnim]);
-
-  if (!visible) return null;
-
   return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Animated.View
-          style={[styles.backdrop, { opacity: fadeAnim }]}
-        >
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.drawer,
-            {
-              transform: [{ translateX: slideAnim }],
-              paddingTop: getHeaderPaddingTop(insets.top),
-              paddingBottom: getScrollBottomPadding(insets.bottom, 20),
-            },
-          ]}
-        >
+    <SideDrawerShell
+      visible={visible}
+      onClose={onClose}
+      width={DRAWER_WIDTH}
+      testID="profile-drawer"
+      drawerStyle={styles.drawerPanel}
+    >
+      <View
+        style={[
+          styles.drawerInner,
+          {
+            paddingTop: getHeaderPaddingTop(insets.top),
+            paddingBottom: getScrollBottomPadding(insets.bottom, 20),
+          },
+        ]}
+      >
           <View style={styles.drawerContent}>
           <View style={styles.header}>
             <Pressable
@@ -378,29 +339,19 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
             </View>
           </ScrollView>
           </View>
-        </Animated.View>
       </View>
-    </Modal>
+    </SideDrawerShell>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  drawerPanel: {
+    backgroundColor: Colors.light.backgroundRoot,
+  },
+  drawerInner: {
     flex: 1,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-  },
-  drawer: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: DRAWER_WIDTH,
     backgroundColor: Colors.light.backgroundRoot,
     paddingHorizontal: Spacing.lg,
-    flexDirection: "column",
   },
   drawerContent: {
     flex: 1,

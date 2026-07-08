@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { ScreenHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProductImageView from "@/components/ProductImageView";
 import { useDataContext } from "@/context/DataContext";
@@ -16,9 +16,17 @@ import { usePaymentMethods } from "@/context/PaymentMethodsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { runStoreCheckoutPayment } from "@/services/storeCheckoutService";
 import * as ordersService from "@/services/content/ordersService";
-import { fetchDistinctSellerIdsForProducts } from "@/lib/cartSellerCheck";
-import { DELIVERY_OPTIONS } from "@/constants/deliveryOptions";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import {
+  deliveryFeeForSellerOption,
+  getEnabledSellerDeliveryOptions,
+  parseSellerDeliverySettings,
+  sellerDeliveryLabel,
+} from "@/constants/sellerDelivery";
+import {
+  fetchSellerDeliveryBySellerIds,
+  type SellerDeliveryProfile,
+} from "@/services/commerce/sellerDeliveryService";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr } from "@/lib/formatCurrency";
 
 type ConfirmationItem = {
@@ -42,7 +50,7 @@ type CartNavParamList = {
 type NavigationProp = NativeStackNavigationProp<CartNavParamList>;
 
 export default function CartScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(Spacing.xl);
   const navigation = useNavigation<NavigationProp>();
   const { storeCategories } = useDataContext();
   const { profile, session } = useAuth();
@@ -55,6 +63,8 @@ export default function CartScreen() {
     updateQuantity,
     removeItem,
     setDeliveryOption,
+    setSellerDeliveryOption,
+    removeOrderedItems,
     setOrderNote,
     prepareCheckout,
     clearCart,
@@ -66,7 +76,9 @@ export default function CartScreen() {
   } = useCart();
 
   const [note, setNote] = useState(checkout.orderNote);
-  const [placingOrder, setPlacingOrder] = useState(false);
+  const [placingSellerId, setPlacingSellerId] = useState<string | null>(null);
+  const [sellerProfiles, setSellerProfiles] = useState<Record<string, SellerDeliveryProfile>>({});
+  const [deliveryLoadError, setDeliveryLoadError] = useState<string | null>(null);
   const [promoInput, setPromoInput] = useState("");
   const [promoBanner, setPromoBanner] = useState<string | null>(null);
 
@@ -98,42 +110,91 @@ export default function CartScreen() {
     return { ...item, product };
   });
 
-  const selectedDelivery = checkout.deliveryOption;
-  const deliveryOption = DELIVERY_OPTIONS.find((d) => d.id === selectedDelivery) ?? DELIVERY_OPTIONS[0];
-  const lineSubtotal = cartProducts.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const remoteTotals = Boolean(checkout.sessionId && isSupabaseConfigured());
-  const subtotal = remoteTotals ? checkout.subtotal : lineSubtotal;
-  const deliveryFee = remoteTotals ? checkout.deliveryFee : deliveryOption.price;
-  const promoDiscount = remoteTotals ? checkout.promoDiscount : 0;
-  const total = remoteTotals ? checkout.total : lineSubtotal + deliveryFee;
+  useEffect(() => {
+    const sellerIds = [
+      ...new Set(
+        cartProducts
+          .map((item) => item.product?.sellerId)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+    if (sellerIds.length === 0) {
+      setSellerProfiles({});
+      setDeliveryLoadError(null);
+      return;
+    }
+    setDeliveryLoadError(null);
+    void fetchSellerDeliveryBySellerIds(sellerIds)
+      .then((profiles) => {
+        setSellerProfiles(profiles);
+      })
+      .catch(() => {
+        setDeliveryLoadError("Could not load delivery options. Using defaults — try again before checkout.");
+        setSellerProfiles({});
+      });
+  }, [items]);
 
-  const handlePlaceOrder = async () => {
-    if (cartProducts.length === 0 || placingOrder) return;
+  const sellerGroups = useMemo(() => {
+    const bySeller = new Map<string, typeof cartProducts>();
+    for (const item of cartProducts) {
+      const sellerId = item.product?.sellerId ?? "unknown";
+      const list = bySeller.get(sellerId) ?? [];
+      list.push(item);
+      bySeller.set(sellerId, list);
+    }
+
+    return [...bySeller.entries()].map(([sellerId, groupItems]) => {
+      const profile = sellerProfiles[sellerId];
+      const settings = profile?.settings ?? parseSellerDeliverySettings(null);
+      const deliveryOptions = getEnabledSellerDeliveryOptions(settings);
+      const selected =
+        checkout.sellerDeliveryOptions[sellerId] ?? deliveryOptions[0]?.id ?? "standard";
+      const valid = deliveryOptions.some((o) => o.id === selected)
+        ? selected
+        : deliveryOptions[0]?.id ?? "standard";
+      const subtotal = groupItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+      const deliveryFee = deliveryFeeForSellerOption(settings, valid);
+      return {
+        sellerId,
+        storeName: profile?.storeName ?? "Seller",
+        settings,
+        items: groupItems,
+        deliveryOptions,
+        selectedOptionId: valid,
+        subtotal,
+        deliveryFee,
+        total: subtotal + deliveryFee,
+      };
+    });
+  }, [cartProducts, sellerProfiles, checkout.sellerDeliveryOptions]);
+
+  const singleSellerGroup = sellerGroups.length === 1 ? sellerGroups[0] : null;
+  const computedSubtotal = sellerGroups.reduce((sum, group) => sum + group.subtotal, 0);
+  const computedDeliveryFee = sellerGroups.reduce((sum, group) => sum + group.deliveryFee, 0);
+  const promoDiscount = checkout.promoDiscount ?? 0;
+  const subtotal = computedSubtotal;
+  const deliveryFee = computedDeliveryFee;
+  const total = Math.max(0, subtotal - promoDiscount + deliveryFee);
+
+  const handlePlaceOrderForSeller = async (sellerId: string) => {
+    const group = sellerGroups.find((g) => g.sellerId === sellerId);
+    if (!group || group.items.length === 0 || placingSellerId) return;
 
     if (!isSupabaseConfigured() || !session?.user) {
       Alert.alert("Sign in required", "Please sign in to complete checkout.");
       return;
     }
 
-    const sellerIds = await fetchDistinctSellerIdsForProducts(items.map((i) => i.productId));
-    if (sellerIds.length > 1) {
-      Alert.alert(
-        "One seller per order",
-        "Your cart has products from multiple sellers. Please checkout with one seller at a time."
-      );
-      return;
-    }
-
-    setPlacingOrder(true);
+    setPlacingSellerId(sellerId);
     await setOrderNote(note);
     const checkoutForOrder = await prepareCheckout();
     if (!checkoutForOrder) {
-      setPlacingOrder(false);
+      setPlacingSellerId(null);
       Alert.alert("Checkout", "Could not prepare your cart. Please try again.");
       return;
     }
 
-    const lineItems = cartProducts.map((item) => ({
+    const lineItems = group.items.map((item) => ({
       productId: item.productId,
       productName: item.productName,
       productCategory: item.productCategory,
@@ -141,30 +202,38 @@ export default function CartScreen() {
       unitPrice: item.unitPrice,
     }));
 
-    const deliveryFeeForOrder = checkoutForOrder.deliveryFee;
-    const orderTotal = checkoutForOrder.total;
+    const orderTotal = Math.max(
+      0,
+      group.subtotal - (sellerGroups.length === 1 ? promoDiscount : 0) + group.deliveryFee
+    );
+    const deliveryFeeForOrder = group.deliveryFee;
 
     const pendingOrder = await createOrderFromCheckout({
       customerName: profile?.full_name || "Guest",
       customerEmail: profile?.email,
       items: lineItems,
       paymentStatus: "Pending",
-      deliveryOption: selectedDelivery,
+      deliveryOption: group.selectedOptionId,
       deliveryFee: deliveryFeeForOrder,
       notes: note.trim() || undefined,
-      promoDiscount: checkoutForOrder.promoDiscount > 0 ? checkoutForOrder.promoDiscount : undefined,
-      sellerPromoId: checkoutForOrder.sellerPromoId ?? undefined,
-      platformPromoId: checkoutForOrder.platformPromoId ?? undefined,
+      promoDiscount:
+        sellerGroups.length === 1 && checkoutForOrder.promoDiscount > 0
+          ? checkoutForOrder.promoDiscount
+          : undefined,
+      sellerPromoId:
+        sellerGroups.length === 1 ? checkoutForOrder.sellerPromoId ?? undefined : undefined,
+      platformPromoId:
+        sellerGroups.length === 1 ? checkoutForOrder.platformPromoId ?? undefined : undefined,
     });
 
     if (!pendingOrder) {
-      setPlacingOrder(false);
+      setPlacingSellerId(null);
       Alert.alert("Checkout", "Could not create your order. Please try again.");
       return;
     }
 
     if (!session?.access_token) {
-      setPlacingOrder(false);
+      setPlacingSellerId(null);
       Alert.alert("Checkout", "Please sign in to complete your purchase.");
       return;
     }
@@ -177,7 +246,7 @@ export default function CartScreen() {
       customerEmail: profile?.email,
     });
 
-    setPlacingOrder(false);
+    setPlacingSellerId(null);
 
     if (payment.error) {
       if (payment.error === "Payment cancelled") {
@@ -195,28 +264,37 @@ export default function CartScreen() {
 
     await refreshOrders();
     const confirmationItems: ConfirmationItem[] = lineItems;
-    await clearCart();
+    await removeOrderedItems(group.items.map((i) => i.productId));
+
+    if (items.length === group.items.length) {
+      await clearCart();
+    }
 
     navigation.navigate("OrderConfirmation", {
       orderNumber: payment.orderNumber ?? pendingOrder.orderId,
-      deliveryOption: selectedDelivery,
+      deliveryOption: sellerDeliveryLabel(group.settings, group.selectedOptionId),
       totalPrice: orderTotal,
       items: confirmationItems,
     });
   };
 
+  const handlePlaceOrder = async () => {
+    if (!singleSellerGroup) return;
+    await handlePlaceOrderForSeller(singleSellerGroup.sellerId);
+  };
+
   if (cartLoading) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter}>
-            <ThemedText style={styles.headerTitle}>Cart</ThemedText>
-          </View>
-          <View style={styles.headerIconButton} />
-        </View>
+        <ScreenHeader
+          variant="back"
+          showNotifications={false}
+          center={
+            <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              Cart
+            </ThemedText>
+          }
+        />
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={Colors.light.accent} />
           <ThemedText style={styles.emptySubtitle}>Loading cart…</ThemedText>
@@ -228,15 +306,15 @@ export default function CartScreen() {
   if (cartError) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter}>
-            <ThemedText style={styles.headerTitle}>Cart</ThemedText>
-          </View>
-          <View style={styles.headerIconButton} />
-        </View>
+        <ScreenHeader
+          variant="back"
+          showNotifications={false}
+          center={
+            <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              Cart
+            </ThemedText>
+          }
+        />
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptySubtitle}>{cartError}</ThemedText>
         </View>
@@ -247,15 +325,15 @@ export default function CartScreen() {
   if (cartProducts.length === 0) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter}>
-            <ThemedText style={styles.headerTitle}>Cart</ThemedText>
-          </View>
-          <View style={styles.headerIconButton} />
-        </View>
+        <ScreenHeader
+          variant="back"
+          showNotifications={false}
+          center={
+            <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+              Cart
+            </ThemedText>
+          }
+        />
         <View style={styles.emptyState}>
           <View style={styles.emptyIconCircle}>
             <Feather name="shopping-cart" size={36} color={Colors.light.textMuted} />
@@ -276,135 +354,194 @@ export default function CartScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <ThemedText style={styles.headerTitle}>Cart ({cartProducts.length})</ThemedText>
-        </View>
-        <View style={styles.headerIconButton} />
-      </View>
+      <ScreenHeader
+        variant="back"
+        showNotifications={false}
+        center={
+          <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            Cart ({cartProducts.length})
+          </ThemedText>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 120) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Feather name="shopping-bag" size={18} color={Colors.light.accent} />
-            <ThemedText style={styles.sectionTitle}>Items</ThemedText>
-          </View>
-          {cartProducts.map((item) => {
-            const product = item.product;
-            return (
-              <View key={item.productId} style={styles.cartItemCard} testID={`cart-item-${item.productId}`}>
-                <View style={styles.cartItemTop}>
-                  <View style={styles.productImageContainer}>
-                    {product ? (
-                      <ProductImageView
-                        product={product}
-                        containerStyle={styles.productImage}
-                        imageStyle={styles.productImage}
-                      />
-                    ) : (
-                      <View style={styles.imagePlaceholder}>
-                        <View style={styles.placeholderCircle} />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.productInfo}>
-                    <ThemedText style={styles.productCategory}>{item.productCategory}</ThemedText>
-                    <ThemedText style={styles.productName} numberOfLines={2}>{item.productName}</ThemedText>
-                    <ThemedText style={styles.productPrice}>{formatInr(item.unitPrice)}</ThemedText>
-                  </View>
-                  <Pressable
-                    style={styles.removeButton}
-                    onPress={() => removeItem(item.productId)}
-                    testID={`button-remove-${item.productId}`}
-                  >
-                    <Feather name="trash-2" size={16} color="#D94F4F" />
-                  </Pressable>
-                </View>
-                <View style={styles.cartItemBottom}>
-                  <View style={styles.quantityRow}>
-                    <Pressable
-                      style={[styles.quantityButton, item.quantity <= 1 && styles.quantityButtonDisabled]}
-                      onPress={() => updateQuantity(item.productId, item.quantity - 1)}
-                      disabled={item.quantity <= 1}
-                      testID={`button-decrease-${item.productId}`}
-                    >
-                      <Feather name="minus" size={16} color={item.quantity <= 1 ? Colors.light.textMuted : Colors.light.accent} />
-                    </Pressable>
-                    <View style={styles.quantityDisplay}>
-                      <ThemedText style={styles.quantityText}>{item.quantity}</ThemedText>
+        {sellerGroups.map((group) => (
+          <View key={group.sellerId} style={styles.sellerGroup}>
+            <View style={styles.sellerGroupHeader}>
+              <Feather name="shopping-bag" size={18} color={Colors.light.accent} />
+              <ThemedText style={styles.sellerGroupTitle}>{group.storeName}</ThemedText>
+            </View>
+
+            {group.items.map((item) => {
+              const product = item.product;
+              return (
+                <View key={item.productId} style={styles.cartItemCard} testID={`cart-item-${item.productId}`}>
+                  <View style={styles.cartItemTop}>
+                    <View style={styles.productImageContainer}>
+                      {product ? (
+                        <ProductImageView
+                          product={product}
+                          containerStyle={styles.productImage}
+                          imageStyle={styles.productImage}
+                        />
+                      ) : (
+                        <View style={styles.imagePlaceholder}>
+                          <View style={styles.placeholderCircle} />
+                        </View>
+                      )}
+                    </View>
+                    <View style={styles.productInfo}>
+                      <ThemedText style={styles.productCategory}>{item.productCategory}</ThemedText>
+                      <ThemedText style={styles.productName} numberOfLines={2}>{item.productName}</ThemedText>
+                      <ThemedText style={styles.productPrice}>{formatInr(item.unitPrice)}</ThemedText>
                     </View>
                     <Pressable
-                      style={[styles.quantityButton, item.quantity >= 10 && styles.quantityButtonDisabled]}
-                      onPress={() => updateQuantity(item.productId, item.quantity + 1)}
-                      disabled={item.quantity >= 10}
-                      testID={`button-increase-${item.productId}`}
+                      style={styles.removeButton}
+                      onPress={() => removeItem(item.productId)}
+                      testID={`button-remove-${item.productId}`}
                     >
-                      <Feather name="plus" size={16} color={item.quantity >= 10 ? Colors.light.textMuted : Colors.light.accent} />
+                      <Feather name="trash-2" size={16} color="#D94F4F" />
                     </Pressable>
                   </View>
-                  <ThemedText style={styles.itemSubtotal}>
-                    {formatInr(item.unitPrice * item.quantity)}
-                  </ThemedText>
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Feather name="truck" size={18} color={Colors.light.accent} />
-            <ThemedText style={styles.sectionTitle}>Delivery Option</ThemedText>
-          </View>
-          <ThemedText style={styles.sectionSubtitle}>Choose your preferred delivery speed</ThemedText>
-          <View style={styles.deliveryOptions}>
-            {DELIVERY_OPTIONS.map((option) => (
-              <Pressable
-                key={option.id}
-                style={[
-                  styles.deliveryCard,
-                  selectedDelivery === option.id && styles.deliveryCardSelected,
-                ]}
-                onPress={() => setDeliveryOption(option.id)}
-                testID={`delivery-option-${option.id}`}
-              >
-                <View style={styles.deliveryCardLeft}>
-                  <View style={[styles.radioOuter, selectedDelivery === option.id && styles.radioOuterSelected]}>
-                    {selectedDelivery === option.id ? <View style={styles.radioInner} /> : null}
+                  <View style={styles.cartItemBottom}>
+                    <View style={styles.quantityRow}>
+                      <Pressable
+                        style={[styles.quantityButton, item.quantity <= 1 && styles.quantityButtonDisabled]}
+                        onPress={() => updateQuantity(item.productId, item.quantity - 1)}
+                        disabled={item.quantity <= 1}
+                        testID={`button-decrease-${item.productId}`}
+                      >
+                        <Feather name="minus" size={16} color={item.quantity <= 1 ? Colors.light.textMuted : Colors.light.accent} />
+                      </Pressable>
+                      <View style={styles.quantityDisplay}>
+                        <ThemedText style={styles.quantityText}>{item.quantity}</ThemedText>
+                      </View>
+                      <Pressable
+                        style={[styles.quantityButton, item.quantity >= 10 && styles.quantityButtonDisabled]}
+                        onPress={() => updateQuantity(item.productId, item.quantity + 1)}
+                        disabled={item.quantity >= 10}
+                        testID={`button-increase-${item.productId}`}
+                      >
+                        <Feather name="plus" size={16} color={item.quantity >= 10 ? Colors.light.textMuted : Colors.light.accent} />
+                      </Pressable>
+                    </View>
+                    <ThemedText style={styles.itemSubtotal}>
+                      {formatInr(item.unitPrice * item.quantity)}
+                    </ThemedText>
                   </View>
-                  <View style={styles.deliveryTextContainer}>
+                </View>
+              );
+            })}
+
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Feather name="truck" size={18} color={Colors.light.accent} />
+                <ThemedText style={styles.sectionTitle}>Delivery from {group.storeName}</ThemedText>
+              </View>
+              <ThemedText style={styles.sectionSubtitle}>
+                Options set by this seller — only their enabled speeds are shown.
+              </ThemedText>
+              <View style={styles.deliveryOptions}>
+                {group.deliveryOptions.map((option) => (
+                  <Pressable
+                    key={option.id}
+                    style={[
+                      styles.deliveryCard,
+                      group.selectedOptionId === option.id && styles.deliveryCardSelected,
+                    ]}
+                    onPress={() => void setSellerDeliveryOption(group.sellerId, option.id)}
+                    testID={`delivery-option-${group.sellerId}-${option.id}`}
+                  >
+                    <View style={styles.deliveryCardLeft}>
+                      <View
+                        style={[
+                          styles.radioOuter,
+                          group.selectedOptionId === option.id && styles.radioOuterSelected,
+                        ]}
+                      >
+                        {group.selectedOptionId === option.id ? <View style={styles.radioInner} /> : null}
+                      </View>
+                      <View style={styles.deliveryTextContainer}>
+                        <ThemedText
+                          style={[
+                            styles.deliveryLabel,
+                            group.selectedOptionId === option.id && styles.deliveryLabelSelected,
+                          ]}
+                        >
+                          {option.label}
+                        </ThemedText>
+                        <ThemedText style={styles.deliveryDuration}>{option.duration}</ThemedText>
+                      </View>
+                    </View>
                     <ThemedText
                       style={[
-                        styles.deliveryLabel,
-                        selectedDelivery === option.id && styles.deliveryLabelSelected,
+                        styles.deliveryPrice,
+                        group.selectedOptionId === option.id && styles.deliveryPriceSelected,
                       ]}
                     >
-                      {option.label}
+                      {option.price === 0 ? "Free" : formatInr(option.price)}
                     </ThemedText>
-                    <ThemedText style={styles.deliveryDuration}>{option.duration}</ThemedText>
-                  </View>
-                </View>
-                <ThemedText
-                  style={[
-                    styles.deliveryPrice,
-                    selectedDelivery === option.id && styles.deliveryPriceSelected,
-                  ]}
-                >
-                  {option.price === 0 ? "Free" : formatInr(option.price)}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
-        {remoteTotals && cartProducts.length > 0 ? (
+            <View style={styles.sellerSubtotalCard}>
+              <View style={styles.summaryRow}>
+                <ThemedText style={styles.summaryLabel}>Subtotal</ThemedText>
+                <ThemedText style={styles.summaryValue}>{formatInr(group.subtotal)}</ThemedText>
+              </View>
+              <View style={styles.summaryRow}>
+                <ThemedText style={styles.summaryLabel}>Delivery</ThemedText>
+                <ThemedText style={styles.summaryValue}>
+                  {group.deliveryFee === 0 ? "Free" : formatInr(group.deliveryFee)}
+                </ThemedText>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.summaryRow}>
+                <ThemedText style={styles.totalLabel}>Seller total</ThemedText>
+                <ThemedText style={styles.totalValue}>{formatInr(group.total)}</ThemedText>
+              </View>
+            </View>
+
+            {sellerGroups.length > 1 ? (
+              <Pressable
+                style={[
+                  styles.placeOrderButton,
+                  styles.placeOrderButtonInline,
+                  (placingSellerId === group.sellerId || cartMutating) && styles.placeOrderButtonDisabled,
+                ]}
+                onPress={() => void handlePlaceOrderForSeller(group.sellerId)}
+                disabled={placingSellerId === group.sellerId || cartMutating}
+                testID={`button-place-order-${group.sellerId}`}
+              >
+                {placingSellerId === group.sellerId ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <ThemedText style={styles.placeOrderText}>
+                    Place Order from {group.storeName} — {formatInr(group.total)}
+                  </ThemedText>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+
+        {deliveryLoadError ? (
+          <ThemedText style={styles.deliveryErrorText}>{deliveryLoadError}</ThemedText>
+        ) : null}
+
+        {sellerGroups.length > 1 ? (
+          <ThemedText style={styles.multiSellerNote}>
+            Promo codes apply when all items are from one seller. Place separate orders per store to use seller promos.
+          </ThemedText>
+        ) : null}
+
+        {isSupabaseConfigured() && singleSellerGroup ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Feather name="tag" size={18} color={Colors.light.accent} />
@@ -470,19 +607,35 @@ export default function CartScreen() {
         </View>
 
         <View style={styles.summaryCard}>
-          <ThemedText style={styles.summaryTitle}>Order Summary</ThemedText>
-          {cartProducts.map((item) => (
-            <View key={item.productId} style={styles.summaryRow}>
-              <ThemedText style={styles.summaryLabel} numberOfLines={1}>
-                {item.productName} x {item.quantity}
-              </ThemedText>
-              <ThemedText style={styles.summaryValue}>
-                {formatInr(item.unitPrice * item.quantity)}
-              </ThemedText>
-            </View>
-          ))}
+          <ThemedText style={styles.summaryTitle}>
+            {sellerGroups.length > 1 ? "Cart Overview" : "Order Summary"}
+          </ThemedText>
+          {sellerGroups.length > 1 ? (
+            sellerGroups.map((group) => (
+              <View key={group.sellerId} style={styles.summarySellerBlock}>
+                <ThemedText style={styles.summarySellerName}>{group.storeName}</ThemedText>
+                <View style={styles.summaryRow}>
+                  <ThemedText style={styles.summaryLabel}>Items + delivery</ThemedText>
+                  <ThemedText style={styles.summaryValue}>{formatInr(group.total)}</ThemedText>
+                </View>
+              </View>
+            ))
+          ) : (
+            cartProducts.map((item) => (
+              <View key={item.productId} style={styles.summaryRow}>
+                <ThemedText style={styles.summaryLabel} numberOfLines={1}>
+                  {item.productName} x {item.quantity}
+                </ThemedText>
+                <ThemedText style={styles.summaryValue}>
+                  {formatInr(item.unitPrice * item.quantity)}
+                </ThemedText>
+              </View>
+            ))
+          )}
           <View style={styles.summaryRow}>
-            <ThemedText style={styles.summaryLabel}>Delivery</ThemedText>
+            <ThemedText style={styles.summaryLabel}>
+              {sellerGroups.length > 1 ? "Combined delivery" : "Delivery"}
+            </ThemedText>
             <ThemedText style={styles.summaryValue}>
               {deliveryFee === 0 ? "Free" : formatInr(deliveryFee)}
             </ThemedText>
@@ -532,22 +685,26 @@ export default function CartScreen() {
             <ThemedText style={styles.paymentMethodLink}>Manage payment references</ThemedText>
           </Pressable>
         ) : null}
-      </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
-        <Pressable
-          style={[styles.placeOrderButton, (placingOrder || cartMutating) && styles.placeOrderButtonDisabled]}
-          onPress={handlePlaceOrder}
-          disabled={placingOrder || cartMutating}
-          testID="button-place-order"
-        >
-          {placingOrder ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <ThemedText style={styles.placeOrderText}>Place Order - {formatInr(total)}</ThemedText>
-          )}
-        </Pressable>
-      </View>
+        {singleSellerGroup ? (
+          <Pressable
+            style={[
+              styles.placeOrderButton,
+              styles.placeOrderButtonScrollEnd,
+              (placingSellerId || cartMutating) && styles.placeOrderButtonDisabled,
+            ]}
+            onPress={() => void handlePlaceOrder()}
+            disabled={Boolean(placingSellerId) || cartMutating}
+            testID="button-place-order"
+          >
+            {placingSellerId ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <ThemedText style={styles.placeOrderText}>Place Order — {formatInr(total)}</ThemedText>
+            )}
+          </Pressable>
+        ) : null}
+      </ScrollView>
     </View>
   );
 }
@@ -556,22 +713,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-    width: 40,
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
   },
   headerTitle: {
     fontSize: 18,
@@ -583,6 +724,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
   },
   emptyState: {
     flex: 1,
@@ -624,6 +766,41 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: Spacing.xl,
+  },
+  sellerGroup: {
+    marginBottom: Spacing.xl,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.divider,
+  },
+  sellerGroupHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: Spacing.md,
+  },
+  sellerGroupTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: Colors.light.accent,
+  },
+  sellerSubtotalCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    marginBottom: Spacing.md,
+  },
+  placeOrderButtonInline: {
+    marginBottom: Spacing.lg,
+  },
+  summarySellerBlock: {
+    marginBottom: Spacing.sm,
+  },
+  summarySellerName: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.light.text,
+    marginBottom: 4,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -860,6 +1037,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#8B3A3A",
   },
+  deliveryErrorText: {
+    fontSize: 13,
+    color: "#8B3A3A",
+    textAlign: "center",
+    marginBottom: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+  },
+  multiSellerNote: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
+    marginBottom: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    lineHeight: 18,
+  },
   summaryDiscount: {
     fontSize: 14,
     color: "#013220",
@@ -967,22 +1159,14 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     marginTop: Spacing.xs,
   },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.light.backgroundRoot,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.divider,
-  },
   placeOrderButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.md,
     paddingVertical: 16,
     alignItems: "center",
+  },
+  placeOrderButtonScrollEnd: {
+    marginTop: Spacing.xl,
   },
   placeOrderText: {
     fontSize: 16,

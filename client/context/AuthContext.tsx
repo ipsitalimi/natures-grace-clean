@@ -12,19 +12,27 @@ import * as Linking from "expo-linking";
 import type { Session } from "@supabase/supabase-js";
 
 import { getAuthRedirectUrl } from "@/lib/authRedirect";
+import { isEmailNotConfirmedError } from "@/lib/authErrors";
 import {
   completeAuthSessionFromUrl,
+  isAuthCallbackUrl,
   isPasswordRecoveryCallback,
   isSignupConfirmationCallback,
   readAuthCallbackUrl,
+  stripAuthParamsFromBrowserUrl,
 } from "@/lib/authSessionFromUrl";
 import { getSupabase } from "@/lib/supabase";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import {
+  buildAcceptanceInputs,
+  recordLegalAcceptances,
+} from "@/services/legal/legalAcceptanceService";
 import { fetchProfileByUserId } from "@/services/profileService";
 import {
   sendAuthEmailHook,
   sendPasswordResetRequestedHook,
 } from "@/services/transactionalHooksApi";
+import type { LegalVersions, UserMandatoryLegalKey } from "@/types/legal";
 import { registerPushTokenForUser } from "@/services/pushTokenService";
 import type { ProfileRow, UserRole } from "@/types/database";
 
@@ -58,7 +66,13 @@ interface AuthContextType {
   signIn: (
     email: string,
     password: string
-  ) => Promise<{ error?: string; route?: AuthHomeRoute; profile?: ProfileRow }>;
+  ) => Promise<{
+    error?: string;
+    needsEmailVerification?: boolean;
+    email?: string;
+    route?: AuthHomeRoute;
+    profile?: ProfileRow;
+  }>;
   signUp: (
     email: string,
     password: string,
@@ -76,10 +90,17 @@ interface AuthContextType {
     currentPassword?: string
   ) => Promise<{ error?: string }>;
   refreshProfile: () => Promise<ProfileRow | null>;
+  resendVerificationEmail: (email: string) => Promise<{ error?: string }>;
+  setPendingSignupLegal: (
+    payload: { keys: UserMandatoryLegalKey[]; versions: LegalVersions } | null
+  ) => void;
   pendingPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
   emailConfirmedMessage: string | null;
   consumeEmailConfirmedMessage: () => void;
+  justVerifiedEmail: boolean;
+  consumeJustVerifiedEmail: () => void;
+  authCallbackError: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -90,11 +111,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [pendingPasswordRecovery, setPendingPasswordRecovery] = useState(false);
   const [emailConfirmedMessage, setEmailConfirmedMessage] = useState<string | null>(null);
+  const [justVerifiedEmail, setJustVerifiedEmail] = useState(false);
+  const [authCallbackError, setAuthCallbackError] = useState<string | null>(null);
+  const [pendingSignupLegal, setPendingSignupLegalState] = useState<{
+    keys: UserMandatoryLegalKey[];
+    versions: LegalVersions;
+  } | null>(null);
   const profileLoadGeneration = useRef(0);
 
   const consumeEmailConfirmedMessage = useCallback(() => {
     setEmailConfirmedMessage(null);
   }, []);
+
+  const consumeJustVerifiedEmail = useCallback(() => {
+    setJustVerifiedEmail(false);
+  }, []);
+
+  const setPendingSignupLegal = useCallback(
+    (payload: { keys: UserMandatoryLegalKey[]; versions: LegalVersions } | null) => {
+      setPendingSignupLegalState(payload);
+    },
+    []
+  );
 
   const clearPasswordRecovery = useCallback(() => {
     setPendingPasswordRecovery(false);
@@ -117,6 +155,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, []);
 
+  const clearAuthState = useCallback(() => {
+    profileLoadGeneration.current += 1;
+    setSession(null);
+    setProfile(null);
+    setPendingPasswordRecovery(false);
+  }, []);
+
   const loadProfile = useCallback(async (userId: string) => {
     const generation = ++profileLoadGeneration.current;
     const row = await loadProfileWithRetry(userId);
@@ -126,6 +171,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (row) {
+      if (
+        row.status === "Suspended" ||
+        row.status === "Deletion Requested" ||
+        row.status === "Deleted"
+      ) {
+        const supabase = getSupabase();
+        if (supabase) {
+          await supabase.auth.signOut();
+        }
+        clearAuthState();
+        return null;
+      }
       setProfile(row);
       return row;
     }
@@ -133,14 +190,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Keep the last known profile for this user when a refetch fails or races.
     setProfile((current) => (current?.id === userId ? current : null));
     return null;
-  }, [loadProfileWithRetry]);
+  }, [loadProfileWithRetry, clearAuthState]);
 
-  const clearAuthState = useCallback(() => {
-    profileLoadGeneration.current += 1;
-    setSession(null);
-    setProfile(null);
-    setPendingPasswordRecovery(false);
-  }, []);
+  const applyPendingSignupLegal = useCallback(
+    async (accessToken: string, userId?: string) => {
+      if (!pendingSignupLegal) return;
+      const recordResult = await recordLegalAcceptances(
+        buildAcceptanceInputs(pendingSignupLegal.keys, pendingSignupLegal.versions)
+      );
+      if (recordResult.ok) {
+        setPendingSignupLegalState(null);
+        void sendAuthEmailHook("account_created", accessToken);
+        if (userId) {
+          await loadProfile(userId);
+        }
+      }
+    },
+    [pendingSignupLegal, loadProfile]
+  );
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -149,23 +216,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const completeNativeAuthUrl = async (url: string) => {
-      if (Platform.OS === "web") return;
+    const completeAuthUrl = async (url: string) => {
       const result = await completeAuthSessionFromUrl(supabase, url);
+      if (result.error) {
+        setAuthCallbackError(result.error);
+        return result;
+      }
+      setAuthCallbackError(null);
       if (result.isPasswordRecovery) {
         setPendingPasswordRecovery(true);
-      } else if (result.session && isSignupConfirmationCallback(url)) {
-        setEmailConfirmedMessage("Email confirmed! You're signed in.");
-        if (result.session.access_token) {
-          void sendAuthEmailHook("email_verified", result.session.access_token);
+      } else if (result.session && !result.isPasswordRecovery) {
+        if (isSignupConfirmationCallback(url)) {
+          setJustVerifiedEmail(true);
+          setEmailConfirmedMessage("Email verified! You're signed in.");
+          if (result.session.access_token) {
+            void sendAuthEmailHook("email_verified", result.session.access_token);
+            void applyPendingSignupLegal(
+              result.session.access_token,
+              result.session.user?.id
+            );
+          }
         }
       }
+      return result;
+    };
+
+    const completeNativeAuthUrl = async (url: string) => {
+      if (Platform.OS === "web") return;
+      await completeAuthUrl(url);
     };
 
     const applyAuthSession = async (nextSession: Session | null) => {
       setSession(nextSession);
 
       if (nextSession?.user?.id) {
+        setAuthCallbackError(null);
         await loadProfile(nextSession.user.id);
         void registerPushTokenForUser(nextSession.user.id);
         return;
@@ -187,7 +272,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const callbackUrl = readAuthCallbackUrl();
         markPasswordRecoveryFromUrl(callbackUrl);
         if (callbackUrl && isSignupConfirmationCallback(callbackUrl)) {
-          setEmailConfirmedMessage("Email confirmed! You're signed in.");
+          setJustVerifiedEmail(true);
+          setEmailConfirmedMessage("Email verified! You're signed in.");
+          if (nextSession.access_token) {
+            void sendAuthEmailHook("email_verified", nextSession.access_token);
+            void applyPendingSignupLegal(nextSession.access_token, nextSession.user?.id);
+          }
         }
       }
 
@@ -208,7 +298,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void (async () => {
       if (Platform.OS === "web") {
-        markPasswordRecoveryFromUrl(readAuthCallbackUrl());
+        const callbackUrl = readAuthCallbackUrl();
+        if (callbackUrl && isAuthCallbackUrl(callbackUrl)) {
+          await completeAuthUrl(callbackUrl);
+          stripAuthParamsFromBrowserUrl();
+        } else {
+          markPasswordRecoveryFromUrl(callbackUrl);
+        }
       }
 
       if (Platform.OS !== "web") {
@@ -227,7 +323,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sub.subscription.unsubscribe();
       linkingSub?.remove();
     };
-  }, [loadProfile, markPasswordRecoveryFromUrl]);
+  }, [loadProfile, markPasswordRecoveryFromUrl, applyPendingSignupLegal]);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -252,7 +348,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
       });
 
-      if (error) return { error: error.message };
+      if (error) {
+        if (isEmailNotConfirmedError(error.message)) {
+          return {
+            needsEmailVerification: true,
+            email: email.trim().toLowerCase(),
+            error: "Please verify your email before signing in.",
+          };
+        }
+        return { error: error.message };
+      }
+
+      if (data.user && !data.user.email_confirmed_at) {
+        await supabase.auth.signOut();
+        clearAuthState();
+        return {
+          needsEmailVerification: true,
+          email: data.user.email ?? email.trim().toLowerCase(),
+          error: "Please verify your email before signing in.",
+        };
+      }
 
       if (data.session) {
         setSession(data.session);
@@ -267,6 +382,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await supabase.auth.signOut();
         clearAuthState();
         return { error: "This account has been suspended. Contact support." };
+      }
+      if (row.status === "Deletion Requested" || row.status === "Deleted") {
+        await supabase.auth.signOut();
+        clearAuthState();
+        return { error: "This account is no longer active. Contact support." };
       }
 
       return { route: homeRouteForRole(row.role), profile: row };
@@ -367,6 +487,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return loadProfile(session.user.id);
   }, [session?.user?.id, loadProfile]);
 
+  const resendVerificationEmail = useCallback(async (email: string) => {
+    const supabase = getSupabase();
+    if (!supabase) return { error: "Supabase is not configured" };
+
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim().toLowerCase(),
+      options: { emailRedirectTo: getAuthRedirectUrl() },
+    });
+    if (error) return { error: error.message };
+    return {};
+  }, []);
+
   const value = useMemo(
     () => ({
       isConfigured: isSupabaseConfigured(),
@@ -379,10 +512,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetPassword,
       changePassword,
       refreshProfile,
+      resendVerificationEmail,
+      setPendingSignupLegal,
       pendingPasswordRecovery,
       clearPasswordRecovery,
       emailConfirmedMessage,
       consumeEmailConfirmedMessage,
+      justVerifiedEmail,
+      consumeJustVerifiedEmail,
+      authCallbackError,
     }),
     [
       loading,
@@ -394,10 +532,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetPassword,
       changePassword,
       refreshProfile,
+      resendVerificationEmail,
+      setPendingSignupLegal,
       pendingPasswordRecovery,
       clearPasswordRecovery,
       emailConfirmedMessage,
       consumeEmailConfirmedMessage,
+      justVerifiedEmail,
+      consumeJustVerifiedEmail,
+      authCallbackError,
     ]
   );
 

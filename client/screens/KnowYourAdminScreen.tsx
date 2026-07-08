@@ -1,13 +1,12 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { View, StyleSheet, ScrollView } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 const expertiseItems = [
   { icon: "sun", label: "Reiki Grandmaster & Advanced Su-Jok Therapist" },
@@ -39,28 +38,17 @@ function LotusDecor({ size = 48, color = Colors.light.accent }: { size?: number;
 }
 
 export default function KnowYourAdminScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const { scrollPaddingBottom } = useLayoutInsets(32);
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Know Your Admin</ThemedText>
-      </View>
+      <BelowHeaderTitle>Know Your Admin</BelowHeaderTitle>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.profileCard}>
@@ -139,37 +127,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: Colors.light.cardBackground,
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 22,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-    textAlign: "center",
   },
   scrollView: {
     flex: 1,

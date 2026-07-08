@@ -1,28 +1,18 @@
 import React, { useCallback, useState } from "react";
-import {
-  View,
-  ScrollView,
-  StyleSheet,
-  Pressable,
-  ActivityIndicator,
-  TextInput,
-  Alert,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import ApplicationProgressTracker from "@/components/ApplicationProgressTracker";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import type { RoleApplication } from "@/data/roleApplications";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { fetchMyRoleApplications } from "@/services/platform/roleApplicationsService";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 export default function ApplicationStatusScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [apps, setApps] = useState<RoleApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,87 +49,63 @@ export default function ApplicationStatusScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+    <PageLayout
+      title="Application Status"
+      titleInHeader
+      header="back"
+      contentContainerStyle={styles.content}
+    >
+      {loading ? (
+        <ActivityIndicator color={Colors.light.accent} style={styles.loader} />
+      ) : error ? (
+        <Pressable onPress={() => void load()}>
+          <ThemedText style={styles.errorText}>{error} — tap to retry</ThemedText>
         </Pressable>
-        <ThemedText style={styles.headerTitle}>Application Status</ThemedText>
-        <View style={styles.headerIconButton} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
-      >
-        {loading ? (
-          <ActivityIndicator color={Colors.light.accent} style={{ marginTop: 40 }} />
-        ) : error ? (
-          <Pressable onPress={() => void load()}>
-            <ThemedText style={styles.errorText}>{error} — tap to retry</ThemedText>
-          </Pressable>
-        ) : !latest ? (
-          <ThemedText style={styles.emptyText}>
-            You have not submitted a practitioner or seller application yet.
+      ) : !latest ? (
+        <ThemedText style={styles.emptyText}>
+          You have not submitted a practitioner or seller application yet.
+        </ThemedText>
+      ) : (
+        <>
+          <ThemedText style={styles.roleLabel}>{latest.targetRole} Application</ThemedText>
+          <ThemedText style={styles.submitted}>
+            Submitted {new Date(latest.createdAt).toLocaleDateString()}
           </ThemedText>
-        ) : (
-          <>
-            <ThemedText style={styles.roleLabel}>
-              {latest.targetRole} Application
+
+          <ApplicationProgressTracker
+            stage={latest.progressStage}
+            rejectionReason={latest.rejectionReason}
+          />
+
+          {latest.status === "Rejected" ? (
+            <Pressable style={styles.reapplyBtn} onPress={handleReapply}>
+              <ThemedText style={styles.reapplyText}>Update & reapply</ThemedText>
+            </Pressable>
+          ) : null}
+
+          {latest.status === "Pending" ? (
+            <ThemedText style={styles.hint}>
+              Reviews typically take 5–7 business days. You'll be notified when there is an update.
             </ThemedText>
-            <ThemedText style={styles.submitted}>
-              Submitted {new Date(latest.createdAt).toLocaleDateString()}
-            </ThemedText>
-
-            <ApplicationProgressTracker
-              stage={latest.progressStage}
-              rejectionReason={latest.rejectionReason}
-            />
-
-            {latest.status === "Rejected" ? (
-              <Pressable style={styles.reapplyBtn} onPress={handleReapply}>
-                <ThemedText style={styles.reapplyText}>Update & reapply</ThemedText>
-              </Pressable>
-            ) : null}
-
-            {latest.status === "Pending" ? (
-              <ThemedText style={styles.hint}>
-                Reviews typically take 5–7 business days. You'll be notified when there is an update.
-              </ThemedText>
-            ) : null}
-          </>
-        )}
-      </ScrollView>
-    </View>
+          ) : null}
+        </>
+      )}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
+  content: {
+    paddingTop: LayoutSpacing.xs,
   },
-  headerIconButton: { padding: 8, width: 40 },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: Colors.light.accent,
-  },
-  scroll: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
+  loader: { marginTop: 40 },
   roleLabel: { fontSize: 20, fontWeight: "600", color: Colors.light.text },
-  submitted: { fontSize: 13, color: Colors.light.textMuted, marginBottom: Spacing.lg },
-  hint: { fontSize: 13, color: Colors.light.textMuted, marginTop: Spacing.lg, lineHeight: 18 },
+  submitted: { fontSize: 13, color: Colors.light.textMuted, marginBottom: LayoutSpacing.lg },
+  hint: { fontSize: 13, color: Colors.light.textMuted, marginTop: LayoutSpacing.lg, lineHeight: 18 },
   emptyText: { fontSize: 14, color: Colors.light.textMuted, textAlign: "center", marginTop: 40 },
   errorText: { color: "#8B3A3A", textAlign: "center", marginTop: 40 },
   reapplyBtn: {
-    marginTop: Spacing.lg,
+    marginTop: LayoutSpacing.lg,
     backgroundColor: Colors.light.accent,
     paddingVertical: 14,
     borderRadius: BorderRadius.sm,

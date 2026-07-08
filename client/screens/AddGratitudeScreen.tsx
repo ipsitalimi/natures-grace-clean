@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle, KeyboardFormLayout } from "@/components/layout";
 import { Colors, Spacing } from "@/constants/theme";
 import { useGratitude } from "@/context/GratitudeContext";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 function HeartIcon({ size, color }: { size: number; color: string }) {
   return (
@@ -34,7 +33,6 @@ function HeartIcon({ size, color }: { size: number; color: string }) {
 
 export default function AddGratitudeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { addGratitude } = useGratitude();
   const { session } = useAuth();
@@ -69,134 +67,93 @@ export default function AddGratitudeScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <View style={styles.headerIconButton} />
+    <KeyboardFormLayout
+      footerInset={tabBarHeight}
+      header={
+        <>
+          <BackHeader showNotifications={false} />
+          <BelowHeaderTitle>Add Gratitude</BelowHeaderTitle>
+        </>
+      }
+    >
+      <View style={styles.iconContainer}>
+        <HeartIcon size={40} color={Colors.light.accent} />
       </View>
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Add Gratitude</ThemedText>
-      </View>
+      <ThemedText style={styles.prompt}>What are you grateful for today?</ThemedText>
 
-      <View style={[styles.content, { paddingBottom: tabBarHeight + 20 }]}>
-        <View style={styles.iconContainer}>
-          <HeartIcon size={40} color={Colors.light.accent} />
-        </View>
+      <TextInput
+        style={styles.textInput}
+        placeholder="I'm thankful for..."
+        placeholderTextColor={`${Colors.light.textSecondary}80`}
+        multiline
+        textAlignVertical="top"
+        value={gratitudeText}
+        onChangeText={setGratitudeText}
+        blurOnSubmit
+        returnKeyType="done"
+        testID="input-gratitude"
+      />
 
-        <ThemedText style={styles.prompt}>
-          What are you grateful for today?
-        </ThemedText>
-
-        <TextInput
-          style={styles.textInput}
-          placeholder="I'm thankful for..."
-          placeholderTextColor={`${Colors.light.textSecondary}80`}
-          multiline
-          textAlignVertical="top"
-          value={gratitudeText}
-          onChangeText={setGratitudeText}
-          testID="input-gratitude"
-        />
-
-        <View style={styles.visibilitySection}>
-          <ThemedText style={styles.visibilityLabel}>Who can see this?</ThemedText>
-          <View style={styles.visibilityOptions}>
-            <Pressable
-              style={[styles.visibilityOption, !isPublic && styles.visibilityOptionActive]}
-              onPress={() => setIsPublic(false)}
-              testID="option-private"
-            >
-              <Feather name="eye-off" size={16} color={!isPublic ? "#FFFFFF" : Colors.light.accent} />
-              <ThemedText style={[styles.visibilityOptionText, !isPublic && styles.visibilityOptionTextActive]}>
-                Private
-              </ThemedText>
-            </Pressable>
-            <Pressable
-              style={[styles.visibilityOption, isPublic && styles.visibilityOptionActive]}
-              onPress={() => setIsPublic(true)}
-              testID="option-public"
-            >
-              <Feather name="eye" size={16} color={isPublic ? "#FFFFFF" : Colors.light.accent} />
-              <ThemedText style={[styles.visibilityOptionText, isPublic && styles.visibilityOptionTextActive]}>
-                Public
-              </ThemedText>
-            </Pressable>
-          </View>
-          <ThemedText style={styles.visibilityHint}>
-            {isPublic
-              ? "Others in the community will see this gratitude"
-              : "Only you can see this gratitude"}
-          </ThemedText>
-        </View>
-
-        {submitError ? (
-          <ThemedText style={styles.submitErrorText}>{submitError}</ThemedText>
-        ) : null}
-
-        {saved ? (
-          <View style={styles.successMessage}>
-            <Feather name="check-circle" size={20} color={Colors.light.accent} />
-            <ThemedText style={styles.successText}>Gratitude added</ThemedText>
-          </View>
-        ) : (
+      <View style={styles.visibilitySection}>
+        <ThemedText style={styles.visibilityLabel}>Who can see this?</ThemedText>
+        <View style={styles.visibilityOptions}>
           <Pressable
-            style={[styles.submitButton, (!gratitudeText.trim() || submitting) && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={!gratitudeText.trim() || submitting}
-            testID="button-save-gratitude"
+            style={[styles.visibilityOption, !isPublic && styles.visibilityOptionActive]}
+            onPress={() => setIsPublic(false)}
+            testID="option-private"
           >
-            {submitting ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <ThemedText style={styles.submitButtonText}>Save Gratitude</ThemedText>
-            )}
+            <Feather name="eye-off" size={16} color={!isPublic ? "#FFFFFF" : Colors.light.accent} />
+            <ThemedText style={[styles.visibilityOptionText, !isPublic && styles.visibilityOptionTextActive]}>
+              Private
+            </ThemedText>
           </Pressable>
-        )}
+          <Pressable
+            style={[styles.visibilityOption, isPublic && styles.visibilityOptionActive]}
+            onPress={() => setIsPublic(true)}
+            testID="option-public"
+          >
+            <Feather name="eye" size={16} color={isPublic ? "#FFFFFF" : Colors.light.accent} />
+            <ThemedText style={[styles.visibilityOptionText, isPublic && styles.visibilityOptionTextActive]}>
+              Public
+            </ThemedText>
+          </Pressable>
+        </View>
+        <ThemedText style={styles.visibilityHint}>
+          {isPublic
+            ? "Others in the community will see this gratitude"
+            : "Only you can see this gratitude"}
+        </ThemedText>
       </View>
-    </View>
+
+      {submitError ? (
+        <ThemedText style={styles.submitErrorText}>{submitError}</ThemedText>
+      ) : null}
+
+      {saved ? (
+        <View style={styles.successMessage}>
+          <Feather name="check-circle" size={20} color={Colors.light.accent} />
+          <ThemedText style={styles.successText}>Gratitude added</ThemedText>
+        </View>
+      ) : (
+        <Pressable
+          style={[styles.submitButton, (!gratitudeText.trim() || submitting) && styles.submitButtonDisabled]}
+          onPress={handleSubmit}
+          disabled={!gratitudeText.trim() || submitting}
+          testID="button-save-gratitude"
+        >
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.submitButtonText}>Save Gratitude</ThemedText>
+          )}
+        </Pressable>
+      )}
+    </KeyboardFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-    width: 40,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-  },
   iconContainer: {
     alignItems: "center",
     marginBottom: Spacing.md,

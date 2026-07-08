@@ -15,7 +15,7 @@ async function sendRoleApprovalNotifications(
   const isPractitioner = application.targetRole === "Practitioner";
   const event = isPractitioner ? "practitioner_approved" : "seller_approved";
   const emailTemplate = event;
-  const linkRoute = isPractitioner ? "PractitionerMain" : "SellerOnboarding";
+  const linkRoute = isPractitioner ? "PractitionerOnboarding" : "SellerOnboarding";
   const message = isPractitioner
     ? "Congratulations! Your practitioner application has been approved."
     : "Congratulations! Your seller application was approved. Set up your store to get started.";
@@ -198,25 +198,13 @@ async function createPractitionerFromApplication(
   const supabase = getSupabase();
   if (!supabase) throw new Error("Supabase not configured");
 
-  const { error } = await supabase.from("practitioners").insert({
-    profile_id: userId,
-    name: form.fullName || "Practitioner",
-    category: form.category || "Healings",
-    subcategory: form.sessionTypes || "",
-    bio: form.bio || "",
-    experience: form.experience || "",
-    certifications: parseCertifications(form.certifications || ""),
-    rating: 5,
-    review_count: 0,
-    price_per_session: parsePriceFromRange(form.priceRange || ""),
-    approval_status: "Approved",
-    is_verified: false,
-    featured: false,
-    is_active: true,
+  const { error } = await supabase.rpc("apply_practitioner_application", {
+    p_user_id: userId,
+    p_form: form,
   });
 
   if (error) {
-    console.error("[roleApplicationsService] create practitioner:", error.message);
+    console.error("[roleApplicationsService] apply practitioner:", error.message);
     throw new Error(error.message);
   }
 }
@@ -291,68 +279,15 @@ export async function approveRoleApplication(
     if (payload.error) return { ok: false, error: payload.error };
   }
 
-  if (rpcError && rpcError.code !== "PGRST202") {
-    console.warn("[roleApplicationsService] RPC fallback:", rpcError.message);
+  if (rpcError) {
+    const message =
+      rpcError.code === "PGRST202"
+        ? "Role approval requires database migration approve_role_application_transaction. Apply the latest Supabase migrations."
+        : rpcError.message;
+    return { ok: false, error: message };
   }
 
-  const { data: row, error: fetchError } = await supabase
-    .from("role_applications")
-    .select("*")
-    .eq("id", applicationId)
-    .maybeSingle();
-
-  if (fetchError || !row) {
-    return { ok: false, error: fetchError?.message ?? "Application not found" };
-  }
-
-  const application = mapRow(row as DbRoleApplicationRow);
-  if (application.status !== "Pending") {
-    return { ok: false, error: "Application is no longer pending" };
-  }
-
-  try {
-    if (application.targetRole === "Practitioner") {
-      await createPractitionerFromApplication(application.userId, application.formData);
-    } else {
-      await createSellerFromApplication(application.userId, application.formData);
-    }
-  } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "Could not provision role account",
-    };
-  }
-
-  const roleResult = await updateProfile(application.userId, {
-    role: application.targetRole,
-    full_name: application.formData.fullName || undefined,
-    phone: application.formData.phone || undefined,
-  });
-  if (roleResult.error) {
-    return { ok: false, error: roleResult.error };
-  }
-
-  const { error: updateError } = await supabase
-    .from("role_applications")
-    .update({
-      status: "Approved",
-      progress_stage: "approved",
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: adminUser.id,
-    })
-    .eq("id", applicationId)
-    .eq("status", "Pending");
-
-  if (updateError) {
-    return { ok: false, error: updateError.message };
-  }
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  await sendRoleApprovalNotifications(application, session?.access_token);
-
-  return { ok: true };
+  return { ok: false, error: "Role approval failed unexpectedly." };
 }
 
 export async function rejectRoleApplication(

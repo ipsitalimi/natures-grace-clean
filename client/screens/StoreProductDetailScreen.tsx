@@ -1,21 +1,11 @@
-import React, { useState, useEffect } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Image,
-  Animated,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useEffect, useState } from "react";
+import { View, StyleSheet, ScrollView, Pressable, Image, Animated, TextInput, ActivityIndicator, Alert } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { ScreenHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProductImageView from "@/components/ProductImageView";
 import { useDataContext } from "@/context/DataContext";
@@ -25,7 +15,12 @@ import { useReviews } from "@/context/ReviewsContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import type { Review } from "@/data/reviews";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import {
+  getEnabledSellerDeliveryOptions,
+  type SellerDeliveryOption,
+} from "@/constants/sellerDelivery";
+import { fetchSellerDeliveryBySellerId } from "@/services/commerce/sellerDeliveryService";
 import { formatInr } from "@/lib/formatCurrency";
 
 type StoreParamList = {
@@ -34,7 +29,7 @@ type StoreParamList = {
 };
 
 export default function StoreProductDetailScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom, bottom } = useLayoutInsets(Spacing.xl);
   const navigation = useNavigation<NativeStackNavigationProp<StoreParamList>>();
   const route = useRoute<RouteProp<StoreParamList, "StoreProductDetail">>();
   const { productId } = route.params;
@@ -67,6 +62,8 @@ export default function StoreProductDetailScreen() {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [favoriteBusy, setFavoriteBusy] = useState(false);
+  const [sellerDeliveryOptions, setSellerDeliveryOptions] = useState<SellerDeliveryOption[]>([]);
+  const [sellerStoreName, setSellerStoreName] = useState<string | null>(null);
 
   const favorited = product ? isFavorite("product", productId) : false;
 
@@ -132,6 +129,28 @@ export default function StoreProductDetailScreen() {
       cancelled = true;
     };
   }, [productId, product, session?.user?.id, getMyReviewForProduct]);
+
+  useEffect(() => {
+    if (!product?.sellerId) {
+      setSellerDeliveryOptions([]);
+      setSellerStoreName(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchSellerDeliveryBySellerId(product.sellerId).then((profile) => {
+      if (cancelled) return;
+      if (!profile) {
+        setSellerDeliveryOptions([]);
+        setSellerStoreName(null);
+        return;
+      }
+      setSellerStoreName(profile.storeName);
+      setSellerDeliveryOptions(getEnabledSellerDeliveryOptions(profile.settings));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.sellerId]);
 
   const handleSubmitProductReview = async () => {
     if (!product) return;
@@ -199,13 +218,7 @@ export default function StoreProductDetailScreen() {
   if (!product) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <View style={styles.headerIconButton} />
-        </View>
+        <ScreenHeader variant="back" showNotifications={false} />
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>Product not found</ThemedText>
         </View>
@@ -215,47 +228,46 @@ export default function StoreProductDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => void handleToggleFavorite()}
-          disabled={favoriteBusy}
-          testID="button-toggle-favorite"
-        >
-          {favoriteBusy ? (
-            <ActivityIndicator size="small" color={Colors.light.accent} />
-          ) : (
-            <Feather
-              name="heart"
-              size={22}
-              color={favorited ? "#D4534A" : Colors.light.accent}
-            />
-          )}
-        </Pressable>
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Cart")}
-          testID="button-detail-cart"
-        >
-          <Feather name="shopping-cart" size={22} color={Colors.light.accent} />
-          {cartCount > 0 ? (
-            <View style={styles.cartBadge}>
-              <ThemedText style={styles.cartBadgeText}>{cartCount > 9 ? "9+" : cartCount}</ThemedText>
-            </View>
-          ) : null}
-        </Pressable>
-      </View>
+      <ScreenHeader
+        variant="back"
+        showNotifications={false}
+        rightAction={
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.headerIconButton}
+              onPress={() => void handleToggleFavorite()}
+              disabled={favoriteBusy}
+              testID="button-toggle-favorite"
+            >
+              {favoriteBusy ? (
+                <ActivityIndicator size="small" color={Colors.light.accent} />
+              ) : (
+                <Feather
+                  name="heart"
+                  size={22}
+                  color={favorited ? "#D4534A" : Colors.light.accent}
+                />
+              )}
+            </Pressable>
+            <Pressable
+              style={styles.headerIconButton}
+              onPress={() => navigation.navigate("Cart")}
+              testID="button-detail-cart"
+            >
+              <Feather name="shopping-cart" size={22} color={Colors.light.accent} />
+              {cartCount > 0 ? (
+                <View style={styles.cartBadge}>
+                  <ThemedText style={styles.cartBadgeText}>{cartCount > 9 ? "9+" : cartCount}</ThemedText>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: insets.bottom + Spacing["3xl"] },
-        ]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.imagePlaceholder}>
@@ -280,6 +292,26 @@ export default function StoreProductDetailScreen() {
           <ThemedText style={styles.productDescription}>
             {product.description}
           </ThemedText>
+
+          {sellerDeliveryOptions.length > 0 ? (
+            <>
+              <View style={styles.divider} />
+              <ThemedText style={styles.sectionTitle}>Delivery options</ThemedText>
+              {sellerStoreName ? (
+                <ThemedText style={styles.deliverySellerNote}>
+                  Fulfilled by {sellerStoreName}
+                </ThemedText>
+              ) : null}
+              {sellerDeliveryOptions.map((option) => (
+                <View key={option.id} style={styles.deliveryRow}>
+                  <ThemedText style={styles.deliveryRowLabel}>{option.label}</ThemedText>
+                  <ThemedText style={styles.deliveryRowMeta}>
+                    {option.duration} · {option.price <= 0 ? "Free" : formatInr(option.price)}
+                  </ThemedText>
+                </View>
+              ))}
+            </>
+          ) : null}
 
           <View style={styles.divider} />
 
@@ -367,25 +399,23 @@ export default function StoreProductDetailScreen() {
           ) : isSupabaseConfigured() ? (
             <ThemedText style={styles.reviewSignIn}>Sign in to leave a review.</ThemedText>
           ) : null}
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.addToCartButton,
+              pressed && styles.addToCartButtonPressed,
+            ]}
+            onPress={handleAddToCart}
+            testID="button-add-to-cart"
+          >
+            <Feather name="shopping-cart" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <ThemedText style={styles.addToCartText}>Add to Cart</ThemedText>
+          </Pressable>
         </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom) + Spacing.md }]}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.addToCartButton,
-            pressed && styles.addToCartButtonPressed,
-          ]}
-          onPress={handleAddToCart}
-          testID="button-add-to-cart"
-        >
-          <Feather name="shopping-cart" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <ThemedText style={styles.addToCartText}>Add to Cart</ThemedText>
-        </Pressable>
-      </View>
-
       {showToast ? (
-        <Animated.View style={[styles.toast, { opacity: toastOpacity, bottom: insets.bottom + 90 }]}>
+        <Animated.View style={[styles.toast, { opacity: toastOpacity, bottom: bottom + Spacing.lg }]}>
           <Feather name="check-circle" size={18} color="#FFFFFF" />
           <ThemedText style={styles.toastText}>Added to cart</ThemedText>
           <Pressable onPress={() => navigation.navigate("Cart")} testID="button-toast-view-cart">
@@ -402,20 +432,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
   },
   headerIconButton: {
     padding: 8,
     position: "relative",
-  },
-  headerCenter: {
-    flex: 1,
   },
   cartBadge: {
     position: "absolute",
@@ -461,6 +484,7 @@ const styles = StyleSheet.create({
   detailSection: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.xl,
+    paddingBottom: Spacing.md,
   },
   categoryLabel: {
     fontSize: 12,
@@ -471,12 +495,14 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   productName: {
-    fontSize: 34,
+    fontSize: 28,
+    lineHeight: 36,
     fontWeight: "600",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
     letterSpacing: 0.5,
     marginBottom: Spacing.sm,
+    flexShrink: 1,
   },
   productPrice: {
     fontSize: 22,
@@ -498,6 +524,26 @@ const styles = StyleSheet.create({
   productDescription: {
     fontSize: 15,
     lineHeight: 24,
+    color: Colors.light.textSecondary,
+  },
+  deliverySellerNote: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+    marginBottom: Spacing.sm,
+  },
+  deliveryRow: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.divider,
+  },
+  deliveryRowLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.light.text,
+    marginBottom: 2,
+  },
+  deliveryRowMeta: {
+    fontSize: 13,
     color: Colors.light.textSecondary,
   },
   reviewSpinner: {
@@ -596,13 +642,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-  bottomBar: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: Spacing.md,
-    backgroundColor: Colors.light.backgroundRoot,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.divider,
-  },
   addToCartButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.sm,
@@ -610,6 +649,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
+    marginTop: Spacing.xl,
   },
   addToCartButtonPressed: {
     opacity: 0.85,

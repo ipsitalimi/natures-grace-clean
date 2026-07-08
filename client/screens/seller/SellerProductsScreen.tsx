@@ -3,14 +3,15 @@ import { View, StyleSheet, ScrollView, Pressable, TextInput, FlatList, ActivityI
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
-import Svg, { Rect } from "react-native-svg";
+import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { Layout } from "@/constants/layout";
 import { formatInr } from "@/lib/formatCurrency";
 import ProductImageView from "@/components/ProductImageView";
-import AppHeader from "@/components/AppHeader";
-import SellerDrawer from "@/components/SellerDrawer";
+import ScreenHeader from "@/components/layout/ScreenHeader";
+import { useDrawer } from "@/context/DrawerContext";
 import {
   getStockColor,
   getCategoryShortName,
@@ -154,8 +155,7 @@ export default function SellerProductsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
   const { sellerCatalog: sellerProducts, dataLoading } = useDataContext();
-  const [drawerVisible, setDrawerVisible] = useState(false);
-
+  const { openDrawer } = useDrawer();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("All");
@@ -174,12 +174,29 @@ export default function SellerProductsScreen() {
 
   return (
     <View style={styles.container}>
-      <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
-
-      <View style={styles.pageTitleSection}>
-        <ThemedText style={styles.pageTitle}>Products</ThemedText>
-      </View>
+      <ScreenHeader
+        variant="title"
+        title="Products"
+        showNotifications
+        leftAction={
+          <Pressable
+            style={styles.headerIconBtn}
+            onPress={() => openDrawer("seller")}
+            testID="button-profile"
+          >
+            <Svg width={Layout.headerIconSize} height={Layout.headerIconSize} viewBox="0 0 24 24" fill="none">
+              <Circle cx="12" cy="8" r="4" fill={Colors.light.accent} opacity={0.8} />
+              <Path
+                d="M4 20C4 16 8 14 12 14C16 14 20 16 20 20"
+                stroke={Colors.light.accent}
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </Svg>
+          </Pressable>
+        }
+      />
 
       {dataLoading ? (
         <View style={styles.loadingState}>
@@ -356,18 +373,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  /** Same as CommunityScreen `titleSection` + `title` */
-  pageTitleSection: {
+  headerIconBtn: {
+    padding: Layout.headerIconPadding,
     alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg + 8,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
+    justifyContent: "center",
   },
   loadingState: {
     flex: 1,

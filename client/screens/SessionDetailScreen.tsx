@@ -2,33 +2,55 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   Pressable,
   TextInput,
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { useRoute, RouteProp } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
 import type { UserSessionHistory } from "@/data/practitionerBookings";
 import { useAuth } from "@/context/AuthContext";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import { useReviews } from "@/context/ReviewsContext";
 import type { Review } from "@/data/reviews";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 import { openMeetingLink } from "@/lib/meetingLink";
 import { useCancellationPolicy } from "@/lib/cancellationPolicy";
 
 type ParamList = {
   SessionDetail: { sessionId: string };
 };
+
+function SessionDetailLayout({
+  children,
+  scrollable = true,
+  footerInset = 0,
+}: {
+  children: React.ReactNode;
+  scrollable?: boolean;
+  footerInset?: number;
+}) {
+  return (
+    <PageLayout
+      title="Session Detail"
+      titleInHeader
+      header="back"
+      scrollable={scrollable}
+      footerInset={footerInset}
+      style={styles.flex}
+      contentContainerStyle={styles.pageContent}
+    >
+      {children}
+    </PageLayout>
+  );
+}
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -53,11 +75,9 @@ function getStatusColor(status: UserSessionHistory["status"]): string {
 }
 
 export default function SessionDetailScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<RouteProp<ParamList, "SessionDetail">>();
   const { sessionId } = route.params;
-  const [drawerVisible, setDrawerVisible] = useState(false);
 
   const { session: authSession } = useAuth();
   const { userSessions, loading: practitionerLoading, refresh, cancelUserSession } =
@@ -98,44 +118,18 @@ export default function SessionDetailScreen() {
 
   if (practitionerLoading && !session) {
     return (
-      <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Session Detail</ThemedText>
-        </View>
+      <SessionDetailLayout scrollable={false}>
         <View style={styles.emptyState}>
           <ActivityIndicator color={Colors.light.accent} />
           <ThemedText style={styles.emptyText}>Loading session…</ThemedText>
         </View>
-      </View>
+      </SessionDetailLayout>
     );
   }
 
   if (!session) {
     return (
-      <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Session Detail</ThemedText>
-        </View>
-
+      <SessionDetailLayout scrollable={false}>
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>
             {!isSupabaseConfigured()
@@ -143,7 +137,7 @@ export default function SessionDetailScreen() {
               : "Session not found."}
           </ThemedText>
         </View>
-      </View>
+      </SessionDetailLayout>
     );
   }
 
@@ -222,27 +216,7 @@ export default function SessionDetailScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
-
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Session Detail</ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 100) }]}
-        showsVerticalScrollIndicator={false}
-      >
+    <SessionDetailLayout>
         <View style={styles.headerCard}>
           <ThemedText style={styles.practitionerName}>{session.practitionerName}</ThemedText>
           <ThemedText style={styles.serviceType}>{session.serviceType}</ThemedText>
@@ -353,76 +327,46 @@ export default function SessionDetailScreen() {
             )}
           </View>
         ) : null}
-      </ScrollView>
 
-      {isUpcoming ? (
-        <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
-          <Pressable
-            style={styles.joinButton}
-            onPress={handleJoinSession}
-            testID="button-join-session"
-          >
-            <ThemedText style={styles.joinButtonText}>Join Session</ThemedText>
-          </Pressable>
-          <Pressable
-            style={[styles.cancelButton, cancelling && styles.submitReviewDisabled]}
-            onPress={handleCancelSession}
-            disabled={cancelling}
-            testID="button-cancel-session"
-          >
-            {cancelling ? (
-              <ActivityIndicator color="#D4534A" />
-            ) : (
-              <ThemedText style={styles.cancelButtonText}>Cancel Session</ThemedText>
-            )}
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
+        {isUpcoming ? (
+          <View style={styles.actionSection}>
+            <Pressable
+              style={styles.joinButton}
+              onPress={handleJoinSession}
+              testID="button-join-session"
+            >
+              <ThemedText style={styles.joinButtonText}>Join Session</ThemedText>
+            </Pressable>
+            <Pressable
+              style={[styles.cancelButton, cancelling && styles.submitReviewDisabled]}
+              onPress={handleCancelSession}
+              disabled={cancelling}
+              testID="button-cancel-session"
+            >
+              {cancelling ? (
+                <ActivityIndicator color="#D4534A" />
+              ) : (
+                <ThemedText style={styles.cancelButtonText}>Cancel Session</ThemedText>
+              )}
+            </Pressable>
+          </View>
+        ) : null}
+      </SessionDetailLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
+  flex: {
     flex: 1,
   },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
+  pageContent: {
+    paddingTop: LayoutSpacing.xs,
   },
   emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    minHeight: 200,
   },
   emptyText: {
     fontSize: 16,
@@ -573,16 +517,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
   },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.light.backgroundRoot,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.divider,
+  actionSection: {
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.lg,
     gap: 10,
   },
   joinButton: {

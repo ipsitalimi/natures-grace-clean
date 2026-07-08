@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { View, ScrollView, StyleSheet, TextInput, Pressable, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
+import { ScreenHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 import { useAuth } from "@/context/AuthContext";
@@ -19,13 +19,12 @@ import {
 import { submitRoleApplication } from "@/services/platform/roleApplicationsService";
 import { uploadApplicationDocuments } from "@/services/platform/applicationDocumentsService";
 import ApplicationDocumentsSection from "@/components/ApplicationDocumentsSection";
+import PractitionerCategoryFields from "@/components/PractitionerCategoryFields";
 import type { LocalFile } from "@/lib/storageUpload";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
-
-const CATEGORIES = ["Healings", "Counseling", "Therapies", "Spiritual Guidance"];
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 export default function PractitionerApplicationScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(30);
   const navigation = useNavigation();
   const { appNameDisplay } = useAppBrandCopy();
   const { session, profile, refreshProfile } = useAuth();
@@ -39,6 +38,7 @@ export default function PractitionerApplicationScreen() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState("");
+  const [subcategories, setSubcategories] = useState<string[]>([]);
   const [experience, setExperience] = useState("");
   const [certifications, setCertifications] = useState("");
   const [sessionTypes, setSessionTypes] = useState("");
@@ -72,8 +72,8 @@ export default function PractitionerApplicationScreen() {
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting || !agreementReady) return;
-    if (!fullName.trim() || !email.trim() || !category) {
-      setSubmitError("Please fill in your name, email, and practice category.");
+    if (!fullName.trim() || !email.trim() || !category || subcategories.length === 0) {
+      setSubmitError("Please fill in your name, email, practice category, and at least one service.");
       return;
     }
     setSubmitting(true);
@@ -95,6 +95,8 @@ export default function PractitionerApplicationScreen() {
         email: email.trim(),
         phone: phone.trim(),
         category,
+        subcategories: subcategories.join(", "),
+        subcategory: subcategories[0] ?? "",
         experience: experience.trim(),
         certifications: certifications.trim(),
         sessionTypes: sessionTypes.trim(),
@@ -137,7 +139,8 @@ export default function PractitionerApplicationScreen() {
             Your application has been sent to the {appNameDisplay} team for review.
           </ThemedText>
           <ThemedText style={styles.confirmationSubtext}>
-            We'll contact you if your profile is approved.
+            We'll contact you if your profile is approved. To offer another service, submit a
+            separate application after this one is reviewed.
           </ThemedText>
           <Pressable
             style={styles.returnButton}
@@ -153,16 +156,20 @@ export default function PractitionerApplicationScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) + Spacing.sm }]}>
-        <Pressable style={styles.backButton} onPress={handleReturnToWellness} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.screenTitle}>Become a Practitioner</ThemedText>
-      </View>
+      <ScreenHeader
+        variant="back"
+        showNotifications={false}
+        onBackPress={handleReturnToWellness}
+        center={
+          <ThemedText style={styles.screenTitle} numberOfLines={1} adjustsFontSizeToFit>
+            Become a Practitioner
+          </ThemedText>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <ThemedText style={styles.introText}>
@@ -216,23 +223,13 @@ export default function PractitionerApplicationScreen() {
           testID="input-phone"
         />
 
-        <ThemedText style={styles.label}>Practice Category</ThemedText>
-        <View style={styles.categoryChips}>
-          {CATEGORIES.map((cat) => (
-            <Pressable
-              key={cat}
-              style={[styles.chip, category === cat ? styles.chipSelected : null]}
-              onPress={() => setCategory(cat)}
-              testID={`chip-${cat.toLowerCase().replace(/\s+/g, "-")}`}
-            >
-              <ThemedText
-                style={[styles.chipText, category === cat ? styles.chipTextSelected : null]}
-              >
-                {cat}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
+        <PractitionerCategoryFields
+          category={category}
+          subcategories={subcategories}
+          onCategoryChange={setCategory}
+          onSubcategoriesChange={setSubcategories}
+          showSingleApplicationHint
+        />
 
         <ThemedText style={styles.label}>Years of Experience</ThemedText>
         <TextInput
@@ -345,21 +342,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.sm,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
   },
   screenTitle: {
     fontSize: 20,

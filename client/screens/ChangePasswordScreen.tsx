@@ -1,20 +1,18 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, StyleSheet, TextInput, Pressable, ActivityIndicator } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { homeRouteForRole, useAuth } from "@/context/AuthContext";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, "ChangePassword">;
 
 export default function ChangePasswordScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const { changePassword, isConfigured, pendingPasswordRecovery, profile } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -23,6 +21,8 @@ export default function ChangePasswordScreen() {
   const [confirmation, setConfirmation] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  const pageTitle = pendingPasswordRecovery ? "Reset Password" : "Change Password";
 
   const handleUpdate = async () => {
     setError("");
@@ -75,147 +75,102 @@ export default function ChangePasswordScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        {!pendingPasswordRecovery ? (
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-        ) : (
-          <View style={styles.headerIconButton} />
-        )}
-        <View style={styles.headerCenter} />
-        <View style={styles.headerIconButton} />
+    <PageLayout
+      title={pageTitle}
+      titleInHeader
+      header="back"
+      headerProps={{
+        showNotifications: false,
+        ...(pendingPasswordRecovery
+          ? { leftAction: <View style={styles.headerSpacer} /> }
+          : {}),
+      }}
+      contentContainerStyle={styles.content}
+    >
+      {!pendingPasswordRecovery ? (
+        <View style={styles.fieldGroup}>
+          <ThemedText style={styles.label}>Current Password</ThemedText>
+          <TextInput
+            style={styles.input}
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            placeholder="Enter current password"
+            placeholderTextColor={Colors.light.textSecondary}
+            secureTextEntry
+            testID="input-current-password"
+          />
+        </View>
+      ) : null}
+
+      <View style={styles.fieldGroup}>
+        <ThemedText style={styles.label}>New Password</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={newPassword}
+          onChangeText={setNewPassword}
+          placeholder="Enter new password"
+          placeholderTextColor={Colors.light.textSecondary}
+          secureTextEntry
+          testID="input-new-password"
+        />
       </View>
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>
-          {pendingPasswordRecovery ? "Reset Password" : "Change Password"}
+      <View style={styles.fieldGroup}>
+        <ThemedText style={styles.label}>Confirm New Password</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          placeholder="Confirm new password"
+          placeholderTextColor={Colors.light.textSecondary}
+          secureTextEntry
+          testID="input-confirm-password"
+        />
+      </View>
+
+      <ThemedText style={styles.requirementsNote}>Password must be at least 8 characters</ThemedText>
+
+      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+      {confirmation ? (
+        <ThemedText style={styles.confirmationText} testID="text-password-updated">
+          Password Updated
         </ThemedText>
-      </View>
+      ) : null}
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
-        showsVerticalScrollIndicator={false}
+      <Pressable
+        style={[styles.updateButton, saving && styles.updateButtonDisabled]}
+        onPress={() => void handleUpdate()}
+        disabled={saving}
+        testID="button-update-password"
       >
-        {!pendingPasswordRecovery ? (
-          <View style={styles.fieldGroup}>
-            <ThemedText style={styles.label}>Current Password</ThemedText>
-            <TextInput
-              style={styles.input}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              placeholder="Enter current password"
-              placeholderTextColor={Colors.light.textSecondary}
-              secureTextEntry
-              testID="input-current-password"
-            />
-          </View>
-        ) : null}
-
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>New Password</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={newPassword}
-            onChangeText={setNewPassword}
-            placeholder="Enter new password"
-            placeholderTextColor={Colors.light.textSecondary}
-            secureTextEntry
-            testID="input-new-password"
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Confirm New Password</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Confirm new password"
-            placeholderTextColor={Colors.light.textSecondary}
-            secureTextEntry
-            testID="input-confirm-password"
-          />
-        </View>
-
-        <ThemedText style={styles.requirementsNote}>Password must be at least 8 characters</ThemedText>
-
-        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
-        {confirmation ? (
-          <ThemedText style={styles.confirmationText} testID="text-password-updated">Password Updated</ThemedText>
-        ) : null}
-
-        <Pressable
-          style={[styles.updateButton, saving && styles.updateButtonDisabled]}
-          onPress={() => void handleUpdate()}
-          disabled={saving}
-          testID="button-update-password"
-        >
-          {saving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <ThemedText style={styles.updateButtonText}>Update Password</ThemedText>
-          )}
-        </Pressable>
-      </ScrollView>
-    </View>
+        {saving ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <ThemedText style={styles.updateButtonText}>Update Password</ThemedText>
+        )}
+      </Pressable>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.xl,
+  content: {
+    paddingTop: LayoutSpacing.md,
   },
   fieldGroup: {
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
     marginLeft: 4,
   },
   input: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: LayoutSpacing.lg,
     paddingVertical: 14,
     fontSize: 15,
     color: Colors.light.text,
@@ -223,21 +178,21 @@ const styles = StyleSheet.create({
   requirementsNote: {
     fontSize: 13,
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.xl,
+    marginBottom: LayoutSpacing.xl,
     marginLeft: 4,
   },
   errorText: {
     fontSize: 14,
     color: "#C0392B",
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   confirmationText: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.light.accent,
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   updateButton: {
     backgroundColor: Colors.light.button,
@@ -254,5 +209,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  headerSpacer: {
+    width: 40,
+    height: 40,
   },
 });

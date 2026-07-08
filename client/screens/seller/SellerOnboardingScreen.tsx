@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { getScrollBottomPadding } from "@/lib/layoutInsets";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
+import BelowHeaderTitle from "@/components/layout/BelowHeaderTitle";
 import {
   fetchSellerStorefrontByProfileId,
   updateSellerStorefrontByProfileId,
@@ -106,7 +107,7 @@ export default function SellerOnboardingScreen() {
           <View style={styles.iconCircle}>
             <Feather name="check-circle" size={32} color={Colors.light.accent} />
           </View>
-          <ThemedText style={styles.title}>Welcome to your seller dashboard</ThemedText>
+          <BelowHeaderTitle style={styles.heroTitleWrap}>Welcome to your seller dashboard</BelowHeaderTitle>
           <ThemedText style={styles.subtitle}>
             Your application was approved. Set up your storefront so customers can discover your
             products.
@@ -183,6 +184,9 @@ const styles = StyleSheet.create({
   },
   scroll: { padding: Spacing.lg },
   hero: { alignItems: "center", marginBottom: Spacing.xl },
+  heroTitleWrap: {
+    marginBottom: Spacing.sm,
+  },
   iconCircle: {
     width: 64,
     height: 64,
@@ -192,17 +196,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: Spacing.md,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-    textAlign: "center",
-    marginBottom: Spacing.sm,
-  },
   subtitle: {
     fontSize: 15,
     lineHeight: 22,
+    fontFamily: "Nunito_400Regular",
     color: Colors.light.textSecondary,
     textAlign: "center",
   },
@@ -214,7 +211,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    fontWeight: "600",
+    fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
     marginBottom: 6,
     marginTop: Spacing.sm,
@@ -226,6 +223,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: 12,
     fontSize: 15,
+    fontFamily: "Nunito_400Regular",
     color: Colors.light.text,
     backgroundColor: Colors.light.backgroundRoot,
   },
@@ -233,14 +231,17 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: Colors.light.accent,
     borderRadius: BorderRadius.sm,
-    paddingVertical: 14,
+    minHeight: 48,
+    paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
     marginBottom: Spacing.md,
   },
   primaryBtnDisabled: { opacity: 0.7 },
-  primaryBtnText: { color: "#FFFFFF", fontSize: 16, fontWeight: "700" },
+  primaryBtnText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Nunito_700Bold" },
   footerHint: {
     fontSize: 13,
+    fontFamily: "Nunito_400Regular",
     lineHeight: 19,
     color: Colors.light.textMuted,
     textAlign: "center",
@@ -248,6 +249,7 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#8B3A3A",
     fontSize: 14,
+    fontFamily: "Nunito_700Bold",
     marginBottom: Spacing.md,
     textAlign: "center",
   },

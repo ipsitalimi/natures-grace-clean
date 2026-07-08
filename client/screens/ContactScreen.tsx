@@ -2,21 +2,20 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   TextInput,
   Pressable,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useSupportTickets } from "@/context/SupportTicketsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import {
   CONTACT_FORM_BUTTON_SEND_KEY,
   CONTACT_FORM_LABEL_MESSAGE_KEY,
@@ -64,8 +63,6 @@ function InfoCard({
 }
 
 export default function ContactScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const { session, profile } = useAuth();
   const {
     ticketViews,
@@ -168,33 +165,7 @@ export default function ContactScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Notifications" as never)}
-          testID="button-notifications"
-        >
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
-
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Contact</ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
+    <PageLayout title="Contact" titleInHeader header="back" contentContainerStyle={styles.content}>
         {!isSupabaseConfigured() ? (
           <ThemedText style={styles.hintText}>Connect Supabase for live contact details and tickets.</ThemedText>
         ) : null}
@@ -392,47 +363,13 @@ export default function ContactScreen() {
             </ThemedText>
           )}
         </Pressable>
-      </ScrollView>
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
+  content: {
+    paddingTop: LayoutSpacing.xs,
     gap: 10,
   },
   infoCard: {

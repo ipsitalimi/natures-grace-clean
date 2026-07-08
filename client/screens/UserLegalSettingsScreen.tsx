@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Modal, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { View, StyleSheet, Pressable, Modal, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout } from "@/components/layout";
 import LegalDocumentReader from "@/components/legal/LegalDocumentReader";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { USER_SIGNUP_LEGAL_LABELS } from "@/constants/legalDocuments";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -15,7 +15,6 @@ import {
 } from "@/services/legal/legalAcceptanceService";
 import { fetchLegalAcceptanceHistory, type LegalAcceptanceEvent } from "@/services/legal/legalAcceptanceHistoryService";
 import type { UserMandatoryLegalKey } from "@/types/legal";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 function LegalRow({
   label,
@@ -41,8 +40,6 @@ function LegalRow({
 }
 
 export default function UserLegalSettingsScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const { profile } = useAuth();
   const [viewingDoc, setViewingDoc] = useState<UserMandatoryLegalKey | null>(null);
   const [history, setHistory] = useState<LegalAcceptanceEvent[]>([]);
@@ -64,23 +61,12 @@ export default function UserLegalSettingsScreen() {
   const acceptance = parseProfileLegalAcceptance(profile);
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-      </View>
-
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Legal & Policies</ThemedText>
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
+    <>
+      <PageLayout
+        title="Legal & Policies"
+        titleInHeader
+        header="back"
+        contentContainerStyle={styles.content}
       >
         {(Object.keys(USER_SIGNUP_LEGAL_LABELS) as UserMandatoryLegalKey[]).map((key) => {
           const record = acceptance[key];
@@ -113,43 +99,20 @@ export default function UserLegalSettingsScreen() {
             </View>
           ))
         )}
-      </ScrollView>
+      </PageLayout>
 
       <Modal visible={viewingDoc !== null} animationType="slide" onRequestClose={() => setViewingDoc(null)}>
         {viewingDoc ? (
           <LegalDocumentReader docKey={viewingDoc} onBack={() => setViewingDoc(null)} />
         ) : null}
       </Modal>
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-  },
-  headerIconButton: { padding: 8 },
-  headerCenter: { flex: 1 },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
+  content: {
+    paddingTop: LayoutSpacing.xs,
     gap: 10,
   },
   row: {
@@ -157,11 +120,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
+    padding: LayoutSpacing.lg,
     borderWidth: 1,
     borderColor: Colors.light.divider,
   },
-  rowText: { flex: 1, paddingRight: Spacing.sm },
+  rowText: { flex: 1, paddingRight: LayoutSpacing.sm },
   rowLabel: {
     fontSize: 15,
     fontWeight: "600",
@@ -179,14 +142,14 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginTop: Spacing.xl,
-    marginBottom: Spacing.sm,
+    marginTop: LayoutSpacing.xl,
+    marginBottom: LayoutSpacing.sm,
   },
   historyEmpty: { fontSize: 13, color: Colors.light.textMuted, lineHeight: 18 },
   historyRow: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
+    padding: LayoutSpacing.md,
     borderWidth: 1,
     borderColor: Colors.light.divider,
     marginBottom: 8,

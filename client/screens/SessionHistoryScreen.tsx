@@ -1,16 +1,16 @@
-import React, { useState, useCallback } from "react";
-import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import React, { useCallback, useState } from "react";
+import { View, StyleSheet, Pressable, RefreshControl } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import type { UserSessionHistory } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
 type RootStackParamList = {
@@ -34,7 +34,7 @@ function getStatusColor(status: UserSessionHistory["status"]): string {
 
 function SessionCard({ session, onPress }: { session: UserSessionHistory; onPress: () => void }) {
   return (
-    <Pressable style={styles.card} onPress={onPress} testID={`session-card-${session.id}`}>
+    <Card onPress={onPress} testID={`session-card-${session.id}`}>
       <View style={styles.cardTop}>
         <View style={styles.cardInfo}>
           <ThemedText style={styles.practitionerName}>{session.practitionerName}</ThemedText>
@@ -51,28 +51,22 @@ function SessionCard({ session, onPress }: { session: UserSessionHistory; onPres
         <ThemedText style={styles.cardDot}> </ThemedText>
         <ThemedText style={styles.cardDetail}>{session.duration}</ThemedText>
       </View>
-    </Pressable>
+    </Card>
   );
 }
 
 function SkeletonCard() {
   return (
-    <View style={styles.card}>
-      <View style={styles.cardTop}>
-        <View style={styles.cardInfo}>
-          <View style={styles.skeletonLine} />
-          <View style={[styles.skeletonLine, { width: 80, marginTop: 6 }]} />
-        </View>
-      </View>
-      <View style={[styles.skeletonLine, { width: 120, marginTop: 8 }]} />
-    </View>
+    <Card>
+      <View style={styles.skeletonLine} />
+      <View style={[styles.skeletonLine, { width: 80, marginTop: LayoutSpacing.xs }]} />
+      <View style={[styles.skeletonLine, { width: 120, marginTop: LayoutSpacing.sm }]} />
+    </Card>
   );
 }
 
 export default function SessionHistoryScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const { userSessions, loading: practitionerLoading, loadError, refresh } = usePractitionerContext();
   const sessions = userSessions;
   const loading = practitionerLoading;
@@ -94,125 +88,61 @@ export default function SessionHistoryScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
-
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Session History</ThemedText>
-      </View>
-
+    <PageLayout
+      title="Session History"
+      titleInHeader
+      header="back"
+      scrollViewProps={{
+        refreshControl: <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} />,
+      }}
+      contentContainerStyle={styles.list}
+    >
       {loading ? (
-        <View style={styles.loadingContainer}>
+        <>
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
-        </View>
+        </>
       ) : loadError ? (
         <View style={styles.emptyState}>
           <Feather name="alert-circle" size={36} color={Colors.light.textSecondary} />
           <ThemedText style={styles.emptyText}>{loadError}</ThemedText>
           <Pressable style={styles.retryBtn} onPress={() => void refresh()}>
-            <ThemedText style={styles.retryText}>Try again</ThemedText>
+            <ThemedText style={styles.retryText}>Retry</ThemedText>
           </Pressable>
         </View>
-      ) : sessions.length > 0 ? (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void onRefresh()}
-              tintColor={Colors.light.accent}
-            />
-          }
-        >
-          {sessions.map((session) => (
-            <SessionCard
-              key={session.id}
-              session={session}
-              onPress={() => navigation.navigate("SessionDetail", { sessionId: session.id })}
-            />
-          ))}
-        </ScrollView>
-      ) : (
+      ) : sessions.length === 0 ? (
         <View style={styles.emptyState}>
-          <Feather name="clock" size={36} color={Colors.light.textSecondary} />
+          <Feather name="calendar" size={36} color={Colors.light.textSecondary} />
           <ThemedText style={styles.emptyText}>
-            {!isSupabaseConfigured()
-              ? "Connect Supabase to view your session history."
-              : "No sessions yet. Book a session from Wellness to see it here."}
+            {isSupabaseConfigured()
+              ? "No sessions yet. Book a wellness session to see it here."
+              : "Connect Supabase to load session history."}
           </ThemedText>
         </View>
+      ) : (
+        sessions.map((session) => (
+          <SessionCard
+            key={session.id}
+            session={session}
+            onPress={() => navigation.navigate("SessionDetail", { sessionId: session.id })}
+          />
+        ))
       )}
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    gap: 10,
-  },
-  loadingContainer: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-    gap: 10,
-    paddingTop: Spacing.sm,
-  },
-  card: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
+  list: {
+    gap: LayoutSpacing.sm,
+    paddingTop: LayoutSpacing.xs,
   },
   cardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   cardInfo: {
     flex: 1,
@@ -230,7 +160,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 8,
+    borderRadius: BorderRadius.xs,
   },
   statusText: {
     fontSize: 12,
@@ -250,10 +180,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
   },
   emptyState: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
-    gap: 12,
+    paddingVertical: LayoutSpacing.xl,
+    gap: LayoutSpacing.sm,
   },
   emptyText: {
     fontSize: 16,
@@ -261,8 +190,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   retryBtn: {
-    marginTop: 8,
-    paddingHorizontal: 16,
+    marginTop: LayoutSpacing.sm,
+    paddingHorizontal: LayoutSpacing.md,
     paddingVertical: 10,
     borderRadius: BorderRadius.md,
     backgroundColor: Colors.light.accent,

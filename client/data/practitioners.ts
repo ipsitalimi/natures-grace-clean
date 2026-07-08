@@ -6,11 +6,18 @@ export { drNeelamPhoto as drNeelamLocalPhoto };
 
 export type PractitionerApprovalStatus = "Approved" | "Pending" | "Rejected";
 
+export type PractitionerSpecialty = {
+  category: string;
+  subcategory: string;
+};
+
 export interface Practitioner {
   id: string;
   name: string;
   category: string;
   subcategory: string;
+  /** Approved (category, subcategory) pairs — drives Wellness listing and session offerings. */
+  specialties?: PractitionerSpecialty[];
   photo: string;
   localPhoto?: ImageSourcePropType;
   bio: string;
@@ -150,6 +157,39 @@ export const categories: Category[] = [
   },
 ];
 
+export function normalizeCategoryKey(value: string): string {
+  return value.toLowerCase().trim().replace(/_/g, "-").replace(/\s+/g, "-");
+}
+
+/** Match a practitioner `category` value to a template (by id or display name). */
+export function findCategoryTemplate(
+  templates: Category[],
+  practitionerCategory: string
+): Category | undefined {
+  const key = normalizeCategoryKey(practitionerCategory);
+  return templates.find((c) => {
+    const idKey = normalizeCategoryKey(c.id);
+    const nameKey = normalizeCategoryKey(c.name);
+    return idKey === key || nameKey === key;
+  });
+}
+
 export function getCategoryById(categoryId: string): Category | undefined {
-  return categories.find((cat) => cat.id === categoryId);
+  const key = normalizeCategoryKey(categoryId);
+  return categories.find(
+    (cat) => normalizeCategoryKey(cat.id) === key || normalizeCategoryKey(cat.name) === key
+  );
+}
+
+export function getCategoryNames(): string[] {
+  return categories.map((c) => c.name);
+}
+
+export function getSubcategoryNamesForCategory(categoryName: string): string[] {
+  const cat = categories.find((c) => c.name === categoryName);
+  return cat?.subcategories.map((s) => s.name) ?? [];
+}
+
+export function emptyCategoryTemplates(): Category[] {
+  return categories.map((c) => ({ ...c, practitioners: [] }));
 }

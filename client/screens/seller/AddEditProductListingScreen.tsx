@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { View, ScrollView, StyleSheet, TextInput, Pressable, Image, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -8,12 +7,12 @@ import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { BackHeader, KeyboardFormLayout } from "@/components/layout";
 import { SELLER_CATEGORIES } from "@/data/sellerMockData";
 import { useDataContext } from "@/context/DataContext";
 import { useAuth } from "@/context/AuthContext";
 import type { LocalFile } from "@/lib/storageUpload";
 import { uploadProductImage } from "@/lib/storageUpload";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 const MIN_PRICE = 200;
 const MAX_PRICE = 5000;
@@ -56,7 +55,6 @@ function BoxIcon({ size = 18 }: { size?: number }) {
 }
 
 export default function AddEditProductListingScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<any>();
 
@@ -78,6 +76,7 @@ export default function AddEditProductListingScreen() {
   const [stock, setStock] = useState<string>(initial?.stock?.toString() ?? "10");
   const [description, setDescription] = useState<string>(initial?.description ?? "");
   const [saved, setSaved] = useState(false);
+  const [savedPendingApproval, setSavedPendingApproval] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [imageFile, setImageFile] = useState<LocalFile | null>(null);
@@ -121,6 +120,7 @@ export default function AddEditProductListingScreen() {
     if (!canSave || saving) return;
     setSaving(true);
     setSaveError("");
+    setSavedPendingApproval(false);
     const stockNum = parseInt(stock, 10) || 0;
     const payload = {
       name: name.trim(),
@@ -143,6 +143,7 @@ export default function AddEditProductListingScreen() {
           setSaveError("Could not save this product. Please try again.");
           return;
         }
+        setSavedPendingApproval(created.approvalStatus === "Pending");
         if (imageFile) {
           await uploadImageForProduct(created.id);
         }
@@ -161,22 +162,14 @@ export default function AddEditProductListingScreen() {
   const incrementPrice = () => setPrice((p) => Math.min(p + PRICE_STEP, MAX_PRICE));
   const decrementPrice = () => setPrice((p) => Math.max(p - PRICE_STEP, MIN_PRICE));
 
-  return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>
-          {isEdit ? "Edit Listing" : "Add Product Listing"}
-        </ThemedText>
-      </View>
+  const screenTitle = isEdit ? "Edit Listing" : "Add Product Listing";
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
-        showsVerticalScrollIndicator={false}
-      >
+  return (
+    <KeyboardFormLayout
+      footerInset={30}
+      header={<BackHeader title={screenTitle} showNotifications={false} />}
+      contentContainerStyle={styles.scrollContent}
+    >
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Feather name="edit-3" size={18} color={Colors.light.accent} />
@@ -348,44 +341,19 @@ export default function AddEditProductListingScreen() {
           <View style={styles.confirmationBanner}>
             <Feather name="check-circle" size={16} color="#013220" />
             <ThemedText style={styles.confirmationText}>
-              {isEdit ? "Product updated successfully" : "Product saved successfully"}
+              {isEdit
+                ? "Product updated successfully"
+                : savedPendingApproval
+                  ? "Product saved — pending admin approval before it appears in the store"
+                  : "Product saved successfully"}
             </ThemedText>
           </View>
         ) : null}
-      </ScrollView>
-    </View>
+    </KeyboardFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-  },
-  scrollView: {
-    flex: 1,
-  },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
   },

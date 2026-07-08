@@ -1,21 +1,20 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Circle, Path } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
 import { useDataContext } from "@/context/DataContext";
 import { useAuth } from "@/context/AuthContext";
 import { useModeration } from "@/context/ModerationContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { publicReplies } from "@/data/discussions";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 type RootStackParamList = {
   DiscussionThread: { discussionId: string };
@@ -39,14 +38,13 @@ function PersonIcon({ size = 32 }: { size?: number }) {
 }
 
 export default function DiscussionThreadScreen() {
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const { scrollPaddingBottom } = useLayoutInsets(tabBarHeight);
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<DiscussionThreadRouteProp>();
   const { discussionId } = route.params;
-  const [drawerVisible, setDrawerVisible] = useState(false);
 
-  const { discussions, discussionsLoading, discussionsError } = useDataContext();
+  const { discussions, discussionsLoading, discussionsError, refreshContent } = useDataContext();
   const { session } = useAuth();
   const { submitReport } = useModeration();
   const discussion = discussions.find((d) => d.id === discussionId);
@@ -55,12 +53,7 @@ export default function DiscussionThreadScreen() {
   if (discussionsLoading) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-        </View>
+        <BackHeader showNotifications={false} />
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={Colors.light.accent} />
           <ThemedText style={styles.emptyText}>Loading discussion…</ThemedText>
@@ -72,14 +65,12 @@ export default function DiscussionThreadScreen() {
   if (discussionsError) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-        </View>
+        <BackHeader showNotifications={false} />
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>{discussionsError}</ThemedText>
+          <Pressable style={styles.retryButton} onPress={() => void refreshContent()}>
+            <ThemedText style={styles.retryButtonText}>Try again</ThemedText>
+          </Pressable>
         </View>
       </View>
     );
@@ -88,18 +79,8 @@ export default function DiscussionThreadScreen() {
   if (!discussion) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Discussion</ThemedText>
-        </View>
+        <BackHeader />
+        <BelowHeaderTitle>Discussion</BelowHeaderTitle>
         <View style={styles.emptyState}>
           <Feather name="message-circle" size={36} color={Colors.light.textSecondary} />
           <ThemedText style={styles.emptyText}>Nothing here yet.</ThemedText>
@@ -163,27 +144,25 @@ export default function DiscussionThreadScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={handleReport} testID="button-report-discussion">
-          <Feather name="flag" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader
+        showNotifications={false}
+        rightAction={
+          <View style={styles.headerActions}>
+            <Pressable style={styles.headerIconButton} onPress={handleReport} testID="button-report-discussion">
+              <Feather name="flag" size={20} color={Colors.light.accent} />
+            </Pressable>
+            <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
+              <Feather name="bell" size={22} color={Colors.light.accent} />
+            </Pressable>
+          </View>
+        }
+      />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Discussion</ThemedText>
-      </View>
+      <BelowHeaderTitle>Discussion</BelowHeaderTitle>
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.questionCard}>
@@ -212,14 +191,12 @@ export default function DiscussionThreadScreen() {
             </View>
           ))}
         </View>
-      </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
         <Pressable style={styles.addReplyButton} onPress={handleAddReply}>
           <Feather name="message-circle" size={18} color="#FFFFFF" />
           <ThemedText style={styles.addReplyText}>Add Reply</ThemedText>
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -229,31 +206,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  headerRow: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
   },
   headerIconButton: {
     padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,
@@ -270,6 +228,20 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: Colors.light.textSecondary,
+    textAlign: "center",
+    paddingHorizontal: Spacing.lg,
+  },
+  retryButton: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.light.accent,
+    marginTop: Spacing.sm,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   questionCard: {
     backgroundColor: Colors.light.cardBackground,
@@ -343,17 +315,6 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     lineHeight: 21,
   },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.light.backgroundRoot,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.divider,
-  },
   addReplyButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -362,6 +323,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     paddingVertical: 14,
     gap: 8,
+    marginBottom: Spacing.lg,
   },
   addReplyText: {
     fontSize: 15,

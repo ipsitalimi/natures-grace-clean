@@ -1,25 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { View, ScrollView, StyleSheet, TextInput, Pressable, Switch } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, StyleSheet, TextInput, Pressable, Switch } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle, KeyboardFormLayout } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { SessionOffering } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
+import { useAuth } from "@/context/AuthContext";
 import { fetchAvailabilityForOffering } from "@/services/content/practitionerAvailabilityService";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
-
-const SESSION_TYPES = [
-  "Healing",
-  "Counseling",
-  "Spiritual Guidance",
-  "Therapy",
-  "Nutrition",
-  "Financial Guidance",
-];
+import { fetchPractitionerProfileDetailsResult } from "@/services/content/practitionerId";
+import { peekLastPractitionerProvisionError } from "@/services/content/practitionerId";
 
 const DURATION_OPTIONS = [
   { minutes: 15, label: "15 mins" },
@@ -720,9 +713,9 @@ const calStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function AddEditOfferingScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const route = useRoute<any>();
+  const { profile } = useAuth();
 
   const { offerings, upsertOffering } = usePractitionerContext();
   const offeringId: string | null = route.params?.offeringId ?? null;
@@ -746,6 +739,43 @@ export default function AddEditOfferingScreen() {
   const [globalTiming, setGlobalTiming] = useState<TimeSlot>({ start: DEFAULT_START, end: DEFAULT_END });
   const [dateTimings, setDateTimings] = useState<Record<string, TimeSlot>>({});
   const [availabilityLoaded, setAvailabilityLoaded] = useState(!isEdit);
+  const [approvedSessionTypes, setApprovedSessionTypes] = useState<string[]>([]);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingProfile(true);
+      const result = await fetchPractitionerProfileDetailsResult(profile?.id);
+      if (cancelled) return;
+      if (result.ok) {
+        const names = [
+          ...new Set(
+            result.profile.specialties?.map((s) => s.subcategory) ??
+              (result.profile.subcategory ? [result.profile.subcategory] : [])
+          ),
+        ].filter(Boolean);
+        setApprovedSessionTypes(names);
+      } else {
+        setApprovedSessionTypes([]);
+      }
+      setLoadingProfile(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.id]);
+
+  const sessionTypeOptions = approvedSessionTypes;
+
+  useEffect(() => {
+    if (selectedType && sessionTypeOptions.includes(selectedType)) return;
+    if (sessionTypeOptions.length === 0) {
+      setSelectedType("");
+      return;
+    }
+    setSelectedType((prev) => (prev && sessionTypeOptions.includes(prev) ? prev : sessionTypeOptions[0]));
+  }, [selectedType, sessionTypeOptions]);
 
   useEffect(() => {
     if (!existingOffering?.id || !isEdit) return;
@@ -803,7 +833,12 @@ export default function AddEditOfferingScreen() {
     });
     setSaving(false);
     if (!saved) {
-      setSaveError("Could not save this offering. Please try again.");
+      const provision = peekLastPractitionerProvisionError();
+      setSaveError(
+        provision && !provision.ok
+          ? provision.error
+          : "Could not save this offering. Make sure your practitioner account is set up, then try again."
+      );
       return;
     }
     setSaved(true);
@@ -814,31 +849,34 @@ export default function AddEditOfferingScreen() {
   const decrementPrice = () => setPrice((p) => Math.max(p - PRICE_STEP, MIN_PRICE));
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>
-          {isEdit ? "Edit Offering" : "Add Session Offering"}
-        </ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardFormLayout
+      footerInset={30}
+      header={
+        <>
+          <BackHeader showNotifications={false} />
+          <BelowHeaderTitle>
+            {isEdit ? "Edit Offering" : "Add Session Offering"}
+          </BelowHeaderTitle>
+        </>
+      }
+    >
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <TypeIcon />
             <ThemedText style={styles.sectionTitle}>Session Type</ThemedText>
           </View>
           <ThemedText style={styles.sectionSubtitle}>
-            Choose the type of session you offer
+            Choose a service from your approved specialties
           </ThemedText>
+          {loadingProfile ? (
+            <ThemedText style={styles.sectionSubtitle}>Loading your approved services…</ThemedText>
+          ) : approvedSessionTypes.length === 0 ? (
+            <ThemedText style={styles.sectionSubtitle}>
+              No approved services found on your profile. Complete practitioner approval first.
+            </ThemedText>
+          ) : null}
           <View style={styles.chipsGrid}>
-            {SESSION_TYPES.map((type) => (
+            {sessionTypeOptions.map((type) => (
               <Pressable
                 key={type}
                 style={[styles.chip, selectedType === type && styles.chipSelected]}
@@ -929,7 +967,14 @@ export default function AddEditOfferingScreen() {
             </Pressable>
             <View style={styles.priceDisplay}>
               <ThemedText style={styles.priceSymbol}>&#8377;</ThemedText>
-              <ThemedText style={styles.priceValue}>{price.toLocaleString()}</ThemedText>
+              <ThemedText
+                style={styles.priceValue}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.7}
+              >
+                {price.toLocaleString()}
+              </ThemedText>
             </View>
             <Pressable
               style={[styles.stepperBtn, price >= MAX_PRICE && styles.stepperBtnDisabled]}
@@ -1018,39 +1063,11 @@ export default function AddEditOfferingScreen() {
             </ThemedText>
           </View>
         ) : null}
-      </ScrollView>
-    </View>
+    </KeyboardFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
-  },
-  scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: Spacing.lg },
   section: { marginBottom: Spacing.xl },
   sectionHeader: {
     flexDirection: "row",
@@ -1140,6 +1157,9 @@ const styles = StyleSheet.create({
   priceDisplay: {
     flexDirection: "row",
     alignItems: "baseline",
+    justifyContent: "center",
+    flex: 1,
+    minWidth: 0,
   },
   priceSymbol: {
     fontSize: 20,
@@ -1151,6 +1171,8 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
+    flexShrink: 1,
+    textAlign: "center",
   },
   priceRange: {
     flexDirection: "row",

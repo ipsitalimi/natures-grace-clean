@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
@@ -6,8 +6,8 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import AppHeader from "@/components/AppHeader";
-import PractitionerDrawer from "@/components/PractitionerDrawer";
+import ScreenHeader from "@/components/layout/ScreenHeader";
+import { useDrawer } from "@/context/DrawerContext";
 import type { PractitionerSession } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 
@@ -25,24 +25,39 @@ function getStatusColor(status: PractitionerSession["status"]) {
 export default function PractitionerSessionsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const { sessions, loading } = usePractitionerContext();
+  const { openDrawer } = useDrawer();
+  const { sessions, loading, loadError, refresh } = usePractitionerContext();
 
   return (
     <View style={styles.container}>
-      <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
+      <ScreenHeader
+        variant="title"
+        title="Sessions"
+        showNotifications
+        leftAction={
+          <Pressable
+            style={styles.headerIconBtn}
+            onPress={() => openDrawer("practitioner")}
+            testID="button-profile"
+          >
+            <Feather name="user" size={22} color={Colors.light.accent} />
+          </Pressable>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 36 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Sessions</ThemedText>
-        </View>
-
-        {loading ? (
+        {loadError ? (
+          <View style={styles.emptyState}>
+            <ThemedText style={styles.errorText}>{loadError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => void refresh()}>
+              <ThemedText style={styles.retryText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        ) : loading ? (
           <View style={styles.emptyState}>
             <ActivityIndicator color={Colors.light.accent} />
             <ThemedText style={styles.emptyText}>Loading sessions…</ThemedText>
@@ -113,22 +128,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
+  headerIconBtn: {
+    padding: 8,
+  },
   scrollView: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg + 8,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-    textAlign: "center",
+    paddingTop: Spacing.sm,
   },
   sessionCard: {
     backgroundColor: Colors.light.cardBackground,
@@ -210,5 +216,22 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     textAlign: "center",
     paddingHorizontal: Spacing.xl,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#8B3A3A",
+    textAlign: "center",
+  },
+  retryBtn: {
+    marginTop: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: Colors.light.accent,
+  },
+  retryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
 });

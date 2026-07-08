@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, Pressable, ActivityIndicator, TextInput, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
@@ -10,16 +9,21 @@ import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing } from "@/constants/theme";
-import AppHeader from "@/components/AppHeader";
-import ProfileDrawer from "@/components/ProfileDrawer";
-import SellerDrawer from "@/components/SellerDrawer";
-import PractitionerDrawer from "@/components/PractitionerDrawer";
+import { Colors } from "@/constants/theme";
+import { LayoutSpacing } from "@/constants/layout";
+import { PageLayout } from "@/components/layout";
+import { useDrawer } from "@/context/DrawerContext";
 import { useIsSellerTabContext } from "@/hooks/useIsSellerTabContext";
 import { useIsPractitionerTabContext } from "@/hooks/useIsPractitionerTabContext";
 import { useJournal } from "@/context/JournalContext";
 import { useGratitude } from "@/context/GratitudeContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import {
+  DEFAULT_MOOD_OPTIONS,
+  getMoodColor,
+  MAX_CUSTOM_MOODS,
+  MAX_SELECTED_MOODS,
+  parseMoodsFromStorage,
+} from "@/lib/journalMoods";
 
 type MoodStackParamList = {
   JournalEditor: { prompt?: string } | undefined;
@@ -103,15 +107,6 @@ function CalendarIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
-function getMoodColor(mood: string): string {
-  switch (mood) {
-    case "Peaceful": return "#7BA68A";
-    case "Grateful": return "#C4A97A";
-    case "Anxious": return "#C47A7A";
-    case "Hopeful": return "#7AAEC4";
-    default: return Colors.light.accent;
-  }
-}
 
 interface MenuItemProps {
   icon: React.ReactNode;
@@ -144,22 +139,33 @@ function MenuItem({ icon, title, subtitle, badge, onPress }: MenuItemProps) {
   );
 }
 
-const moodOptions = ["Peaceful", "Grateful", "Anxious", "Hopeful"];
+const moodOptions = [...DEFAULT_MOOD_OPTIONS];
 
 export default function MoodScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
+  const { openDrawerForRole } = useDrawer();
   const isSellerTab = useIsSellerTabContext();
   const isPractitionerTab = useIsPractitionerTabContext();
   const isRoleTab = isSellerTab || isPractitionerTab;
-  const { entries, selectedMood, setSelectedMood, getStreak, journalLoading, journalError } =
-    useJournal();
+  const {
+    entries,
+    selectedMoods,
+    customMoods,
+    toggleSelectedMood,
+    addCustomMood,
+    removeCustomMood,
+    getStreak,
+    journalLoading,
+    journalError,
+  } = useJournal();
   const { myGratitudes } = useGratitude();
+  const [customMoodInput, setCustomMoodInput] = useState("");
+  const [addingCustom, setAddingCustom] = useState(false);
 
   const streak = getStreak();
   const recentEntries = entries.slice(0, 3);
+  const atSelectionLimit = selectedMoods.length >= MAX_SELECTED_MOODS;
 
   const todayDate = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -168,7 +174,41 @@ export default function MoodScreen() {
   });
 
   const handleMoodSelect = (mood: string) => {
-    setSelectedMood(selectedMood === mood ? null : mood);
+    if (!selectedMoods.includes(mood) && atSelectionLimit) {
+      Alert.alert(
+        "Selection limit",
+        `You can select up to ${MAX_SELECTED_MOODS} moods at a time.`
+      );
+      return;
+    }
+    toggleSelectedMood(mood);
+  };
+
+  const handleAddCustomMood = async () => {
+    const trimmed = customMoodInput.trim();
+    if (!trimmed) return;
+    if (customMoods.length >= MAX_CUSTOM_MOODS && !customMoods.some((m) => m.toLowerCase() === trimmed.toLowerCase())) {
+      Alert.alert(
+        "Custom mood limit",
+        `You can save up to ${MAX_CUSTOM_MOODS} custom moods. Remove one to add another.`
+      );
+      return;
+    }
+    if (!selectedMoods.includes(trimmed) && atSelectionLimit) {
+      Alert.alert(
+        "Selection limit",
+        `You can select up to ${MAX_SELECTED_MOODS} moods at a time.`
+      );
+      return;
+    }
+    setAddingCustom(true);
+    const ok = await addCustomMood(trimmed);
+    setAddingCustom(false);
+    if (ok) {
+      setCustomMoodInput("");
+    } else {
+      Alert.alert("Could not add mood", "Please use a shorter name (max 24 characters).");
+    }
   };
 
   const goBackToHome = () => {
@@ -182,47 +222,28 @@ export default function MoodScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {isSellerTab ? (
-        <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      ) : isPractitionerTab ? (
-        <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      ) : (
-        <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      )}
-      {isRoleTab ? (
-        <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
-      ) : (
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
+    <PageLayout
+      title="Journal"
+      titleInHeader
+      header={isRoleTab ? "compact" : "title"}
+      headerProps={
+        isRoleTab
+          ? {
+              onProfilePress: () =>
+                openDrawerForRole({ isSeller: isSellerTab, isPractitioner: isPractitionerTab }),
+            }
+          : { onBackPress: goBackToHome }
+      }
+      footerInset={tabBarHeight}
+    >
+      {streak > 0 ? (
+        <View style={styles.streakContainer} testID="text-streak">
+          <ThemedText style={styles.streakText}>
+            {getStreakIcon()} {streak} day reflection streak
+          </ThemedText>
         </View>
-      )}
+      ) : null}
 
-      <View style={styles.topContent}>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.title}>Journal</ThemedText>
-        </View>
-
-        {streak > 0 ? (
-          <View style={styles.streakContainer} testID="text-streak">
-            <ThemedText style={styles.streakText}>
-              {getStreakIcon()} {streak} day reflection streak
-            </ThemedText>
-          </View>
-        ) : null}
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
-        showsVerticalScrollIndicator={false}
-      >
         <View style={styles.promptCard}>
           <ThemedText style={styles.promptDate}>{todayDate}</ThemedText>
           <ThemedText style={styles.promptText}>
@@ -248,34 +269,88 @@ export default function MoodScreen() {
 
         <View style={styles.moodSection}>
           <ThemedText style={styles.sectionTitle}>How are you feeling?</ThemedText>
+          <ThemedText style={styles.moodHint}>
+            Select up to {MAX_SELECTED_MOODS} moods for your next entry
+          </ThemedText>
           <View style={styles.moodRow}>
-            {moodOptions.map((mood) => (
-              <Pressable
-                key={mood}
-                style={[
-                  styles.moodOption,
-                  selectedMood === mood && styles.moodOptionSelected,
-                ]}
-                onPress={() => handleMoodSelect(mood)}
-                testID={`mood-chip-${mood.toLowerCase()}`}
-              >
-                <View style={[styles.moodColorDot, { backgroundColor: getMoodColor(mood) }]} />
-                <ThemedText
-                  style={[
-                    styles.moodEmoji,
-                    selectedMood === mood && styles.moodEmojiSelected,
-                  ]}
+            {moodOptions.map((mood) => {
+              const selected = selectedMoods.includes(mood);
+              return (
+                <Pressable
+                  key={mood}
+                  style={[styles.moodOption, selected && styles.moodOptionSelected]}
+                  onPress={() => handleMoodSelect(mood)}
+                  testID={`mood-chip-${mood.toLowerCase()}`}
                 >
-                  {mood}
-                </ThemedText>
-              </Pressable>
-            ))}
+                  <View style={[styles.moodColorDot, { backgroundColor: getMoodColor(mood) }]} />
+                  <ThemedText style={[styles.moodEmoji, selected && styles.moodEmojiSelected]}>
+                    {mood}
+                  </ThemedText>
+                </Pressable>
+              );
+            })}
           </View>
-          {selectedMood ? (
+
+          {customMoods.length > 0 ? (
+            <View style={styles.customMoodRow}>
+              {customMoods.map((mood) => {
+                const selected = selectedMoods.includes(mood);
+                return (
+                  <Pressable
+                    key={mood}
+                    style={[styles.customMoodChip, selected && styles.moodOptionSelected]}
+                    onPress={() => handleMoodSelect(mood)}
+                    onLongPress={() => {
+                      Alert.alert("Remove custom mood?", mood, [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Remove", style: "destructive", onPress: () => void removeCustomMood(mood) },
+                      ]);
+                    }}
+                  >
+                    <View style={[styles.moodColorDot, { backgroundColor: getMoodColor(mood) }]} />
+                    <ThemedText
+                      style={[styles.customMoodText, selected && styles.moodEmojiSelected]}
+                      numberOfLines={1}
+                    >
+                      {mood}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {customMoods.length < MAX_CUSTOM_MOODS ? (
+            <View style={styles.addCustomRow}>
+              <TextInput
+                style={styles.customMoodInput}
+                placeholder="Add a custom mood"
+                placeholderTextColor={Colors.light.textMuted}
+                value={customMoodInput}
+                onChangeText={setCustomMoodInput}
+                maxLength={24}
+                returnKeyType="done"
+                onSubmitEditing={() => void handleAddCustomMood()}
+              />
+              <Pressable
+                style={[styles.addCustomButton, (!customMoodInput.trim() || addingCustom) && styles.addCustomButtonDisabled]}
+                onPress={() => void handleAddCustomMood()}
+                disabled={!customMoodInput.trim() || addingCustom}
+              >
+                {addingCustom ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Feather name="plus" size={18} color="#FFFFFF" />
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+
+          {selectedMoods.length > 0 ? (
             <View style={styles.moodConfirmation}>
               <Feather name="check" size={14} color={Colors.light.accent} />
               <ThemedText style={styles.moodConfirmationText}>
-                Feeling {selectedMood.toLowerCase()} - will be attached to your next entry
+                {selectedMoods.join(", ")} — will be attached to your next entry
               </ThemedText>
             </View>
           ) : null}
@@ -300,7 +375,9 @@ export default function MoodScreen() {
                 <ThemedText style={styles.seeAllText}>See All</ThemedText>
               </Pressable>
             </View>
-            {recentEntries.map((entry) => (
+            {recentEntries.map((entry) => {
+              const entryMoods = parseMoodsFromStorage(entry.mood);
+              return (
               <Pressable
                 key={entry.id}
                 style={({ pressed }) => [styles.recentEntryCard, pressed && styles.recentEntryCardPressed]}
@@ -308,8 +385,8 @@ export default function MoodScreen() {
                 testID={`entry-card-${entry.id}`}
               >
                 <View style={styles.recentEntryTop}>
-                  {entry.mood ? (
-                    <View style={[styles.entryMoodDot, { backgroundColor: getMoodColor(entry.mood) }]} />
+                  {entryMoods[0] ? (
+                    <View style={[styles.entryMoodDot, { backgroundColor: getMoodColor(entryMoods[0]) }]} />
                   ) : null}
                   <ThemedText style={styles.recentEntryDate}>{entry.date}</ThemedText>
                 </View>
@@ -317,7 +394,8 @@ export default function MoodScreen() {
                   {entry.preview}
                 </ThemedText>
               </Pressable>
-            ))}
+            );
+            })}
           </View>
         ) : null}
 
@@ -347,53 +425,14 @@ export default function MoodScreen() {
           subtitle="Track your emotional journey"
           onPress={() => navigation.navigate("MonthlyOverview")}
         />
-      </ScrollView>
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  topContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
   streakContainer: {
     alignItems: "center",
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   streakText: {
     fontSize: 13,
@@ -403,8 +442,8 @@ const styles = StyleSheet.create({
   },
   loadingSection: {
     alignItems: "center",
-    paddingVertical: Spacing.lg,
-    gap: 8,
+    paddingVertical: LayoutSpacing.lg,
+    gap: LayoutSpacing.sm,
   },
   loadingText: {
     fontSize: 13,
@@ -462,17 +501,25 @@ const styles = StyleSheet.create({
   moodSection: {
     marginBottom: 20,
   },
+  moodHint: {
+    fontSize: 12,
+    color: Colors.light.textMuted,
+    marginTop: 4,
+    marginBottom: 8,
+  },
   moodRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 6,
   },
   moodOption: {
-    flex: 1,
+    width: "47%",
+    minWidth: 100,
     backgroundColor: Colors.light.cardBackground,
     borderRadius: 12,
     paddingVertical: 10,
-    marginHorizontal: 3,
+    paddingHorizontal: 8,
     alignItems: "center",
     gap: 4,
     borderWidth: 1.5,
@@ -496,6 +543,58 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     fontWeight: "700",
   },
+  customMoodRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  customMoodChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    maxWidth: "100%",
+  },
+  customMoodText: {
+    fontSize: 12,
+    color: Colors.light.text,
+    fontWeight: "500",
+    flexShrink: 1,
+  },
+  addCustomRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 12,
+  },
+  customMoodInput: {
+    flex: 1,
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.light.text,
+    borderWidth: 1,
+    borderColor: Colors.light.divider,
+  },
+  addCustomButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: Colors.light.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addCustomButtonDisabled: {
+    opacity: 0.45,
+  },
   moodConfirmation: {
     flexDirection: "row",
     alignItems: "center",
@@ -508,6 +607,8 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     fontWeight: "500",
     opacity: 0.7,
+    flex: 1,
+    flexShrink: 1,
   },
   recentSection: {
     marginBottom: 20,

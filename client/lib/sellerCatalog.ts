@@ -11,6 +11,7 @@ export function toSellerProduct(p: StoreProduct): SellerProduct {
     category: p.category,
     stock: p.stock ?? 0,
     status: p.status ?? "Active",
+    approvalStatus: p.approvalStatus,
     imageUrl: p.imageUrl ?? null,
   };
 }

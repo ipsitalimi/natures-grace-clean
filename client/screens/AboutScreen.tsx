@@ -1,14 +1,14 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { View, StyleSheet, Pressable, Image, ActivityIndicator } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 
 import appLogo from "../../assets/images/natures-grace-logo.png";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import {
   ABOUT_APP_NAME_KEY,
@@ -21,8 +21,6 @@ import {
 } from "@/services/content/helpSupportService";
 
 export default function AboutScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const [copyMap, setCopyMap] = useState<Record<string, string> | null>(null);
   const [copyLoading, setCopyLoading] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
@@ -62,182 +60,126 @@ export default function AboutScreen() {
   const hasLoadedCopy = Boolean(copyMap !== null && !copyLoading && !copyError && isSupabaseConfigured());
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
+    <PageLayout title="About" titleInHeader header="back" contentContainerStyle={styles.content}>
+      <View style={styles.logoContainer}>
+        <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
+        {copyLoading && isSupabaseConfigured() ? (
+          <ActivityIndicator color={Colors.light.accent} style={{ marginVertical: LayoutSpacing.sm }} />
+        ) : (
+          <>
+            <ThemedText
+              style={[styles.appName, hasLoadedCopy && !appNameRaw ? styles.aboutMuted : undefined]}
+              testID="text-about-app-name"
+            >
+              {isSupabaseConfigured()
+                ? formatSupportCopyForDisplay(appNameRaw)
+                : formatSupportCopyForDisplay("")}
+            </ThemedText>
+            <ThemedText
+              style={[styles.version, hasLoadedCopy && !versionRaw ? styles.aboutMuted : undefined]}
+              testID="text-about-app-version"
+            >
+              {isSupabaseConfigured()
+                ? formatSupportCopyForDisplay(versionRaw)
+                : formatSupportCopyForDisplay("")}
+            </ThemedText>
+          </>
+        )}
       </View>
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>About</ThemedText>
+      {!isSupabaseConfigured() ? (
+        <ThemedText style={styles.hint}>Connect Supabase for editable About copy.</ThemedText>
+      ) : null}
+
+      {copyLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.hint}>Loading…</ThemedText>
+        </View>
+      ) : null}
+
+      {copyError ? (
+        <Pressable onPress={() => void loadAboutCopy()} testID="button-about-retry">
+          <ThemedText style={styles.error}>{copyError} — tap to retry</ThemedText>
+        </Pressable>
+      ) : null}
+
+      <Card style={styles.cardSpacing}>
+        <ThemedText style={[styles.description, hasLoadedCopy && !introRaw ? styles.aboutMuted : undefined]}>
+          {formatSupportCopyForDisplay(introRaw)}
+        </ThemedText>
+      </Card>
+
+      <Card style={styles.cardSpacing}>
+        <ThemedText
+          style={[styles.cardTitle, hasLoadedCopy && !missionTitleRaw ? styles.aboutMuted : undefined]}
+          testID="text-about-mission-heading"
+        >
+          {isSupabaseConfigured()
+            ? formatSupportCopyLabel(missionTitleRaw, { showEmpty: hasLoadedCopy })
+            : formatSupportCopyForDisplay("")}
+        </ThemedText>
+        <ThemedText style={[styles.cardText, hasLoadedCopy && !missionRaw ? styles.aboutMuted : undefined]}>
+          {formatSupportCopyForDisplay(missionRaw)}
+        </ThemedText>
+      </Card>
+
+      <View style={styles.badge}>
+        <Feather name="award" size={24} color={Colors.light.accent} />
+        <ThemedText style={[styles.badgeTitle, hasLoadedCopy && !badgeTitleRaw ? styles.aboutMuted : undefined]}>
+          {formatSupportCopyForDisplay(badgeTitleRaw)}
+        </ThemedText>
+        <ThemedText style={[styles.badgeText, hasLoadedCopy && !badgeBodyRaw ? styles.aboutBadgeMuted : undefined]}>
+          {formatSupportCopyForDisplay(badgeBodyRaw)}
+        </ThemedText>
       </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.logoContainer}>
-          <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
-          {copyLoading && isSupabaseConfigured() ? (
-            <ActivityIndicator color={Colors.light.accent} style={{ marginVertical: Spacing.sm }} />
-          ) : (
-            <>
-              <ThemedText
-                style={[styles.appName, hasLoadedCopy && !appNameRaw ? styles.aboutMuted : undefined]}
-                testID="text-about-app-name"
-              >
-                {isSupabaseConfigured()
-                  ? formatSupportCopyForDisplay(appNameRaw)
-                  : formatSupportCopyForDisplay("")}
-              </ThemedText>
-              <ThemedText
-                style={[styles.version, hasLoadedCopy && !versionRaw ? styles.aboutMuted : undefined]}
-                testID="text-about-app-version"
-              >
-                {isSupabaseConfigured()
-                  ? formatSupportCopyForDisplay(versionRaw)
-                  : formatSupportCopyForDisplay("")}
-              </ThemedText>
-            </>
-          )}
-        </View>
-
-        {!isSupabaseConfigured() ? (
-          <ThemedText style={styles.hint}>Connect Supabase for editable About copy.</ThemedText>
-        ) : null}
-
-        {copyLoading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={Colors.light.accent} />
-            <ThemedText style={styles.hint}>Loading…</ThemedText>
-          </View>
-        ) : null}
-
-        {copyError ? (
-          <Pressable onPress={() => void loadAboutCopy()} testID="button-about-retry">
-            <ThemedText style={styles.error}>{copyError} — tap to retry</ThemedText>
-          </Pressable>
-        ) : null}
-
-        <View style={styles.card}>
-          <ThemedText style={[styles.description, hasLoadedCopy && !introRaw ? styles.aboutMuted : undefined]}>
-            {formatSupportCopyForDisplay(introRaw)}
-          </ThemedText>
-        </View>
-
-        <View style={styles.card}>
-          <ThemedText
-            style={[styles.cardTitle, hasLoadedCopy && !missionTitleRaw ? styles.aboutMuted : undefined]}
-            testID="text-about-mission-heading"
-          >
-            {isSupabaseConfigured()
-              ? formatSupportCopyLabel(missionTitleRaw, { showEmpty: hasLoadedCopy })
-              : formatSupportCopyForDisplay("")}
-          </ThemedText>
-          <ThemedText style={[styles.cardText, hasLoadedCopy && !missionRaw ? styles.aboutMuted : undefined]}>
-            {formatSupportCopyForDisplay(missionRaw)}
-          </ThemedText>
-        </View>
-
-        <View style={styles.badge}>
-          <Feather name="award" size={24} color={Colors.light.accent} />
-          <ThemedText style={[styles.badgeTitle, hasLoadedCopy && !badgeTitleRaw ? styles.aboutMuted : undefined]}>
-            {formatSupportCopyForDisplay(badgeTitleRaw)}
-          </ThemedText>
-          <ThemedText style={[styles.badgeText, hasLoadedCopy && !badgeBodyRaw ? styles.aboutBadgeMuted : undefined]}>
-            {formatSupportCopyForDisplay(badgeBodyRaw)}
-          </ThemedText>
-        </View>
-      </ScrollView>
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
+  content: {
+    gap: LayoutSpacing.sm,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.md,
   },
   hint: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   error: {
     fontSize: 14,
     color: "#8B3A3A",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   logoContainer: {
     alignItems: "center",
-    marginVertical: Spacing.xl,
+    marginVertical: LayoutSpacing.xl,
   },
   logoImage: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   appName: {
     fontSize: 24,
     fontWeight: "700",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
-    marginBottom: 4,
+    marginBottom: LayoutSpacing.xs,
   },
   version: {
     fontSize: 13,
     color: Colors.light.textSecondary,
   },
-  card: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    marginBottom: 10,
+  cardSpacing: {
+    marginBottom: LayoutSpacing.sm,
   },
   description: {
     fontSize: 15,
@@ -248,7 +190,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: Colors.light.accent,
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   cardText: {
     fontSize: 15,
@@ -258,16 +200,16 @@ const styles = StyleSheet.create({
   badge: {
     backgroundColor: `${Colors.light.accent}10`,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.xl,
+    padding: LayoutSpacing.xl,
     alignItems: "center",
-    marginTop: Spacing.sm,
+    marginTop: LayoutSpacing.sm,
   },
   badgeTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: Colors.light.accent,
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.xs,
+    marginTop: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.xs,
   },
   badgeText: {
     fontSize: 14,

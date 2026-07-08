@@ -4,7 +4,6 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  ScrollView,
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,6 +11,7 @@ import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
@@ -69,11 +69,11 @@ export default function SignupScreen() {
         },
       ]}
     >
-      <ScrollView
+      <KeyboardAwareScrollViewCompat
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        bottomOffset={insets.bottom}
       >
         <View style={styles.logoArea}>
           <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
@@ -145,7 +145,7 @@ export default function SignupScreen() {
             <ThemedText style={styles.primaryButtonText}>Continue</ThemedText>
           </Pressable>
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
 
       <View style={styles.bottomSection}>
         <ThemedText style={styles.switchText}>Already have an account? </ThemedText>

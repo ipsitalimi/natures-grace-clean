@@ -16,6 +16,10 @@ export type PractitionerApplicationForm = {
   email: string;
   phone: string;
   category: string;
+  /** Comma-separated approved subcategory names within `category`. */
+  subcategories: string;
+  /** @deprecated Legacy single subcategory — use subcategories */
+  subcategory: string;
   experience: string;
   certifications: string;
   sessionTypes: string;

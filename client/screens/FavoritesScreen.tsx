@@ -2,24 +2,23 @@ import React, { useMemo, useState, useCallback } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { useDataContext } from "@/context/DataContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import type { FavoriteListEntry } from "@/data/favorites";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -36,7 +35,7 @@ function FavoriteCard({
   openLabel?: string;
 }) {
   return (
-    <View style={styles.card} testID={`favorite-card-${item.id}`}>
+    <Card testID={`favorite-card-${item.id}`}>
       <View style={styles.cardTop}>
         <View style={styles.cardInfo}>
           <ThemedText style={styles.name}>{item.name}</ThemedText>
@@ -59,12 +58,11 @@ function FavoriteCard({
           <ThemedText style={styles.viewButtonText}>{openLabel}</ThemedText>
         </Pressable>
       ) : null}
-    </View>
+    </Card>
   );
 }
 
 export default function FavoritesScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const { session } = useAuth();
   const { practitionerCategories, allProducts, resources, events } = useDataContext();
@@ -194,120 +192,67 @@ export default function FavoritesScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Notifications")}
-          testID="button-notifications"
-        >
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
-
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Favorites</ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
+    <PageLayout
+      title="Favorites"
+      titleInHeader
+      header="back"
+      scrollViewProps={{
+        refreshControl: (
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => void onRefresh()}
             tintColor={Colors.light.accent}
           />
-        }
-      >
-        {favoritesLoading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={Colors.light.accent} />
-            <ThemedText style={styles.loadingText}>Loading favorites…</ThemedText>
-          </View>
-        ) : null}
+        ),
+      }}
+      contentContainerStyle={styles.content}
+    >
+      {favoritesLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading favorites…</ThemedText>
+        </View>
+      ) : null}
 
-        {favoritesError ? (
-          <ThemedText style={styles.errorText}>{favoritesError}</ThemedText>
-        ) : null}
+      {favoritesError ? (
+        <ThemedText style={styles.errorText}>{favoritesError}</ThemedText>
+      ) : null}
 
-        {!session?.user && isSupabaseConfigured() ? (
-          <ThemedText style={styles.errorText}>Sign in to view and save favorites.</ThemedText>
-        ) : null}
+      {!session?.user && isSupabaseConfigured() ? (
+        <ThemedText style={styles.errorText}>Sign in to view and save favorites.</ThemedText>
+      ) : null}
 
-        {!favoritesLoading && !favoritesError && listEntries.length === 0 ? (
-          <ThemedText style={styles.emptyText}>
-            {session?.user
-              ? "No favorites yet. Tap the heart on a practitioner, product, resource, or event to save it here."
-              : "Sign in to save favorites."}
-          </ThemedText>
-        ) : null}
+      {!favoritesLoading && !favoritesError && listEntries.length === 0 ? (
+        <ThemedText style={styles.emptyText}>
+          {session?.user
+            ? "No favorites yet. Tap the heart on a practitioner, product, resource, or event to save it here."
+            : "Sign in to save favorites."}
+        </ThemedText>
+      ) : null}
 
-        {listEntries.map((item) => (
-          <FavoriteCard
-            key={item.id}
-            item={item}
-            onRemove={() => handleRemove(item.id)}
-            onOpen={() => handleOpenFavorite(item)}
-            openLabel={openLabelFor(item.itemType)}
-          />
-        ))}
-      </ScrollView>
-    </View>
+      {listEntries.map((item) => (
+        <FavoriteCard
+          key={item.id}
+          item={item}
+          onRemove={() => handleRemove(item.id)}
+          onOpen={() => handleOpenFavorite(item)}
+          openLabel={openLabelFor(item.itemType)}
+        />
+      ))}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    gap: 10,
+  content: {
+    gap: LayoutSpacing.sm,
+    paddingTop: LayoutSpacing.xs,
   },
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.md,
   },
   loadingText: {
     fontSize: 14,
@@ -317,7 +262,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#8B3A3A",
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   emptyText: {
     fontSize: 14,
@@ -325,20 +270,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
   },
-  card: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-  },
   cardTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   cardInfo: {
     flex: 1,
-    marginRight: Spacing.md,
+    marginRight: LayoutSpacing.md,
   },
   name: {
     fontSize: 16,

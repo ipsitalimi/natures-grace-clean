@@ -1,16 +1,17 @@
 import React from "react";
 import { View, StyleSheet, ScrollView, Pressable, Image } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProductImageView from "@/components/ProductImageView";
+import { getStoreCategoryById } from "@/data/storeCategories";
 import { StoreProduct } from "@/data/storeProducts";
 import { useDataContext } from "@/context/DataContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr } from "@/lib/formatCurrency";
 
 type ParamList = {
@@ -63,7 +64,7 @@ function ProductCard({ product, onPress }: ProductCardProps) {
 
 function useGetCategory(categoryId: string) {
   const { storeCategories } = useDataContext();
-  return storeCategories.find((c) => c.id === categoryId);
+  return storeCategories.find((c) => c.id === categoryId) ?? getStoreCategoryById(categoryId);
 }
 
 function getProductVisual(category: string): string {
@@ -88,7 +89,7 @@ function PlaceholderIcon({ category }: { category: string }) {
 }
 
 export default function StoreCategoryProductsScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(Spacing.xl);
   const navigation = useNavigation<NavigationProp>();
   const route =
     useRoute<RouteProp<{ StoreCategoryProducts: { categoryId: string } }>>();
@@ -98,18 +99,8 @@ export default function StoreCategoryProductsScreen() {
   if (!category) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>Products</ThemedText>
-        </View>
+        <BackHeader />
+        <BelowHeaderTitle>Products</BelowHeaderTitle>
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>
             Category not found
@@ -121,25 +112,15 @@ export default function StoreCategoryProductsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>{category.name}</ThemedText>
-      </View>
+      <BelowHeaderTitle>{category.name}</BelowHeaderTitle>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: getScrollBottomPadding(insets.bottom) + Spacing.xl },
+          { paddingBottom: scrollPaddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -147,17 +128,25 @@ export default function StoreCategoryProductsScreen() {
           {category.description}
         </ThemedText>
 
-        {category.products.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            onPress={() =>
-              navigation.navigate("StoreProductDetail", {
-                productId: product.id,
-              })
-            }
-          />
-        ))}
+        {category.products.length === 0 ? (
+          <View style={styles.emptyState}>
+            <ThemedText style={styles.emptyText}>
+              No products in this category yet. Approved seller listings will appear here.
+            </ThemedText>
+          </View>
+        ) : (
+          category.products.map((product) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              onPress={() =>
+                navigation.navigate("StoreProductDetail", {
+                  productId: product.id,
+                })
+              }
+            />
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -167,32 +156,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,

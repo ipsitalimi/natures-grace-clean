@@ -1,4 +1,5 @@
 import type { OrderStatus, PaymentStatus, SellerOrder } from "@/data/orders";
+import { getStoreCategoryNames } from "@/data/storeCategories";
 
 export type { OrderStatus, PaymentStatus, SellerOrder };
 export {
@@ -16,6 +17,7 @@ export interface SellerProduct {
   category: string;
   stock: number;
   status: "Active" | "Low Stock" | "Out of Stock";
+  approvalStatus?: "Approved" | "Pending" | "Rejected";
   imageUrl?: string | null;
   /** @deprecated No live product view tracking — do not display in UI. */
   views?: number;
@@ -60,14 +62,7 @@ export interface WalletTransaction {
   date: string;
 }
 
-export const SELLER_CATEGORIES = [
-  "Spiritual Manifestation & Protection",
-  "Mindful Radiance",
-  "Conscious Nutrition",
-  "Spirit & Space",
-  "Sacred Rituals",
-  "Daily Vitality",
-];
+export const SELLER_CATEGORIES = getStoreCategoryNames();
 
 export function getCategoryShortName(category: string): string {
   switch (category) {

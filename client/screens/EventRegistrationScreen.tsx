@@ -2,22 +2,22 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   Pressable,
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
 import { useAuth } from "@/context/AuthContext";
 import { useEventRegistrations } from "@/context/EventRegistrationsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { eventRegistrationNote } from "@/lib/eventPricing";
 
 type ParamList = {
@@ -25,7 +25,7 @@ type ParamList = {
 };
 
 export default function EventRegistrationScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(Spacing.xl);
   const navigation = useNavigation();
   const route = useRoute<RouteProp<ParamList, "EventRegistration">>();
   const { eventId } = route.params;
@@ -127,19 +127,7 @@ export default function EventRegistrationScreen() {
   if (showConfirmation) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable
-            style={styles.headerIconButton}
-            onPress={() => navigation.navigate("Notifications" as never)}
-            testID="button-notifications"
-          >
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
+        <BackHeader />
         <View style={styles.confirmationContainer}>
           <View style={styles.confirmationIcon}>
             <Feather name="check-circle" size={56} color={Colors.light.accent} />
@@ -179,32 +167,18 @@ export default function EventRegistrationScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Notifications" as never)}
-          testID="button-notifications"
-        >
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Register</ThemedText>
-      </View>
+      <BelowHeaderTitle>Register</BelowHeaderTitle>
 
-      <ScrollView
+      <KeyboardAwareScrollViewCompat
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: getScrollBottomPadding(insets.bottom) + Spacing.xl },
+          { paddingBottom: scrollPaddingBottom },
         ]}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        bottomOffset={Spacing.xl}
       >
         {!event ? (
           <ThemedText style={styles.errorText}>Event not found.</ThemedText>
@@ -331,7 +305,7 @@ export default function EventRegistrationScreen() {
         </Pressable>
 
         {event ? <ThemedText style={styles.noteText}>{event.bottomNote}</ThemedText> : null}
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
@@ -340,32 +314,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,

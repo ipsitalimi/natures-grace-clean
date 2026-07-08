@@ -1,34 +1,66 @@
 import type { EdgeInsets } from "react-native-safe-area-context";
 
-/**
- * Global layout spacing — use instead of hardcoded top/bottom padding.
- * Safe-area values come from useSafeAreaInsets(); these match `Spacing` in theme.ts.
- * Kept inline here to avoid a circular import (theme must not import this file).
- */
-export const LAYOUT = {
-  /** Extra space below the status bar / notch (paired with insets.top on headers). */
-  headerTopExtra: 8,
-  headerBottom: 8,
-  screenHorizontal: 16,
-  scrollBottomExtra: 16,
-  /** Minimum bottom inset when device reports 0 (some Android edge-to-edge cases). */
-  minBottomInset: 8,
-  authTopExtra: 12,
-} as const;
+import { Layout, LayoutSpacing } from "@/constants/layout";
 
-/** Top padding for AppHeader, ScreenHeaderBar, and custom header rows. */
+/**
+ * Safe-area helpers — top inset is applied once in ScreenHeader / PageLayout.
+ * Do NOT wrap the app root in SafeAreaView edges top.
+ */
+export const LAYOUT = Layout;
+
+/** Re-export spacing scale for layout shells. */
+export { LayoutSpacing };
+
+/** Top padding for header rows (status bar + small breathing room). */
 export function getHeaderPaddingTop(insetTop: number): number {
-  return insetTop + LAYOUT.headerTopExtra;
+  return insetTop + Layout.headerTopExtra;
 }
 
-/** Top padding for full-screen auth / marketing layouts without a header bar. */
+/** Tighter top padding for compact home-style headers. */
+export function getCompactHeaderPaddingTop(insetTop: number): number {
+  return insetTop + LayoutSpacing.xs;
+}
+
+/** Top padding for full-screen auth layouts without a header bar. */
 export function getAuthScreenPaddingTop(insetTop: number): number {
-  return insetTop + LAYOUT.authTopExtra;
+  return insetTop + Layout.authTopExtra;
 }
 
 /** Bottom padding for scroll content above home indicator / tab bar. */
 export function getScrollBottomPadding(insetBottom: number, extraBottom = 0): number {
-  return Math.max(insetBottom, LAYOUT.minBottomInset) + LAYOUT.scrollBottomExtra + extraBottom;
+  return Math.max(insetBottom, Layout.minBottomInset) + Layout.scrollBottomExtra + extraBottom;
+}
+
+/** Body height of sticky CTA content (top padding + button row), excluding safe area. */
+export const STICKY_ACTION_BAR_BODY_HEIGHT = 80;
+
+/** Extra space below the button inside the bar (all platforms). */
+export const STICKY_ACTION_BAR_EXTRA_BOTTOM = LayoutSpacing.xl;
+
+/** Minimum bottom breathing room when safe-area inset is 0 (common on Android). */
+export const STICKY_ACTION_BAR_MIN_BOTTOM = LayoutSpacing.xl;
+
+/** Inner bottom padding for sticky bar content (SafeAreaView adds device inset separately). */
+export function getStickyActionBarInnerBottomPadding(insetBottom: number): number {
+  return STICKY_ACTION_BAR_EXTRA_BOTTOM + Math.max(STICKY_ACTION_BAR_MIN_BOTTOM - insetBottom, 0);
+}
+
+/** @deprecated Use getStickyActionBarInnerBottomPadding — kept for callers that read bottomBarPadding. */
+export function getStickyActionBarBottomInset(insetBottom: number): number {
+  return getStickyActionBarInnerBottomPadding(insetBottom);
+}
+
+/** Scroll padding so content clears a sticky action bar at the bottom of the screen. */
+export function getStickyActionBarScrollPadding(
+  insetBottom: number,
+  barBodyHeight = STICKY_ACTION_BAR_BODY_HEIGHT
+): number {
+  return (
+    barBodyHeight +
+    insetBottom +
+    getStickyActionBarInnerBottomPadding(insetBottom) +
+    Layout.scrollBottomExtra
+  );
 }
 
 export function headerRowStyle(insets: Pick<EdgeInsets, "top">) {

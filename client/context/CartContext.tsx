@@ -11,6 +11,7 @@ import { EMPTY_CHECKOUT } from "@/data/cart";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import * as cartService from "@/services/commerce/cartService";
+import type { DeliveryTierId } from "@/constants/sellerDelivery";
 
 export type { CartItem } from "@/data/cart";
 
@@ -25,6 +26,8 @@ interface CartContextType {
   removeItem: (productId: string) => Promise<void>;
   updateQuantity: (productId: string, quantity: number) => Promise<void>;
   setDeliveryOption: (deliveryOption: string) => Promise<void>;
+  setSellerDeliveryOption: (sellerId: string, optionId: DeliveryTierId) => Promise<void>;
+  removeOrderedItems: (productIds: string[]) => Promise<void>;
   setOrderNote: (note: string) => Promise<void>;
   prepareCheckout: () => Promise<CartCheckoutState | null>;
   clearCart: () => Promise<void>;
@@ -137,6 +140,31 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     async (productId: string, quantity: number) => {
       if (!isSupabaseConfigured() || !session?.user) return;
       await runMutation(() => cartService.setItemQuantity(productId, quantity));
+    },
+    [session?.user, runMutation]
+  );
+
+  const setSellerDeliveryOption = useCallback(
+    async (sellerId: string, optionId: DeliveryTierId) => {
+      if (!isSupabaseConfigured() || !session?.user) return;
+      setCartMutating(true);
+      try {
+        const snap = await cartService.setSellerDeliveryOption(sellerId, optionId);
+        if (snap) {
+          setItems(snap.items);
+          setCheckout(snap.checkout);
+        }
+      } finally {
+        setCartMutating(false);
+      }
+    },
+    [session?.user]
+  );
+
+  const removeOrderedItems = useCallback(
+    async (productIds: string[]) => {
+      if (!isSupabaseConfigured() || !session?.user) return;
+      await runMutation(() => cartService.removeItemsByProductIds(productIds));
     },
     [session?.user, runMutation]
   );
@@ -255,6 +283,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeItem,
         updateQuantity,
         setDeliveryOption,
+        setSellerDeliveryOption,
+        removeOrderedItems,
         setOrderNote,
         prepareCheckout,
         clearCart,

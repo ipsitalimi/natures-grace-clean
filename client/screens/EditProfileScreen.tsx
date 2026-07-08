@@ -2,25 +2,23 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   TextInput,
   Pressable,
   ActivityIndicator,
   Image,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { updateProfile } from "@/services/profileService";
 import { parseProfilePreferences } from "@/types/profilePreferences";
 import { computeProfileCompletion } from "@/hooks/useProfileCompletion";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { uploadProfileAvatar, type LocalFile } from "@/lib/storageUpload";
 
 function profileBio(preferences: Record<string, unknown> | undefined): string {
@@ -28,8 +26,6 @@ function profileBio(preferences: Record<string, unknown> | undefined): string {
 }
 
 export default function EditProfileScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const { profile, refreshProfile, isConfigured } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -131,190 +127,131 @@ export default function EditProfileScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+    <PageLayout title="Edit Profile" titleInHeader header="back">
+      {completion.percent < 100 ? (
+        <Card style={styles.completionCard}>
+          <ThemedText style={styles.completionTitle}>{completion.percent}% Complete</ThemedText>
+          {completion.missing.length > 0 ? (
+            <>
+              <ThemedText style={styles.completionSubtitle}>Missing:</ThemedText>
+              {completion.missing.map((item) => (
+                <ThemedText key={item.key} style={styles.completionItem}>
+                  · {item.label}
+                </ThemedText>
+              ))}
+            </>
+          ) : null}
+        </Card>
+      ) : null}
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Edit Profile</ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
-        showsVerticalScrollIndicator={false}
+      <Pressable
+        style={styles.avatarContainer}
+        onPress={() => void handlePickAvatar()}
+        disabled={uploadingAvatar}
+        testID="button-change-avatar"
       >
-        {completion.percent < 100 ? (
-          <View style={styles.completionCard}>
-            <ThemedText style={styles.completionTitle}>{completion.percent}% Complete</ThemedText>
-            {completion.missing.length > 0 ? (
-              <>
-                <ThemedText style={styles.completionSubtitle}>Missing:</ThemedText>
-                {completion.missing.map((item) => (
-                  <ThemedText key={item.key} style={styles.completionItem}>
-                    · {item.label}
-                  </ThemedText>
-                ))}
-              </>
-            ) : null}
+        {avatarPreview ? (
+          <Image source={{ uri: avatarPreview }} style={styles.avatarImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.avatar}>
+            <Feather name="user" size={40} color={Colors.light.accent} />
           </View>
-        ) : null}
+        )}
+        {uploadingAvatar ? (
+          <ActivityIndicator color={Colors.light.accent} style={styles.avatarSpinner} />
+        ) : (
+          <ThemedText style={styles.avatarHint}>Tap to change photo</ThemedText>
+        )}
+      </Pressable>
 
-        <Pressable
-          style={styles.avatarContainer}
-          onPress={() => void handlePickAvatar()}
-          disabled={uploadingAvatar}
-          testID="button-change-avatar"
-        >
-          {avatarPreview ? (
-            <Image source={{ uri: avatarPreview }} style={styles.avatarImage} resizeMode="cover" />
-          ) : (
-            <View style={styles.avatar}>
-              <Feather name="user" size={40} color={Colors.light.accent} />
-            </View>
-          )}
-          {uploadingAvatar ? (
-            <ActivityIndicator color={Colors.light.accent} style={styles.avatarSpinner} />
-          ) : (
-            <ThemedText style={styles.avatarHint}>Tap to change photo</ThemedText>
-          )}
-        </Pressable>
+      <View style={styles.fieldGroup}>
+        <ThemedText style={styles.label}>Full Name</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={fullName}
+          onChangeText={setFullName}
+          placeholder="Enter your full name"
+          placeholderTextColor={Colors.light.textSecondary}
+          testID="input-fullname"
+        />
+      </View>
 
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Full Name</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={fullName}
-            onChangeText={setFullName}
-            placeholder="Enter your full name"
-            placeholderTextColor={Colors.light.textSecondary}
-            testID="input-fullname"
-          />
-        </View>
+      <View style={styles.fieldGroup}>
+        <ThemedText style={styles.label}>Email</ThemedText>
+        <TextInput
+          style={[styles.input, styles.inputDisabled]}
+          value={email}
+          editable={false}
+          placeholder="Enter your email"
+          placeholderTextColor={Colors.light.textSecondary}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          testID="input-email"
+        />
+      </View>
 
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Email</ThemedText>
-          <TextInput
-            style={[styles.input, styles.inputDisabled]}
-            value={email}
-            editable={false}
-            placeholder="Enter your email"
-            placeholderTextColor={Colors.light.textSecondary}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            testID="input-email"
-          />
-        </View>
+      <View style={styles.fieldGroup}>
+        <ThemedText style={styles.label}>Phone</ThemedText>
+        <TextInput
+          style={styles.input}
+          value={phone}
+          onChangeText={setPhone}
+          placeholder="Enter your phone number"
+          placeholderTextColor={Colors.light.textSecondary}
+          keyboardType="phone-pad"
+          testID="input-phone"
+        />
+      </View>
 
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Phone</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={phone}
-            onChangeText={setPhone}
-            placeholder="Enter your phone number"
-            placeholderTextColor={Colors.light.textSecondary}
-            keyboardType="phone-pad"
-            testID="input-phone"
-          />
-        </View>
+      <View style={styles.fieldGroup}>
+        <ThemedText style={styles.label}>Bio</ThemedText>
+        <TextInput
+          style={[styles.input, styles.bioInput]}
+          value={bio}
+          onChangeText={setBio}
+          placeholder="Tell us about yourself"
+          placeholderTextColor={Colors.light.textSecondary}
+          multiline
+          numberOfLines={4}
+          textAlignVertical="top"
+          testID="input-bio"
+        />
+      </View>
 
-        <View style={styles.fieldGroup}>
-          <ThemedText style={styles.label}>Bio</ThemedText>
-          <TextInput
-            style={[styles.input, styles.bioInput]}
-            value={bio}
-            onChangeText={setBio}
-            placeholder="Tell us about yourself"
-            placeholderTextColor={Colors.light.textSecondary}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            testID="input-bio"
-          />
-        </View>
+      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+      {confirmation ? (
+        <ThemedText style={styles.confirmationText} testID="text-profile-updated">Profile Updated</ThemedText>
+      ) : null}
 
-        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
-        {confirmation ? (
-          <ThemedText style={styles.confirmationText} testID="text-profile-updated">Profile Updated</ThemedText>
-        ) : null}
-
-        <Pressable
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={() => void handleSave()}
-          disabled={saving}
-          testID="button-save-profile"
-        >
-          {saving ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <ThemedText style={styles.saveButtonText}>Save Changes</ThemedText>
-          )}
-        </Pressable>
-      </ScrollView>
-    </View>
+      <Pressable
+        style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+        onPress={() => void handleSave()}
+        disabled={saving}
+        testID="button-save-profile"
+      >
+        {saving ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <ThemedText style={styles.saveButtonText}>Save Changes</ThemedText>
+        )}
+      </Pressable>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
   completionCard: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
+    marginTop: LayoutSpacing.md,
+    marginBottom: LayoutSpacing.sm,
     borderWidth: 1,
     borderColor: Colors.light.divider,
   },
   completionTitle: { fontSize: 18, fontWeight: "700", color: Colors.light.accent },
-  completionSubtitle: { fontSize: 13, color: Colors.light.textMuted, marginTop: 8 },
-  completionItem: { fontSize: 14, color: Colors.light.text, marginTop: 4 },
+  completionSubtitle: { fontSize: 13, color: Colors.light.textMuted, marginTop: LayoutSpacing.sm },
+  completionItem: { fontSize: 14, color: Colors.light.text, marginTop: LayoutSpacing.xs },
   avatarContainer: {
     alignItems: "center",
-    marginVertical: Spacing.xl,
+    marginVertical: LayoutSpacing.xl,
   },
   avatar: {
     width: 100,
@@ -330,27 +267,27 @@ const styles = StyleSheet.create({
     borderRadius: 50,
   },
   avatarSpinner: {
-    marginTop: Spacing.sm,
+    marginTop: LayoutSpacing.sm,
   },
   avatarHint: {
-    marginTop: Spacing.sm,
+    marginTop: LayoutSpacing.sm,
     fontSize: 13,
     color: Colors.light.textMuted,
   },
   fieldGroup: {
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.sm,
-    marginLeft: 4,
+    marginBottom: LayoutSpacing.sm,
+    marginLeft: LayoutSpacing.xs,
   },
   input: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: LayoutSpacing.md,
     paddingVertical: 14,
     fontSize: 15,
     color: Colors.light.text,
@@ -366,21 +303,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#C0392B",
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   confirmationText: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.light.accent,
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   saveButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.sm,
-    paddingVertical: 16,
+    paddingVertical: LayoutSpacing.md,
     alignItems: "center",
-    marginTop: Spacing.md,
+    marginTop: LayoutSpacing.md,
     minHeight: 52,
     justifyContent: "center",
   },

@@ -89,8 +89,8 @@ ON CONFLICT (slug) DO NOTHING;
 INSERT INTO public.support_copy (key, body)
 VALUES
   ('avg_response_label', '2.4 hrs'),
-  ('support_email', 'support@naturesgrace.com'),
-  ('support_phone', '+91 98765 43210'),
+  ('support_email', 'naturesgraceapp@gmail.com'),
+  ('support_phone', '+91 9560424609'),
   ('support_hours', 'Mon-Sat, 9:00 AM - 6:00 PM IST'),
   ('support_hub_help_title', 'Help Center'),
   ('support_hub_help_description', 'Find answers to common questions'),

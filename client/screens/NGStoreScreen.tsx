@@ -1,21 +1,23 @@
 import React, { useState, useRef, useCallback } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Modal, LayoutChangeEvent, ActivityIndicator, RefreshControl } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { CompositeNavigationProp } from "@react-navigation/native";
 import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { Colors, BorderRadius } from "@/constants/theme";
+import { Layout, LayoutSpacing } from "@/constants/layout";
+import { PageLayout } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import ProductImageView from "@/components/ProductImageView";
 import { StoreCategory, StoreProduct } from "@/data/storeProducts";
 import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 import { formatInr } from "@/lib/formatCurrency";
 
 type StoreStackParamList = {
@@ -86,8 +88,8 @@ function ProductCard({ product, onPress }: ProductCardProps) {
 }
 
 export default function NGStoreScreen() {
-  const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const { headerPaddingTop } = useLayoutInsets();
   const navigation = useNavigation<NavigationProp>();
   const scrollRef = useRef<ScrollView>(null);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -103,15 +105,21 @@ export default function NGStoreScreen() {
       setRefreshing(false);
     }
   }, [refreshContent]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshContent({ silent: true });
+    }, [refreshContent])
+  );
   const { homeContent } = usePlatformConfig();
-  const visibleCategories = storeCategories
-    .map((cat) => ({
-      ...cat,
-      products: cat.products.filter(
-        (p) => !p.approvalStatus || p.approvalStatus === "Approved"
-      ),
-    }))
-    .filter((cat) => cat.products.length > 0);
+  const { profile } = useAuth();
+  const showSellerApplication = profile?.role !== "Seller" && profile?.role !== "Practitioner";
+  const storeCategoriesList = storeCategories.map((cat) => ({
+    ...cat,
+    products: cat.products.filter(
+      (p) => !p.approvalStatus || p.approvalStatus === "Approved"
+    ),
+  }));
   const featuredIds = homeContent.featuredProductIds;
   const { getItemCount } = useCart();
   const cartCount = getItemCount();
@@ -134,40 +142,50 @@ export default function NGStoreScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={goBackToHome} testID="button-back-home">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Cart" as never)}
-          testID="button-store-cart"
-        >
-          <Feather name="shopping-cart" size={22} color={Colors.light.accent} />
-          {cartCount > 0 ? (
-            <View style={styles.cartBadge}>
-              <ThemedText style={styles.cartBadgeText}>{cartCount > 9 ? "9+" : cartCount}</ThemedText>
-            </View>
-          ) : null}
-        </Pressable>
-      </View>
-
-      <View style={styles.titleRow}>
-        <View style={styles.titleRowSpacer} />
-        <ThemedText style={styles.title}>NG Store</ThemedText>
-        <View style={styles.titleRowRight}>
-          <Pressable
-            style={styles.menuButton}
-            onPress={() => setMenuVisible(true)}
-            testID="button-store-menu"
-          >
-            <Feather name="menu" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-      </View>
-
+    <PageLayout
+      title="NG Store"
+      titleInHeader
+      header="action"
+      headerProps={{
+        onBackPress: goBackToHome,
+        showNotifications: false,
+        rightAction: (
+          <View style={styles.headerActions}>
+            <Pressable
+              style={styles.menuButton}
+              onPress={() => setMenuVisible(true)}
+              testID="button-store-menu"
+            >
+              <Feather name="menu" size={Layout.headerIconSize} color={Colors.light.accent} />
+            </Pressable>
+            <Pressable
+              style={styles.headerIconButton}
+              onPress={() => navigation.navigate("Cart" as never)}
+              testID="button-store-cart"
+            >
+              <Feather name="shopping-cart" size={Layout.headerIconSize} color={Colors.light.accent} />
+              {cartCount > 0 ? (
+                <View style={styles.cartBadge}>
+                  <ThemedText style={styles.cartBadgeText}>{cartCount > 9 ? "9+" : cartCount}</ThemedText>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
+        ),
+      }}
+      footerInset={tabBarHeight}
+      scrollRef={scrollRef}
+      scrollViewProps={{
+        refreshControl:
+          !dataLoading && !dataError ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              tintColor={Colors.light.accent}
+            />
+          ) : undefined,
+      }}
+    >
       <Modal
         visible={menuVisible}
         transparent
@@ -175,9 +193,9 @@ export default function NGStoreScreen() {
         onRequestClose={() => setMenuVisible(false)}
       >
         <Pressable style={styles.menuOverlay} onPress={() => setMenuVisible(false)}>
-          <View style={[styles.menuDropdown, { marginTop: insets.top + 90 }]}>
+          <View style={[styles.menuDropdown, { marginTop: headerPaddingTop + 56 }]}>
             <ThemedText style={styles.menuTitle}>Jump to Category</ThemedText>
-            {visibleCategories.map((category) => (
+            {storeCategoriesList.map((category) => (
               <Pressable
                 key={category.id}
                 style={({ pressed }) => [
@@ -197,24 +215,6 @@ export default function NGStoreScreen() {
         </Pressable>
       </Modal>
 
-      <ScrollView
-        ref={scrollRef}
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: tabBarHeight + 20 },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          !dataLoading && !dataError ? (
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => void onRefresh()}
-              tintColor={Colors.light.accent}
-            />
-          ) : undefined
-        }
-      >
         {dataLoading ? (
           <View style={styles.centeredState}>
             <ActivityIndicator color={Colors.light.accent} size="large" />
@@ -241,7 +241,7 @@ export default function NGStoreScreen() {
 
         <View style={styles.divider} />
 
-        {visibleCategories.map((category) => (
+        {storeCategoriesList.map((category) => (
           <View
             key={category.id}
             style={styles.categorySection}
@@ -260,52 +260,55 @@ export default function NGStoreScreen() {
             </View>
 
             <View style={styles.productsGrid}>
-              {category.products.map((product) => (
-                <View key={product.id} style={styles.productCardWrapper}>
-                  <ProductCard
-                    product={product}
-                    onPress={() =>
-                      navigation.navigate("StoreProductDetail", {
-                        productId: product.id,
-                      })
-                    }
-                  />
+              {category.products.length === 0 ? (
+                <View style={styles.emptyCategory}>
+                  <ThemedText style={styles.emptyCategoryText}>
+                    No products in this category yet — sellers can list here soon.
+                  </ThemedText>
                 </View>
-              ))}
+              ) : (
+                category.products.map((product) => (
+                  <View key={product.id} style={styles.productCardWrapper}>
+                    <ProductCard
+                      product={product}
+                      onPress={() =>
+                        navigation.navigate("StoreProductDetail", {
+                          productId: product.id,
+                        })
+                      }
+                    />
+                  </View>
+                ))
+              )}
             </View>
           </View>
         ))}
 
-        <Pressable
-          style={styles.becomeSellerButton}
-          onPress={() => navigation.navigate("SellerApplication" as never)}
-          testID="button-become-seller"
-        >
-          <Feather name="shopping-bag" size={16} color={Colors.light.accent} />
-          <ThemedText style={styles.becomeSellerText}>Become a Seller</ThemedText>
-        </Pressable>
+        {showSellerApplication ? (
+          <Pressable
+            style={styles.becomeSellerButton}
+            onPress={() => navigation.navigate("SellerApplication" as never)}
+            testID="button-become-seller"
+          >
+            <Feather name="shopping-bag" size={16} color={Colors.light.accent} />
+            <ThemedText style={styles.becomeSellerText}>Become a Seller</ThemedText>
+          </Pressable>
+        ) : null}
           </>
         )}
-      </ScrollView>
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
+  headerActions: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
+    justifyContent: "flex-end",
+    gap: LayoutSpacing.xs,
   },
   headerIconButton: {
-    padding: 8,
+    padding: LayoutSpacing.sm,
     position: "relative",
   },
   cartBadge: {
@@ -335,8 +338,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.lg,
+    paddingHorizontal: LayoutSpacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   titleRowSpacer: {
     width: 40,
@@ -358,51 +361,51 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   scrollContent: {
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: LayoutSpacing.lg,
   },
   subtitle: {
     fontSize: 15,
     color: Colors.light.textSecondary,
     textAlign: "center",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   introBody: {
     fontSize: 14,
     lineHeight: 22,
     color: Colors.light.textSecondary,
     textAlign: "center",
-    marginBottom: Spacing.xl,
+    marginBottom: LayoutSpacing.xl,
   },
   divider: {
     width: 60,
     height: 1,
     backgroundColor: Colors.light.divider,
     alignSelf: "center",
-    marginBottom: Spacing["2xl"],
+    marginBottom: LayoutSpacing.xxl,
   },
   menuOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.3)",
   },
   menuDropdown: {
-    marginHorizontal: Spacing.xl,
+    marginHorizontal: LayoutSpacing.xl,
     backgroundColor: Colors.light.backgroundDefault,
     borderRadius: BorderRadius.md,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
+    paddingVertical: LayoutSpacing.md,
+    paddingHorizontal: LayoutSpacing.lg,
   },
   menuTitle: {
     fontSize: 14,
     fontWeight: "600",
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.sm,
+    marginBottom: LayoutSpacing.md,
+    paddingHorizontal: LayoutSpacing.sm,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 12,
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: LayoutSpacing.sm,
     borderRadius: BorderRadius.xs,
   },
   menuItemPressed: {
@@ -411,7 +414,7 @@ const styles = StyleSheet.create({
   menuItemIcon: {
     width: 28,
     alignItems: "center",
-    marginRight: Spacing.md,
+    marginRight: LayoutSpacing.md,
   },
   menuItemText: {
     fontSize: 15,
@@ -419,12 +422,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   categorySection: {
-    marginBottom: Spacing.xl,
+    marginBottom: LayoutSpacing.xl,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   sectionIconContainer: {
     width: 40,
@@ -433,7 +436,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.backgroundSecondary,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: Spacing.md,
+    marginRight: LayoutSpacing.md,
   },
   sectionHeaderText: {
     flex: 1,
@@ -486,7 +489,7 @@ const styles = StyleSheet.create({
     opacity: 0.08,
   },
   productInfo: {
-    padding: Spacing.md,
+    padding: LayoutSpacing.md,
   },
   productName: {
     fontSize: 13,
@@ -508,10 +511,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.accent,
     borderRadius: BorderRadius.sm,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
+    paddingVertical: LayoutSpacing.md,
+    paddingHorizontal: LayoutSpacing.xl,
+    gap: LayoutSpacing.sm,
+    marginTop: LayoutSpacing.md,
   },
   becomeSellerText: {
     fontSize: 14,
@@ -521,14 +524,14 @@ const styles = StyleSheet.create({
   centeredState: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: Spacing.xl * 2,
+    paddingVertical: LayoutSpacing.xl * 2,
     gap: 12,
   },
   stateHint: {
     fontSize: 15,
     color: Colors.light.textSecondary,
     textAlign: "center",
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: LayoutSpacing.lg,
   },
   retryBtn: {
     marginTop: 4,
@@ -541,5 +544,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  emptyCategory: {
+    width: "100%",
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.md,
+    padding: LayoutSpacing.lg,
+    alignItems: "center",
+  },
+  emptyCategoryText: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

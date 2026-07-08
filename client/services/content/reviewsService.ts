@@ -267,6 +267,13 @@ export async function saveSellerReply(
   return true;
 }
 
+export async function savePractitionerReply(
+  reviewId: string,
+  reply: string
+): Promise<boolean> {
+  return saveSellerReply(reviewId, reply);
+}
+
 export async function fetchApprovedPractitionerReviews(
   practitionerId: string,
   limit = 10

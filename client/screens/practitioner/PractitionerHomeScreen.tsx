@@ -1,63 +1,34 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
+import React from "react";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
+import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing } from "@/constants/theme";
-import AppHeader from "@/components/AppHeader";
-import PractitionerDrawer from "@/components/PractitionerDrawer";
+import { Colors, Shadows } from "@/constants/theme";
+import { CardTokens, Layout, LayoutSpacing } from "@/constants/layout";
+import ScreenHeader from "@/components/layout/ScreenHeader";
+import {
+  DashboardWelcomeCard,
+  DashboardSectionTitle,
+  DashboardQuickActionGrid,
+  getTimeGreeting,
+} from "@/components/dashboard";
+import { useDrawer } from "@/context/DrawerContext";
 import type { PractitionerSession, WeeklySessionPoint } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import { formatInr, formatInrCompact } from "@/lib/formatCurrency";
 
-const ICON_SIZE = 22;
-const ICON_WRAP = 48;
-const CARD_RADIUS = 16;
-const CARD_SHADOW = {
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 1 },
-  shadowOpacity: 0.04,
-  shadowRadius: 3,
-  elevation: 2,
-};
+const ICON_SIZE = 20;
+const ICON_WRAP = 36;
+const CARD_SHADOW = Shadows.soft;
 
 
 function InsightIcon({ name }: { name: React.ComponentProps<typeof Feather>["name"] }) {
   return (
     <View style={styles.iconCircle}>
       <Feather name={name} size={ICON_SIZE} color={Colors.light.accent} />
-    </View>
-  );
-}
-
-function PractitionerHeroCard({
-  monthlyAmount,
-  growthPct,
-  clientsToday,
-}: {
-  monthlyAmount: number;
-  growthPct: number;
-  clientsToday: number;
-}) {
-  return (
-    <View style={styles.heroBanner}>
-      <View style={styles.heroOverlay}>
-        <ThemedText style={styles.heroEyebrow}>Earnings this month</ThemedText>
-        <ThemedText style={styles.heroAmount}>{formatInr(monthlyAmount)}</ThemedText>
-        <View style={styles.heroGrowthRow}>
-          <Feather name="trending-up" size={18} color="#FFFFFF" />
-          <ThemedText style={styles.heroGrowthText}>
-            {growthPct >= 0 ? "+" : ""}
-            {growthPct.toFixed(1)}% from last month
-          </ThemedText>
-        </View>
-        <ThemedText style={styles.heroSubtitle}>
-          {clientsToday} clients booked sessions with you today.
-        </ThemedText>
-        <ThemedText style={styles.heroClosing}>Your healing practice is growing beautifully.</ThemedText>
-      </View>
     </View>
   );
 }
@@ -113,31 +84,6 @@ function WeeklyRhythmChart({ data }: { data: WeeklySessionPoint[] }) {
   );
 }
 
-function QuickActionCard({
-  icon,
-  label,
-  onPress,
-  testID,
-}: {
-  icon: keyof typeof Feather.glyphMap;
-  label: string;
-  onPress: () => void;
-  testID?: string;
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [styles.quickCard, pressed && styles.quickCardPressed]}
-      onPress={onPress}
-      testID={testID}
-    >
-      <View style={styles.quickIconWrap}>
-        <Feather name={icon} size={ICON_SIZE} color={Colors.light.accent} />
-      </View>
-      <ThemedText style={styles.quickLabel}>{label}</ThemedText>
-    </Pressable>
-  );
-}
-
 function getStatusPillStyle(status: PractitionerSession["status"]) {
   switch (status) {
     case "Upcoming":
@@ -152,8 +98,9 @@ function getStatusPillStyle(status: PractitionerSession["status"]) {
 export default function PractitionerHomeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
-  const { sessions, stats, practiceName, dashboard } = usePractitionerContext();
+  const { openDrawer } = useDrawer();
+  const { sessions, stats, practiceName, dashboard, loading, loadError, refresh } =
+    usePractitionerContext();
 
   const upcomingSessions = sessions.filter((s) => s.status === "Upcoming");
   const recentSessions = sessions.slice(0, 3);
@@ -163,27 +110,61 @@ export default function PractitionerHomeScreen() {
   const growthPct = dashboard.monthlyGrowthPct;
   const weeklyTotal = dashboard.weeklySessions.reduce((s, d) => s + d.amount, 0);
 
+  const greeting = getTimeGreeting();
+  const earningsMeta = `${formatInr(monthlyAmount)} this month · ${growthPct >= 0 ? "+" : ""}${growthPct.toFixed(1)}% · ${dashboard.clientsBookedToday} clients today`;
+
   return (
     <View style={styles.container}>
-      <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
+      <ScreenHeader
+        variant="title"
+        title={practiceName}
+        showNotifications
+        leftAction={
+          <Pressable
+            style={styles.headerIconBtn}
+            onPress={() => openDrawer("practitioner")}
+            testID="button-profile"
+          >
+            <Svg width={Layout.headerIconSize} height={Layout.headerIconSize} viewBox="0 0 24 24" fill="none">
+              <Circle cx="12" cy="8" r="4" fill={Colors.light.accent} opacity={0.8} />
+              <Path
+                d="M4 20C4 16 8 14 12 14C16 14 20 16 20 20"
+                stroke={Colors.light.accent}
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                fill="none"
+              />
+            </Svg>
+          </Pressable>
+        }
+      />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 36 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + LayoutSpacing.lg }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.titleSection}>
-          <ThemedText style={styles.pageTitle}>{practiceName}</ThemedText>
-        </View>
-
-        <PractitionerHeroCard
-          monthlyAmount={monthlyAmount}
-          growthPct={growthPct}
-          clientsToday={dashboard.clientsBookedToday}
+        <DashboardWelcomeCard
+          greeting={greeting}
+          subtitle="Sessions, offerings, and client care at a glance."
+          meta={earningsMeta}
         />
 
-        <ThemedText style={styles.sectionEyebrow}>At a glance</ThemedText>
+        {loading ? (
+          <View style={styles.stateBanner}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.stateText}>Loading your practice…</ThemedText>
+          </View>
+        ) : loadError ? (
+          <View style={styles.stateBanner}>
+            <ThemedText style={styles.errorText}>{loadError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => void refresh()}>
+              <ThemedText style={styles.retryText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <DashboardSectionTitle style="eyebrow">At a glance</DashboardSectionTitle>
         <View style={styles.keyMetricsRow}>
           <KeyMetricCard
             label="Upcoming"
@@ -210,7 +191,7 @@ export default function PractitionerHomeScreen() {
           {stats.totalSessions} sessions · {stats.sessionsThisWeek} this week
         </ThemedText>
 
-        <View style={[styles.softCard, CARD_SHADOW]}>
+        <View style={styles.softCard}>
           <View style={styles.cardTopRow}>
             <View>
               <ThemedText style={styles.sectionTitleLg}>Weekly rhythm</ThemedText>
@@ -225,51 +206,56 @@ export default function PractitionerHomeScreen() {
           <WeeklyRhythmChart data={dashboard.weeklySessions} />
         </View>
 
-        <ThemedText style={styles.sectionEyebrow}>Tend to your practice</ThemedText>
-        <View style={styles.quickGrid}>
-          <View style={styles.quickRow}>
-            <QuickActionCard
-              icon="calendar"
-              label="Schedule"
-              onPress={() => navigation.navigate("SessionsTab")}
-              testID="quick-action-schedule"
-            />
-            <QuickActionCard
-              icon="layers"
-              label="Offerings"
-              onPress={() => navigation.navigate("SessionOfferings")}
-              testID="quick-action-offerings"
-            />
-            <QuickActionCard
-              icon="credit-card"
-              label="Wallet"
-              onPress={() => navigation.navigate("PractitionerWallet")}
-              testID="quick-action-wallet"
-            />
-          </View>
-          <View style={styles.quickRow}>
-            <QuickActionCard
-              icon="bar-chart-2"
-              label="Analytics"
-              onPress={() => navigation.navigate("PractitionerAnalytics")}
-              testID="quick-action-analytics"
-            />
-            <QuickActionCard
-              icon="star"
-              label="Reviews"
-              onPress={() => navigation.navigate("MyReviews")}
-              testID="quick-action-reviews"
-            />
-            <QuickActionCard
-              icon="edit-3"
-              label="Edit profile"
-              onPress={() => navigation.navigate("PractitionerProfile")}
-              testID="quick-action-profile"
-            />
-          </View>
-        </View>
+        <DashboardSectionTitle style="eyebrow">Tend to your practice</DashboardSectionTitle>
+        <DashboardQuickActionGrid
+          columns={3}
+          actions={[
+            {
+              id: "schedule",
+              icon: "calendar",
+              label: "Schedule",
+              onPress: () => navigation.navigate("SessionsTab"),
+              testID: "quick-action-schedule",
+            },
+            {
+              id: "offerings",
+              icon: "layers",
+              label: "Offerings",
+              onPress: () => navigation.navigate("SessionOfferings"),
+              testID: "quick-action-offerings",
+            },
+            {
+              id: "wallet",
+              icon: "credit-card",
+              label: "Wallet",
+              onPress: () => navigation.navigate("PractitionerWallet"),
+              testID: "quick-action-wallet",
+            },
+            {
+              id: "analytics",
+              icon: "bar-chart-2",
+              label: "Analytics",
+              onPress: () => navigation.navigate("PractitionerAnalytics"),
+              testID: "quick-action-analytics",
+            },
+            {
+              id: "reviews",
+              icon: "star",
+              label: "Reviews",
+              onPress: () => navigation.navigate("PractitionerReviews"),
+              testID: "quick-action-reviews",
+            },
+            {
+              id: "profile",
+              icon: "edit-3",
+              label: "Edit profile",
+              onPress: () => navigation.navigate("PractitionerProfile"),
+              testID: "quick-action-profile",
+            },
+          ]}
+        />
 
-        <View style={[styles.softCard, CARD_SHADOW]}>
+        <View style={styles.softCard}>
           <ThemedText style={styles.sectionTitleLg}>Notes for you</ThemedText>
           <ThemedText style={styles.notesLead}>Small signals that support your practice.</ThemedText>
 
@@ -291,7 +277,10 @@ export default function PractitionerHomeScreen() {
           ) : null}
 
           {latestReview ? (
-            <View style={[styles.insightTouch, styles.insightQuiet]}>
+            <Pressable
+              style={[styles.insightTouch, styles.insightQuiet]}
+              onPress={() => navigation.navigate("PractitionerReviews")}
+            >
               <InsightIcon name="star" />
               <View style={styles.insightBody}>
                 <ThemedText style={styles.insightTitle}>New appreciation</ThemedText>
@@ -299,7 +288,8 @@ export default function PractitionerHomeScreen() {
                   {latestReview.userName} left a {latestReview.rating}★ review — {latestReview.text}
                 </ThemedText>
               </View>
-            </View>
+              <Feather name="chevron-right" size={18} color={Colors.light.textMuted} />
+            </Pressable>
           ) : (
             <View style={[styles.insightTouch, styles.insightQuiet]}>
               <InsightIcon name="star" />
@@ -338,7 +328,7 @@ export default function PractitionerHomeScreen() {
           </View>
         </View>
 
-        <View style={[styles.softCard, CARD_SHADOW]}>
+        <View style={styles.softCard}>
           <View style={styles.cardTopRow}>
             <ThemedText style={styles.sectionTitleLg}>Recent sessions</ThemedText>
             <Pressable onPress={() => navigation.navigate("SessionsTab")} testID="button-all-sessions">
@@ -384,93 +374,53 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
   },
-  scrollView: { flex: 1 },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg + 8,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-    textAlign: "center",
-  },
-  heroBanner: {
-    borderRadius: 16,
-    backgroundColor: Colors.light.accent,
-    overflow: "hidden",
-    marginBottom: Spacing["2xl"],
-  },
-  heroOverlay: {
-    backgroundColor: "rgba(6, 46, 3, 0.7)",
-    padding: Spacing.xl,
-    alignItems: "center",
-  },
-  heroEyebrow: {
-    fontSize: 14,
-    color: "rgba(255, 255, 255, 0.88)",
-    textAlign: "center",
-    marginBottom: 10,
-  },
-  heroAmount: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginBottom: Spacing.md,
-  },
-  heroGrowthRow: {
-    flexDirection: "row",
+  headerIconBtn: {
+    padding: Layout.headerIconPadding,
     alignItems: "center",
     justifyContent: "center",
+  },
+  scrollView: { flex: 1 },
+  scrollContent: {
+    paddingHorizontal: Layout.gutter,
+    paddingTop: LayoutSpacing.sm,
+  },
+  stateBanner: {
+    alignItems: "center",
+    paddingVertical: LayoutSpacing.md,
     gap: 8,
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.sm,
   },
-  heroGrowthText: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  heroSubtitle: {
+  stateText: {
     fontSize: 14,
-    color: "rgba(255, 255, 255, 0.85)",
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: Spacing.md,
-  },
-  heroClosing: {
-    fontSize: 14,
-    fontFamily: "ui-serif",
-    fontStyle: "italic",
-    color: "rgba(255, 255, 255, 0.92)",
-    textAlign: "center",
-    lineHeight: 21,
-  },
-  sectionEyebrow: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.5,
     color: Colors.light.textMuted,
-    textTransform: "uppercase",
-    marginBottom: Spacing.md,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#8B3A3A",
+    textAlign: "center",
+  },
+  retryBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: Colors.light.accent,
+  },
+  retryText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#FFFFFF",
   },
   keyMetricsRow: {
     flexDirection: "row",
-    gap: Spacing.md,
-    marginBottom: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   keyMetricCard: {
     flex: 1,
     backgroundColor: Colors.light.cardBackground,
-    borderRadius: 14,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.sm,
+    borderRadius: CardTokens.radius,
+    paddingVertical: LayoutSpacing.sm,
+    paddingHorizontal: LayoutSpacing.xs,
     alignItems: "center",
     ...CARD_SHADOW,
   },
@@ -481,7 +431,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   keyMetricValue: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     color: Colors.light.text,
     textAlign: "center",
@@ -498,23 +448,24 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: Colors.light.textMuted,
     textAlign: "center",
-    marginBottom: Spacing["2xl"],
-    paddingHorizontal: Spacing.sm,
+    marginBottom: LayoutSpacing.md,
+    paddingHorizontal: LayoutSpacing.sm,
   },
   softCard: {
     backgroundColor: Colors.light.cardBackground,
-    borderRadius: CARD_RADIUS,
-    padding: Spacing.xl,
-    marginBottom: Spacing["2xl"],
+    borderRadius: CardTokens.radius,
+    padding: LayoutSpacing.md,
+    marginBottom: LayoutSpacing.md,
+    ...CARD_SHADOW,
   },
   cardTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   sectionTitleLg: {
-    fontSize: 20,
+    fontSize: 17,
     fontFamily: "ui-serif",
     fontWeight: "600",
     color: Colors.light.text,
@@ -531,15 +482,15 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   revenueSum: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: "700",
     color: Colors.light.accent,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   revenueCaption: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.light.textMuted,
-    marginBottom: Spacing.xl,
+    marginBottom: LayoutSpacing.md,
   },
   chartRow: {
     flexDirection: "row",
@@ -547,7 +498,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     height: 100,
     gap: 6,
-    paddingTop: Spacing.sm,
+    paddingTop: LayoutSpacing.sm,
   },
   chartCol: { flex: 1, alignItems: "center" },
   chartTrack: {
@@ -570,60 +521,23 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Colors.light.accent,
   },
-  quickGrid: {
-    gap: Spacing.md,
-    marginBottom: Spacing["2xl"],
-  },
-  quickRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  quickCard: {
-    flex: 1,
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: 14,
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.sm,
-    alignItems: "center",
-    gap: 10,
-    ...CARD_SHADOW,
-  },
-  quickCardPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
-  },
-  quickIconWrap: {
-    width: ICON_WRAP,
-    height: ICON_WRAP,
-    borderRadius: 16,
-    backgroundColor: `${Colors.light.accent}10`,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quickLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Colors.light.text,
-    textAlign: "center",
-    lineHeight: 15,
-  },
   notesLead: {
-    fontSize: 14,
+    fontSize: 13,
     fontStyle: "italic",
     fontFamily: "ui-serif",
     color: Colors.light.brown,
-    marginBottom: Spacing.lg,
-    lineHeight: 20,
+    marginBottom: LayoutSpacing.sm,
+    lineHeight: 18,
   },
   insightTouch: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: Spacing.md,
-    paddingVertical: Spacing.lg,
+    gap: LayoutSpacing.sm,
+    paddingVertical: LayoutSpacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: `${Colors.light.divider}30`,
   },
-  insightQuiet: { paddingVertical: Spacing.lg },
+  insightQuiet: { paddingVertical: LayoutSpacing.sm },
   insightLast: {
     borderBottomWidth: 0,
     paddingBottom: 0,
@@ -631,27 +545,27 @@ const styles = StyleSheet.create({
   iconCircle: {
     width: ICON_WRAP,
     height: ICON_WRAP,
-    borderRadius: 16,
+    borderRadius: 12,
     backgroundColor: `${Colors.light.accent}10`,
     justifyContent: "center",
     alignItems: "center",
   },
   insightBody: { flex: 1, gap: 4 },
   insightTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: Colors.light.text,
   },
   insightBodyText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: Colors.light.textMuted,
   },
   sessionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: Spacing.lg,
+    paddingVertical: LayoutSpacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: `${Colors.light.divider}28`,
   },
@@ -659,7 +573,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingBottom: 0,
   },
-  sessionLeft: { flex: 1, marginRight: Spacing.lg },
+  sessionLeft: { flex: 1, marginRight: LayoutSpacing.lg },
   sessionName: {
     fontSize: 15,
     fontWeight: "700",

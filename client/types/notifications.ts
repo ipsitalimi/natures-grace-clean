@@ -6,6 +6,7 @@ export type NotificationLinkRoute =
   | "Main"
   | "SellerOnboarding"
   | "SellerMain"
+  | "PractitionerOnboarding"
   | "PractitionerMain"
   | "ApplicationStatus";
 

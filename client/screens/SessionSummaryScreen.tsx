@@ -1,21 +1,21 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { View, StyleSheet, ScrollView, Pressable, Image, Alert, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
 import { useAuth } from "@/context/AuthContext";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import { resolveApiAccessToken } from "@/lib/apiAccessToken";
+import { getApiBaseUrl } from "@/lib/apiBase";
 import { runBookingCheckoutPayment } from "@/services/storeCheckoutService";
-import ProfileDrawer from "@/components/ProfileDrawer";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { useCancellationPolicy } from "@/lib/cancellationPolicy";
 
 type RootStackParamList = {
@@ -71,15 +71,13 @@ function calculatePrice(basePrice: number, duration: number): number {
 }
 
 export default function SessionSummaryScreen() {
-  const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const { scrollPaddingBottom } = useLayoutInsets(Spacing.xl);
   const navigation = useNavigation<NavigationProp>();
   const route = useRoute<SessionSummaryRouteProp>();
   const { practitionerId, selectedDate, selectedTime, duration, offeringId, serviceName, sessionPrice, sessionDateIso } =
     route.params;
   const { profile, session } = useAuth();
   const { refresh: refreshPractitionerData } = usePractitionerContext();
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const { freeHours } = useCancellationPolicy();
 
@@ -89,15 +87,7 @@ export default function SessionSummaryScreen() {
   if (!practitioner) {
     return (
       <View style={styles.container}>
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
+        <BackHeader />
         <ThemedText style={styles.errorText}>Practitioner not found</ThemedText>
       </View>
     );
@@ -115,7 +105,16 @@ export default function SessionSummaryScreen() {
         Alert.alert("Booking unavailable", "Connect Supabase to book sessions.");
         return;
       }
-      if (!session?.access_token) {
+      const accessToken = await resolveApiAccessToken(session?.access_token);
+      if (__DEV__) {
+        console.log("[bookingCheckout][client] confirm booking auth state", {
+          apiUrl: getApiBaseUrl(),
+          supabaseSessionPresent: Boolean(session),
+          contextAccessTokenPresent: Boolean(session?.access_token),
+          resolvedAccessTokenPresent: Boolean(accessToken),
+        });
+      }
+      if (!accessToken) {
         Alert.alert("Payment", "Please sign in to book a session.");
         return;
       }
@@ -124,7 +123,7 @@ export default function SessionSummaryScreen() {
         amountInr: sessionPrice,
         durationMinutes: duration,
         practitionerId,
-        accessToken: session.access_token,
+        accessToken,
         customerName: profile?.full_name ?? undefined,
         customerEmail: profile?.email ?? session?.user?.email ?? undefined,
         booking: {
@@ -157,20 +156,11 @@ export default function SessionSummaryScreen() {
 
   return (
     <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 100 }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.practitionerCard}>
@@ -194,7 +184,9 @@ export default function SessionSummaryScreen() {
           
           <View style={styles.summaryRow}>
             <ThemedText style={styles.summaryLabel}>Session Type</ThemedText>
-            <ThemedText style={styles.summaryValue}>One-on-One Session</ThemedText>
+            <ThemedText style={styles.summaryValue}>
+              {serviceName ?? "One-on-One Session"}
+            </ThemedText>
           </View>
           
           <View style={styles.summaryRow}>
@@ -231,20 +223,20 @@ export default function SessionSummaryScreen() {
             change the time, cancel (if eligible) and book again — in-app rescheduling is not available yet.
           </ThemedText>
         </View>
-      </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: getScrollBottomPadding(insets.bottom, 16) }]}>
         <Pressable
           style={[styles.confirmButton, confirming && styles.confirmButtonDisabled]}
           onPress={() => void handleConfirmBooking()}
           disabled={confirming}
           testID="confirm-booking-button"
         >
-          <ThemedText style={styles.confirmButtonText}>
-            {confirming ? "Processing…" : "Confirm Booking"}
-          </ThemedText>
+          {confirming ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <ThemedText style={styles.confirmButtonText}>Confirm Booking</ThemedText>
+          )}
         </Pressable>
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -253,32 +245,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   scrollView: {
     flex: 1,
@@ -396,22 +362,12 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     lineHeight: 20,
   },
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.light.backgroundRoot,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.light.divider,
-  },
   confirmButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.md,
     paddingVertical: 16,
     alignItems: "center",
+    marginTop: Spacing.xl,
   },
   confirmButtonDisabled: {
     opacity: 0.7,

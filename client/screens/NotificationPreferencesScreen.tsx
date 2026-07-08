@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Switch } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
+import { View, StyleSheet, Switch } from "react-native";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { updateProfilePreferences } from "@/services/profileService";
 import {
@@ -13,7 +12,6 @@ import {
   parseProfilePreferences,
   type ProfilePreferences,
 } from "@/types/profilePreferences";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 function PrefRow({
   label,
@@ -45,11 +43,10 @@ function PrefRow({
 }
 
 export default function NotificationPreferencesScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const { profile, refreshProfile } = useAuth();
   const [prefs, setPrefs] = useState<ProfilePreferences>(DEFAULT_PROFILE_PREFERENCES);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (profile?.preferences) {
@@ -59,9 +56,17 @@ export default function NotificationPreferencesScreen() {
 
   const save = async (next: ProfilePreferences) => {
     if (!profile) return;
+    const previous = prefs;
     setPrefs(next);
     setSaving(true);
-    await updateProfilePreferences(profile.id, next);
+    setSaveError(null);
+    const result = await updateProfilePreferences(profile.id, next);
+    if (result.error) {
+      setPrefs(previous);
+      setSaveError(result.error);
+      setSaving(false);
+      return;
+    }
     await refreshProfile();
     setSaving(false);
   };
@@ -69,98 +74,81 @@ export default function NotificationPreferencesScreen() {
   const master = prefs.notificationsEnabled;
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Notifications</ThemedText>
-        <View style={styles.headerIconButton} />
-      </View>
-
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
-      >
-        <PrefRow
-          label="All notifications"
-          description="Master switch for in-app alerts, email, and push (when enabled on device)"
-          value={master}
-          onChange={(v) => void save({ ...prefs, notificationsEnabled: v })}
-        />
-        <PrefRow
-          label="Booking reminders"
-          description="Session confirmations and reminders"
-          value={prefs.bookingReminders && master}
-          disabled={!master}
-          onChange={(v) => void save({ ...prefs, bookingReminders: v })}
-        />
-        <PrefRow
-          label="Order updates"
-          description="Shipping, delivery, and refunds"
-          value={prefs.orderUpdates && master}
-          disabled={!master}
-          onChange={(v) => void save({ ...prefs, orderUpdates: v })}
-        />
-        <PrefRow
-          label="Community activity"
-          description="Replies and mentions"
-          value={prefs.communityActivity && master}
-          disabled={!master}
-          onChange={(v) => void save({ ...prefs, communityActivity: v })}
-        />
-        <PrefRow
-          label="Promotions"
-          description="Offers from sellers and practitioners"
-          value={prefs.promotions && master}
-          disabled={!master}
-          onChange={(v) => void save({ ...prefs, promotions: v })}
-        />
-        <PrefRow
-          label="Platform announcements"
-          description="Application status and policy updates"
-          value={prefs.platformAnnouncements && master}
-          disabled={!master}
-          onChange={(v) => void save({ ...prefs, platformAnnouncements: v })}
-        />
-        {saving ? (
-          <ThemedText style={styles.saving}>Saving…</ThemedText>
-        ) : null}
-      </ScrollView>
-    </View>
+    <PageLayout
+      title="Notification Preferences"
+      titleInHeader
+      header="back"
+      contentContainerStyle={styles.content}
+    >
+      {saveError ? <ThemedText style={styles.saveError}>{saveError}</ThemedText> : null}
+      <PrefRow
+        label="All notifications"
+        description="Master switch for in-app alerts, email, and push (when enabled on device)"
+        value={master}
+        onChange={(v) => void save({ ...prefs, notificationsEnabled: v })}
+      />
+      <PrefRow
+        label="Booking reminders"
+        description="Session confirmations and reminders"
+        value={prefs.bookingReminders && master}
+        disabled={!master}
+        onChange={(v) => void save({ ...prefs, bookingReminders: v })}
+      />
+      <PrefRow
+        label="Order updates"
+        description="Shipping, delivery, and refunds"
+        value={prefs.orderUpdates && master}
+        disabled={!master}
+        onChange={(v) => void save({ ...prefs, orderUpdates: v })}
+      />
+      <PrefRow
+        label="Community activity"
+        description="Replies and mentions"
+        value={prefs.communityActivity && master}
+        disabled={!master}
+        onChange={(v) => void save({ ...prefs, communityActivity: v })}
+      />
+      <PrefRow
+        label="Promotions"
+        description="Offers from sellers and practitioners"
+        value={prefs.promotions && master}
+        disabled={!master}
+        onChange={(v) => void save({ ...prefs, promotions: v })}
+      />
+      <PrefRow
+        label="Platform announcements"
+        description="Application status and policy updates"
+        value={prefs.platformAnnouncements && master}
+        disabled={!master}
+        onChange={(v) => void save({ ...prefs, platformAnnouncements: v })}
+      />
+      {saving ? <ThemedText style={styles.saving}>Saving…</ThemedText> : null}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
+  content: {
+    paddingTop: LayoutSpacing.xs,
+    gap: 10,
   },
-  headerIconButton: { padding: 8, width: 40 },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: Colors.light.accent,
-  },
-  scroll: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, gap: 10 },
   row: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
+    padding: LayoutSpacing.lg,
     borderWidth: 1,
     borderColor: Colors.light.divider,
   },
-  rowText: { flex: 1, paddingRight: Spacing.md },
+  rowText: { flex: 1, paddingRight: LayoutSpacing.md },
   rowLabel: { fontSize: 15, fontWeight: "600", color: Colors.light.text },
   rowDesc: { fontSize: 12, color: Colors.light.textMuted, marginTop: 2 },
-  saving: { textAlign: "center", color: Colors.light.textMuted, marginTop: Spacing.md },
+  saving: { textAlign: "center", color: Colors.light.textMuted, marginTop: LayoutSpacing.md },
+  saveError: {
+    textAlign: "center",
+    color: "#8B3A3A",
+    fontSize: 13,
+    marginBottom: LayoutSpacing.sm,
+  },
 });

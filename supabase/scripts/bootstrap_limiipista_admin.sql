@@ -8,7 +8,7 @@ BEGIN;
 
 SET LOCAL row_security = off;
 
--- ---------------------------------------------------------------------------
+-- - --------------------------------------------------------------------------
 -- 1) Session + diagnostics (read output before bootstrap runs)
 -- ---------------------------------------------------------------------------
 SELECT current_user AS session_user, session_user AS session_role;

@@ -19,6 +19,7 @@ import { requestSellerPayout, syncSellerWallet } from "@/services/walletLedgerAp
 
 interface WalletContextType {
   walletLoading: boolean;
+  walletLoadError: string | null;
   isRemoteWallet: boolean;
   snapshot: SellerWalletSnapshot;
   refreshWallet: () => Promise<void>;
@@ -37,6 +38,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const { orders, ordersLoading } = useOrdersContext();
   const { settings } = usePlatformConfig();
   const [walletLoading, setWalletLoading] = useState(isSupabaseConfigured());
+  const [walletLoadError, setWalletLoadError] = useState<string | null>(null);
   const [isRemoteWallet, setIsRemoteWallet] = useState(false);
   const [snapshot, setSnapshot] = useState<SellerWalletSnapshot>(() => emptySellerWalletSnapshot());
 
@@ -49,6 +51,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
 
     setWalletLoading(true);
+    setWalletLoadError(null);
     try {
       if (session?.access_token) {
         await syncSellerWallet(session.access_token);
@@ -60,6 +63,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       console.error("[WalletContext] refresh failed:", err);
+      setWalletLoadError(
+        err instanceof Error ? err.message : "Could not load wallet. Pull to refresh or try again."
+      );
     } finally {
       setWalletLoading(false);
     }
@@ -122,13 +128,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<WalletContextType>(
     () => ({
       walletLoading,
+      walletLoadError,
       isRemoteWallet,
       snapshot,
       refreshWallet,
       syncWalletForOrders,
       requestPayout,
     }),
-    [walletLoading, isRemoteWallet, snapshot, refreshWallet, syncWalletForOrders, requestPayout]
+    [walletLoading, walletLoadError, isRemoteWallet, snapshot, refreshWallet, syncWalletForOrders, requestPayout]
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

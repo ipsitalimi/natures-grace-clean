@@ -1,15 +1,14 @@
 import React, { useCallback, useState } from "react";
-import { View, StyleSheet, ScrollView, Switch, Pressable, ActivityIndicator, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, StyleSheet, Switch, Pressable, ActivityIndicator, Alert } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import ProfileDrawer from "@/components/ProfileDrawer";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { updateProfilePreferences } from "@/services/profileService";
 import {
@@ -24,7 +23,7 @@ import {
   formatSupportCopyLabel,
   getSupportCopyKey,
 } from "@/services/content/helpSupportService";
-import { requestAccountDeletion } from "@/services/accountDeletionService";
+import { deleteMyAccount } from "@/services/accountDeletionService";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -72,10 +71,8 @@ function ToggleRow({ label, value, onValueChange, disabled }: ToggleRowProps) {
 }
 
 export default function SettingsScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const { session, profile, refreshProfile, signOut } = useAuth();
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     DEFAULT_PROFILE_PREFERENCES.notificationsEnabled
   );
@@ -144,35 +141,45 @@ export default function SettingsScreen() {
     void persistPreference({ notificationsEnabled: val });
   };
 
-  const handleRequestAccountDeletion = () => {
+  const handleDeleteAccount = () => {
     if (!session?.user) {
-      Alert.alert("Sign in required", "Please sign in to request account deletion.");
+      Alert.alert("Sign in required", "Please sign in to delete your account.");
       return;
     }
     Alert.alert(
-      "Request account deletion",
-      "Your account and personal data will be scheduled for deletion per our Account Deletion Policy. Pending orders or payouts may delay processing.",
+      "Delete account",
+      "This action is permanent. You will lose your profile, orders, bookings, and all account data.",
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Request deletion",
+          text: "Delete account",
           style: "destructive",
           onPress: () => {
-            void (async () => {
-              setDeletionSubmitting(true);
-              const result = await requestAccountDeletion(undefined, session.access_token);
-              setDeletionSubmitting(false);
-              if (result.error) {
-                Alert.alert("Could not submit request", result.error);
-                return;
-              }
-              await refreshProfile();
-              await signOut();
-              Alert.alert(
-                "Request received",
-                "We have recorded your account deletion request. You will receive confirmation by email once processing is complete."
-              );
-            })();
+            Alert.alert(
+              "Are you absolutely sure?",
+              "Deleting your account cannot be undone.",
+              [
+                { text: "Keep account", style: "cancel" },
+                {
+                  text: "Yes, delete",
+                  style: "destructive",
+                  onPress: () => {
+                    void (async () => {
+                      setDeletionSubmitting(true);
+                      const result = await deleteMyAccount(session.access_token);
+                      setDeletionSubmitting(false);
+                      if (result.error) {
+                        Alert.alert("Could not delete account", result.error);
+                        return;
+                      }
+                      await refreshProfile();
+                      await signOut();
+                      Alert.alert("Account deleted", "Your account has been permanently deleted.");
+                    })();
+                  },
+                },
+              ]
+            );
           },
         },
       ]
@@ -193,170 +200,113 @@ export default function SettingsScreen() {
   const aboutRowLabel = supportRowLabel(SETTINGS_ABOUT_ROW_KEY);
 
   return (
-    <View style={styles.container}>
-      <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
+    <PageLayout title="Settings" titleInHeader header="back">
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle}>Account</ThemedText>
+        <View style={styles.sectionCard}>
+          <SettingsRow label="Edit Profile" onPress={() => navigation.navigate("EditProfile")} />
+          <View style={styles.divider} />
+          <SettingsRow label="Change Password" onPress={() => navigation.navigate("ChangePassword")} />
+          <View style={styles.divider} />
+          <SettingsRow
+            label={deletionSubmitting ? "Deleting account…" : "Delete account"}
+            labelMuted={deletionSubmitting}
+            onPress={handleDeleteAccount}
+            testID="settings-row-account-deletion"
+          />
+        </View>
       </View>
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Settings</ThemedText>
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle}>Preferences</ThemedText>
+        {!session?.user && isSupabaseConfigured() ? (
+          <ThemedText style={styles.hintText}>Sign in to save notification preferences.</ThemedText>
+        ) : null}
+        {prefsError ? (
+          <ThemedText style={styles.errorText}>{prefsError}</ThemedText>
+        ) : null}
+        <View style={styles.sectionCard}>
+          <ToggleRow
+            label="Notifications"
+            value={notificationsEnabled}
+            onValueChange={handleNotificationsToggle}
+            disabled={prefsDisabled}
+          />
+          <SettingsRow
+            label="Notification preferences"
+            onPress={() => navigation.navigate("NotificationPreferences" as never)}
+            testID="settings-row-notification-prefs"
+          />
+          <SettingsRow
+            label="Application status"
+            onPress={() => navigation.navigate("ApplicationStatus" as never)}
+            testID="settings-row-application-status"
+          />
+        </View>
       </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Account</ThemedText>
-          <View style={styles.sectionCard}>
-            <SettingsRow label="Edit Profile" onPress={() => navigation.navigate("EditProfile")} />
-            <View style={styles.divider} />
-            <SettingsRow label="Change Password" onPress={() => navigation.navigate("ChangePassword")} />
-            <View style={styles.divider} />
-            <SettingsRow
-              label={deletionSubmitting ? "Submitting deletion request…" : "Request account deletion"}
-              labelMuted={deletionSubmitting}
-              onPress={handleRequestAccountDeletion}
-              testID="settings-row-account-deletion"
-            />
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle}>Support</ThemedText>
+        {!isSupabaseConfigured() ? (
+          <ThemedText style={styles.hintText}>Connect Supabase for editable About row copy.</ThemedText>
+        ) : null}
+        {copyLoading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={Colors.light.accent} size="small" />
+            <ThemedText style={styles.hintText}>Loading support copy…</ThemedText>
           </View>
+        ) : null}
+        {copyError ? (
+          <Pressable onPress={() => void loadSettingsCopy()} testID="button-settings-copy-retry">
+            <ThemedText style={styles.errorText}>{copyError} — tap to retry</ThemedText>
+          </Pressable>
+        ) : null}
+        <View style={styles.sectionCard}>
+          <SettingsRow
+            label={helpRowLabel}
+            labelMuted={hasLoadedCopy && !getSupportCopyKey(copyMap, SUPPORT_HUB_HELP_TITLE_KEY)}
+            onPress={() => navigation.navigate("Help")}
+            testID="settings-row-help"
+          />
+          <View style={styles.divider} />
+          <SettingsRow
+            label={contactRowLabel}
+            labelMuted={hasLoadedCopy && !getSupportCopyKey(copyMap, SUPPORT_HUB_CONTACT_TITLE_KEY)}
+            onPress={() => navigation.navigate("Contact")}
+            testID="settings-row-contact"
+          />
+          <View style={styles.divider} />
+          <SettingsRow
+            label={aboutRowLabel}
+            labelMuted={hasLoadedCopy && !getSupportCopyKey(copyMap, SETTINGS_ABOUT_ROW_KEY)}
+            onPress={() => navigation.navigate("About")}
+            testID="settings-row-about"
+          />
         </View>
+      </View>
 
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Preferences</ThemedText>
-          {!session?.user && isSupabaseConfigured() ? (
-            <ThemedText style={styles.hintText}>Sign in to save notification preferences.</ThemedText>
-          ) : null}
-          {prefsError ? (
-            <ThemedText style={styles.errorText}>{prefsError}</ThemedText>
-          ) : null}
-          <View style={styles.sectionCard}>
-            <ToggleRow
-              label="Notifications"
-              value={notificationsEnabled}
-              onValueChange={handleNotificationsToggle}
-              disabled={prefsDisabled}
-            />
-            <SettingsRow
-              label="Notification preferences"
-              onPress={() => navigation.navigate("NotificationPreferences" as never)}
-              testID="settings-row-notification-prefs"
-            />
-            <SettingsRow
-              label="Application status"
-              onPress={() => navigation.navigate("ApplicationStatus" as never)}
-              testID="settings-row-application-status"
-            />
-          </View>
+      <View style={styles.section}>
+        <ThemedText style={styles.sectionTitle}>Legal & Policies</ThemedText>
+        <View style={styles.sectionCard}>
+          <SettingsRow
+            label="View accepted policies"
+            onPress={() => navigation.navigate("UserLegalPolicies")}
+            testID="settings-row-legal-policies"
+          />
+          <SettingsRow
+            label="Trust & Safety"
+            onPress={() => navigation.navigate("TrustSafety" as never)}
+            testID="settings-row-trust-safety"
+          />
         </View>
-
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Support</ThemedText>
-          {!isSupabaseConfigured() ? (
-            <ThemedText style={styles.hintText}>Connect Supabase for editable About row copy.</ThemedText>
-          ) : null}
-          {copyLoading ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={Colors.light.accent} size="small" />
-              <ThemedText style={styles.hintText}>Loading support copy…</ThemedText>
-            </View>
-          ) : null}
-          {copyError ? (
-            <Pressable onPress={() => void loadSettingsCopy()} testID="button-settings-copy-retry">
-              <ThemedText style={styles.errorText}>{copyError} — tap to retry</ThemedText>
-            </Pressable>
-          ) : null}
-          <View style={styles.sectionCard}>
-            <SettingsRow
-              label={helpRowLabel}
-              labelMuted={hasLoadedCopy && !getSupportCopyKey(copyMap, SUPPORT_HUB_HELP_TITLE_KEY)}
-              onPress={() => navigation.navigate("Help")}
-              testID="settings-row-help"
-            />
-            <View style={styles.divider} />
-            <SettingsRow
-              label={contactRowLabel}
-              labelMuted={hasLoadedCopy && !getSupportCopyKey(copyMap, SUPPORT_HUB_CONTACT_TITLE_KEY)}
-              onPress={() => navigation.navigate("Contact")}
-              testID="settings-row-contact"
-            />
-            <View style={styles.divider} />
-            <SettingsRow
-              label={aboutRowLabel}
-              labelMuted={hasLoadedCopy && !getSupportCopyKey(copyMap, SETTINGS_ABOUT_ROW_KEY)}
-              onPress={() => navigation.navigate("About")}
-              testID="settings-row-about"
-            />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <ThemedText style={styles.sectionTitle}>Legal & Policies</ThemedText>
-          <View style={styles.sectionCard}>
-            <SettingsRow
-              label="View accepted policies"
-              onPress={() => navigation.navigate("UserLegalPolicies")}
-              testID="settings-row-legal-policies"
-            />
-            <SettingsRow
-              label="Trust & Safety"
-              onPress={() => navigation.navigate("TrustSafety" as never)}
-              testID="settings-row-trust-safety"
-            />
-          </View>
-        </View>
-      </ScrollView>
-    </View>
+      </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
   section: {
-    marginBottom: Spacing.xl,
+    marginBottom: LayoutSpacing.xl,
   },
   sectionTitle: {
     fontSize: 14,
@@ -364,8 +314,8 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: Spacing.sm,
-    marginLeft: 4,
+    marginBottom: LayoutSpacing.sm,
+    marginLeft: LayoutSpacing.xs,
   },
   sectionCard: {
     backgroundColor: Colors.light.cardBackground,
@@ -377,7 +327,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingVertical: 14,
-    paddingHorizontal: Spacing.lg,
+    paddingHorizontal: LayoutSpacing.md,
   },
   rowLabel: {
     fontSize: 15,
@@ -390,25 +340,25 @@ const styles = StyleSheet.create({
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-    marginLeft: 4,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.sm,
+    marginLeft: LayoutSpacing.xs,
   },
   hintText: {
     fontSize: 13,
     color: Colors.light.textSecondary,
-    marginBottom: Spacing.sm,
-    marginLeft: 4,
+    marginBottom: LayoutSpacing.sm,
+    marginLeft: LayoutSpacing.xs,
   },
   errorText: {
     fontSize: 13,
     color: "#8B3A3A",
-    marginBottom: Spacing.sm,
-    marginLeft: 4,
+    marginBottom: LayoutSpacing.sm,
+    marginLeft: LayoutSpacing.xs,
   },
   divider: {
     height: 1,
     backgroundColor: Colors.light.brownLight,
-    marginHorizontal: Spacing.lg,
+    marginHorizontal: LayoutSpacing.md,
   },
 });

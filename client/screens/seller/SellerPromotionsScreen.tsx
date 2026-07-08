@@ -8,14 +8,13 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { ScreenHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import type { SellerPromo } from "@/data/sellerMockData";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { formatInr, formatInrOff } from "@/lib/formatCurrency";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { useAuth } from "@/context/AuthContext";
@@ -574,8 +573,7 @@ function CreatePromoForm({
 }
 
 export default function SellerPromotionsScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const { scrollPaddingBottom } = useLayoutInsets(24);
   const { session } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [showFlashSetup, setShowFlashSetup] = useState(false);
@@ -653,24 +651,25 @@ export default function SellerPromotionsScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Promotions</ThemedText>
-        <Pressable
-          style={styles.addBtn}
-          onPress={() => setShowCreate(true)}
-          testID="button-create-promo"
-        >
-          <Feather name="plus" size={20} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+    <View style={styles.container}>
+      <ScreenHeader
+        variant="action"
+        title="Promotions"
+        showNotifications={false}
+        rightAction={
+          <Pressable
+            style={styles.addBtn}
+            onPress={() => setShowCreate(true)}
+            testID="button-create-promo"
+          >
+            <Feather name="plus" size={20} color={Colors.light.accent} />
+          </Pressable>
+        }
+      />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
       >
         {!isSupabaseConfigured() ? (
           <ThemedText style={styles.hintText}>Connect Supabase to manage promo codes.</ThemedText>
@@ -863,26 +862,6 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.light.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.text,
-  },
   addBtn: {
     width: 38,
     height: 38,

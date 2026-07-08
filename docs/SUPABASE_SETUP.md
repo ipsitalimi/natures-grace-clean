@@ -328,6 +328,37 @@ Sellers upload product images from **Add Product**; applicants upload documents 
 
 **Account deletion API:** `POST /api/account/request-deletion` (bearer auth). Admins finalize with `POST /api/admin/users/:id/complete-deletion`.
 
+### Practitioner self-provision (`052_ensure_practitioner_profile.sql`, `053_ensure_practitioner_profile_role_sync.sql`)
+
+Run after `051`. Adds:
+
+- `ensure_practitioner_profile()` — SECURITY DEFINER RPC that creates a `practitioners` row + `practitioner_wallets` row for the signed-in user when no row exists yet.
+- **052** — initial RPC for users with `profiles.role = 'Practitioner'`.
+- **053** — replaces the RPC to also sync `profiles.role` from an approved Practitioner `role_applications` row and seed the practitioner profile from application `form_data` (fixes `not_practitioner` when approval succeeded but the profile role was never updated).
+
+The practitioner app calls this via `supabase.rpc('ensure_practitioner_profile')` when a Practitioner-role user (or approved applicant) has no linked practitioner row. **Without 052, practitioner profile/offering screens fail** with “Could not find the function … in the schema cache”. **Without 053, approved applicants whose `profiles.role` was not updated fail** with `not_practitioner`.
+
+```bash
+supabase db push
+# or run supabase/migrations/052_ensure_practitioner_profile.sql and
+#    supabase/migrations/053_ensure_practitioner_profile_role_sync.sql in the SQL Editor
+```
+
+### Practitioner specialties (`054_practitioner_specialties.sql`)
+
+Run after `053`. Adds:
+
+- `practitioners.specialties` JSONB — approved `{ category, subcategory }` pairs
+- `apply_practitioner_application()` — merges specialties when admin approves (multi-subcategory per application; separate applications for extra categories)
+- Replaces approval + ensure RPCs to use specialty merge
+
+Required for Wellness subcategory practitioner lists and session offering service types.
+
+```bash
+supabase db push
+# or run supabase/migrations/054_practitioner_specialties.sql in the SQL Editor
+```
+
 ### Still mock (Phase 3+)
 
 - Product engagement metrics on Analytics (views/saves/cart adds from product metadata, not order-derived)

@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { View, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { BackHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { useDataContext } from "@/context/DataContext";
 import type { SellerProduct } from "@/data/sellerMockData";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 function getCategoryColor(category: string): { bg: string; text: string } {
   switch (category) {
@@ -31,7 +31,7 @@ function getCategoryColor(category: string): { bg: string; text: string } {
 }
 
 export default function ProductListingsScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(30);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { sellerCatalog, deleteProduct } = useDataContext();
@@ -45,24 +45,28 @@ export default function ProductListingsScreen() {
     }
   }, [isFocused]);
 
-  const handleDelete = (id: string) => {
-    deleteProduct(id);
-    setDeleteConfirm(id);
-    setTimeout(() => setDeleteConfirm(null), 2000);
+  const handleDelete = (id: string, productName: string) => {
+    Alert.alert("Remove product", `Remove "${productName}" from your store?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          deleteProduct(id);
+          setDeleteConfirm(id);
+          setTimeout(() => setDeleteConfirm(null), 2000);
+        },
+      },
+    ]);
   };
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.headerRow}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={20} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Product Listings</ThemedText>
-      </View>
+    <View style={styles.container}>
+      <BackHeader title="Product Listings" showNotifications={false} />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <Pressable
@@ -77,7 +81,7 @@ export default function ProductListingsScreen() {
         </Pressable>
 
         <ThemedText style={styles.sectionSubtitle}>
-          Define what users will see in the NG Store.
+          Define what users will see in the NG Store. Listings marked Pending are hidden until an admin approves them.
         </ThemedText>
 
         {listings.length === 0 ? (
@@ -92,6 +96,8 @@ export default function ProductListingsScreen() {
 
         {listings.map((listing) => {
           const cc = getCategoryColor(listing.category);
+          const isPendingApproval = listing.approvalStatus === "Pending";
+          const isRejected = listing.approvalStatus === "Rejected";
           return (
             <View key={listing.id} style={styles.listingCard} testID={`listing-card-${listing.id}`}>
               <View style={styles.cardTopRow}>
@@ -103,10 +109,22 @@ export default function ProductListingsScreen() {
                   </View>
                   <View style={styles.cardInfo}>
                     <ThemedText style={styles.listingName} numberOfLines={1}>{listing.name}</ThemedText>
-                    <View style={[styles.categoryBadge, { backgroundColor: cc.bg }]}>
-                      <ThemedText style={[styles.categoryText, { color: cc.text }]}>
-                        {listing.category}
-                      </ThemedText>
+                    <View style={styles.badgeRow}>
+                      <View style={[styles.categoryBadge, { backgroundColor: cc.bg }]}>
+                        <ThemedText style={[styles.categoryText, { color: cc.text }]}>
+                          {listing.category}
+                        </ThemedText>
+                      </View>
+                      {isPendingApproval ? (
+                        <View style={styles.pendingBadge}>
+                          <ThemedText style={styles.pendingBadgeText}>Pending approval</ThemedText>
+                        </View>
+                      ) : null}
+                      {isRejected ? (
+                        <View style={styles.rejectedBadge}>
+                          <ThemedText style={styles.rejectedBadgeText}>Rejected</ThemedText>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -122,7 +140,7 @@ export default function ProductListingsScreen() {
                   </Pressable>
                   <Pressable
                     style={styles.deleteIconBtn}
-                    onPress={() => handleDelete(listing.id)}
+                    onPress={() => handleDelete(listing.id, listing.name)}
                     testID={`button-delete-${listing.id}`}
                   >
                     <Feather name="trash-2" size={15} color="#8B3A3A" />
@@ -169,27 +187,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    gap: Spacing.md,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.light.cardBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.accent,
   },
   scrollView: {
     flex: 1,
@@ -285,6 +282,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
+  },
+  badgeRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: 6,
+  },
+  pendingBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(232,166,13,0.15)",
+  },
+  pendingBadgeText: {
+    fontSize: 11,
+    fontFamily: "Nunito_700Bold",
+    color: "#B8860B",
+  },
+  rejectedBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: "rgba(184,60,60,0.12)",
+  },
+  rejectedBadgeText: {
+    fontSize: 11,
+    fontFamily: "Nunito_700Bold",
+    color: "#8B3A3A",
   },
   categoryText: {
     fontSize: 11,

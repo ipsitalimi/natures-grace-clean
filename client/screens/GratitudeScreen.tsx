@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useGratitude, GratitudeEntry } from "@/context/GratitudeContext";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 
 type RootStackParamList = {
   AddGratitude: undefined;
@@ -127,7 +127,7 @@ function CommunityGratitudeItem({ entry, onAddToMine, isOwn, resetKey }: Communi
 
 export default function GratitudeScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(tabBarHeight);
   const navigation = useNavigation<NavigationProp>();
   const {
     myGratitudes,
@@ -143,19 +143,9 @@ export default function GratitudeScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+      <BackHeader />
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Gratitude Log</ThemedText>
-      </View>
+      <BelowHeaderTitle>Gratitude Log</BelowHeaderTitle>
 
       <View style={styles.tabRow}>
         <Pressable
@@ -164,7 +154,12 @@ export default function GratitudeScreen() {
           testID="tab-mine"
         >
           <Feather name="heart" size={14} color={activeTab === "mine" ? "#FFFFFF" : Colors.light.accent} />
-          <ThemedText style={[styles.tabText, activeTab === "mine" && styles.tabTextActive]}>
+          <ThemedText
+            style={[styles.tabText, activeTab === "mine" && styles.tabTextActive]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             My Gratitudes
           </ThemedText>
         </Pressable>
@@ -174,7 +169,12 @@ export default function GratitudeScreen() {
           testID="tab-community"
         >
           <Feather name="users" size={14} color={activeTab === "community" ? "#FFFFFF" : Colors.light.accent} />
-          <ThemedText style={[styles.tabText, activeTab === "community" && styles.tabTextActive]}>
+          <ThemedText
+            style={[styles.tabText, activeTab === "community" && styles.tabTextActive]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.85}
+          >
             Community
           </ThemedText>
         </Pressable>
@@ -183,7 +183,7 @@ export default function GratitudeScreen() {
       {activeTab === "mine" ? (
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.introCard}>
@@ -238,7 +238,7 @@ export default function GratitudeScreen() {
       ) : (
         <ScrollView
           style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarHeight + 20 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.communityIntro}>
@@ -282,32 +282,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
   },
   tabRow: {
     flexDirection: "row",

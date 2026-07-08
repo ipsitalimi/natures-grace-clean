@@ -12,13 +12,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import ScreenHeader from "@/components/layout/ScreenHeader";
 import { BorderRadius } from "@/constants/theme";
 import { LegalTheme } from "@/constants/legalTheme";
 import { getLegalDocument } from "@/constants/legalDocuments";
 import LegalFormattedBody from "@/components/legal/LegalFormattedBody";
 import LegalPageHero from "@/components/legal/LegalPageHero";
 import type { LegalDocumentKey } from "@/types/legal";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { getScrollBottomPadding } from "@/lib/layoutInsets";
 
 interface LegalDocumentReaderProps {
   docKey: LegalDocumentKey;
@@ -80,17 +81,7 @@ export default function LegalDocumentReader({
   return (
     <View style={[styles.container, containerStyle]} accessibilityLabel={`${doc.title} document`}>
       {!embedded && showBack && onBack ? (
-        <View style={[styles.navRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable
-            style={styles.backButton}
-            onPress={onBack}
-            testID="button-legal-back"
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Feather name="arrow-left" size={20} color={LegalTheme.accentGreen} />
-          </Pressable>
-        </View>
+        <ScreenHeader variant="back" title={doc.title} onBackPress={onBack} />
       ) : null}
 
       <ScrollView
@@ -189,18 +180,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: LegalTheme.background,
-  },
-  navRow: {
-    paddingHorizontal: LegalTheme.contentPaddingMobile,
-    paddingBottom: 4,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(1, 50, 32, 0.05)",
   },
   scrollView: {
     flex: 1,

@@ -1,15 +1,15 @@
 import React from "react";
-import { View, StyleSheet, ScrollView, Pressable } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, Pressable } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import type { LegalDocumentKey } from "@/types/legal";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 const LINKS: { key: LegalDocumentKey; label: string }[] = [
   { key: "user_terms", label: "Terms & Conditions" },
@@ -25,72 +25,49 @@ const LINKS: { key: LegalDocumentKey; label: string }[] = [
 ];
 
 export default function TrustSafetyScreen() {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
+    <PageLayout
+      title="Trust & Safety"
+      titleInHeader
+      header="back"
+      contentContainerStyle={styles.content}
+    >
+      <ThemedText style={styles.intro}>
+        Your safety matters. Review our policies, report concerns, and understand how Nature's Grace
+        operates as a wellness marketplace.
+      </ThemedText>
+
+      {LINKS.map((link) => (
+        <Pressable
+          key={link.key}
+          style={styles.row}
+          onPress={() => navigation.navigate("LegalDocument", { docKey: link.key })}
+        >
+          <ThemedText style={styles.rowLabel}>{link.label}</ThemedText>
+          <Feather name="chevron-right" size={18} color={Colors.light.textMuted} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>Trust & Safety</ThemedText>
-        <View style={styles.headerIconButton} />
-      </View>
+      ))}
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
-      >
-        <ThemedText style={styles.intro}>
-          Your safety matters. Review our policies, report concerns, and understand how Nature's Grace
-          operates as a wellness marketplace.
-        </ThemedText>
-
-        {LINKS.map((link) => (
-          <Pressable
-            key={link.key}
-            style={styles.row}
-            onPress={() => navigation.navigate("LegalDocument", { docKey: link.key })}
-          >
-            <ThemedText style={styles.rowLabel}>{link.label}</ThemedText>
-            <Feather name="chevron-right" size={18} color={Colors.light.textMuted} />
-          </Pressable>
-        ))}
-
-        <Pressable style={styles.supportRow} onPress={() => navigation.navigate("Support")}>
-          <Feather name="life-buoy" size={18} color={Colors.light.accent} />
-          <ThemedText style={styles.supportText}>Get help or file a grievance</ThemedText>
-        </Pressable>
-      </ScrollView>
-    </View>
+      <Pressable style={styles.supportRow} onPress={() => navigation.navigate("Support")}>
+        <Feather name="life-buoy" size={18} color={Colors.light.accent} />
+        <ThemedText style={styles.supportText}>Get help or file a grievance</ThemedText>
+      </Pressable>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
+  content: {
+    paddingTop: LayoutSpacing.xs,
+    gap: 10,
   },
-  headerIconButton: { padding: 8, width: 40 },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: Colors.light.accent,
-  },
-  scroll: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
   intro: {
     fontSize: 14,
     color: Colors.light.textSecondary,
-    lineHeight: 20,
-    marginBottom: Spacing.lg,
+    lineHeight: 21,
+    marginBottom: LayoutSpacing.sm,
   },
   row: {
     flexDirection: "row",
@@ -98,20 +75,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
-    marginBottom: 8,
+    padding: LayoutSpacing.lg,
     borderWidth: 1,
     borderColor: Colors.light.divider,
   },
-  rowLabel: { fontSize: 15, fontWeight: "500", color: Colors.light.text },
+  rowLabel: { fontSize: 15, color: Colors.light.text, flex: 1, paddingRight: LayoutSpacing.sm },
   supportRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginTop: Spacing.xl,
-    padding: Spacing.lg,
-    backgroundColor: "rgba(1, 50, 32, 0.06)",
-    borderRadius: BorderRadius.sm,
+    gap: LayoutSpacing.sm,
+    marginTop: LayoutSpacing.md,
+    padding: LayoutSpacing.md,
   },
   supportText: { fontSize: 14, fontWeight: "600", color: Colors.light.accent },
 });

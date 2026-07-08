@@ -48,6 +48,26 @@ function formatDate(iso: string): string {
   });
 }
 
+async function fetchWalletByPractitionerId(
+  practitionerId: string
+): Promise<DbPractitionerWalletRow | null> {
+  const supabase = getSupabase();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("practitioner_wallets")
+    .select("*")
+    .eq("practitioner_id", practitionerId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[practitionerEarnings] fetch wallet:", error.message);
+    return null;
+  }
+
+  return (data as DbPractitionerWalletRow | null) ?? null;
+}
+
 export async function getOrCreateWallet(
   commissionRate = 10,
   profileId?: string | null
@@ -56,32 +76,28 @@ export async function getOrCreateWallet(
   if (!supabase) return null;
 
   const practitionerId = await resolvePractitionerId(profileId);
-
-  if (practitionerId) {
-    const { data: existing } = await supabase
-      .from("practitioner_wallets")
-      .select("*")
-      .eq("practitioner_id", practitionerId)
-      .maybeSingle();
-    if (existing) return existing as DbPractitionerWalletRow;
-  }
-
-  const { data, error } = await supabase
-    .from("practitioner_wallets")
-    .insert({
-      practitioner_id: practitionerId,
-      commission_rate: commissionRate,
-      bank_account_label: null,
-      next_payout_date: null,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error("[practitionerEarnings] create wallet:", error.message);
+  if (!practitionerId) {
+    console.warn("[practitionerEarnings] wallet skipped: no active practitioner row");
     return null;
   }
-  return data as DbPractitionerWalletRow;
+
+  const existing = await fetchWalletByPractitionerId(practitionerId);
+  if (existing) return existing;
+
+  const { data, error } = await supabase.rpc("ensure_practitioner_wallet", {
+    p_commission_rate: commissionRate,
+  });
+
+  if (!error && data) {
+    return data as DbPractitionerWalletRow;
+  }
+
+  if (error) {
+    console.warn("[practitionerEarnings] ensure wallet:", error.message);
+  }
+
+  // Race or migration not applied yet — retry read-only path.
+  return fetchWalletByPractitionerId(practitionerId);
 }
 
 export async function fetchWalletSnapshot(
@@ -102,7 +118,7 @@ export async function fetchWalletSnapshot(
     .limit(50);
 
   if (txnErr) {
-    console.error("[practitionerEarnings] txns:", txnErr.message);
+    console.warn("[practitionerEarnings] txns:", txnErr.message);
     return null;
   }
 
@@ -114,13 +130,13 @@ export async function fetchWalletSnapshot(
     .limit(20);
 
   if (payoutErr) {
-    console.error("[practitionerEarnings] payouts:", payoutErr.message);
+    console.warn("[practitionerEarnings] payouts:", payoutErr.message);
     return null;
   }
 
   const payoutRows = (payouts ?? []) as DbPayoutRow[];
   const activePayoutCount = payoutRows.filter(
-    (p) => p.status === "Pending" || p.status === "Processing"
+    (p) => p.status === "Pending" || p.status === "Processing" || p.status === "Under Review"
   ).length;
 
   const transactions: PractitionerWalletTransaction[] = (

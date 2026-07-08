@@ -1,30 +1,27 @@
-import React, { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Linking } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React from "react";
+import { View, StyleSheet, Pressable, Linking, ActivityIndicator } from "react-native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import AppHeader from "@/components/AppHeader";
-import ProfileDrawer from "@/components/ProfileDrawer";
-import SellerDrawer from "@/components/SellerDrawer";
-import PractitionerDrawer from "@/components/PractitionerDrawer";
+import { Colors, BorderRadius } from "@/constants/theme";
+import { LayoutSpacing } from "@/constants/layout";
+import { PageLayout } from "@/components/layout";
+import { useDrawer } from "@/context/DrawerContext";
 import { useIsSellerTabContext } from "@/hooks/useIsSellerTabContext";
 import { useIsPractitionerTabContext } from "@/hooks/useIsPractitionerTabContext";
 import { ResourceItem } from "@/data/mockResources";
 import { useDataContext } from "@/context/DataContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useResourceEnrollments } from "@/context/ResourceEnrollmentsContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
 
 type RootStackParamList = {
   ResourceDetail: { resourceId: string };
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
-
-const YOUTUBE_CHANNEL = "https://youtube.com/@drneelamparwani?si=27GqPeIr6pvvMEoc";
 
 function CourseCard({
   resource,
@@ -113,72 +110,65 @@ function SkeletonCard() {
 }
 
 export default function ResourcesScreen() {
-  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<NavigationProp>();
-  const [drawerVisible, setDrawerVisible] = useState(false);
+  const { openDrawerForRole } = useDrawer();
   const isSellerTab = useIsSellerTabContext();
   const isPractitionerTab = useIsPractitionerTabContext();
   const isRoleTab = isSellerTab || isPractitionerTab;
-  const [loading, setLoading] = useState(true);
-  const { resources } = useDataContext();
+  const titleInHeader = !isRoleTab || isSellerTab;
+  const { resources, dataLoading, dataError, refreshContent } = useDataContext();
+  const { settings } = usePlatformConfig();
   const { isEnrolledForResource, enrollmentsLoading, enrollmentsError } = useResourceEnrollments();
   const publishedResources = resources.filter((r) => r.published !== false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 400);
-    return () => clearTimeout(timer);
-  }, []);
-
   const courses = publishedResources.filter((r) => r.section === "Courses");
   const videos = publishedResources.filter((r) => r.section === "Video Resources");
+  const youtubeChannelUrl = settings.youtubeChannelUrl?.trim() ?? "";
 
   const openResource = (resourceId: string) => {
     navigation.navigate("ResourceDetail", { resourceId });
   };
 
   const openYouTubeChannel = () => {
-    Linking.openURL(YOUTUBE_CHANNEL);
+    if (youtubeChannelUrl) {
+      void Linking.openURL(youtubeChannelUrl);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      {isSellerTab ? (
-        <SellerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      ) : isPractitionerTab ? (
-        <PractitionerDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      ) : (
-        <ProfileDrawer visible={drawerVisible} onClose={() => setDrawerVisible(false)} />
-      )}
-      {isRoleTab ? (
-        <AppHeader showLogo={false} onProfilePress={() => setDrawerVisible(true)} />
-      ) : (
-        <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-            <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-          </Pressable>
-          <View style={styles.headerCenter} />
-          <Pressable style={styles.headerIconButton} onPress={() => navigation.navigate("Notifications" as never)} testID="button-notifications">
-            <Feather name="bell" size={22} color={Colors.light.accent} />
-          </Pressable>
-        </View>
-      )}
-
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Courses & Resources</ThemedText>
-      </View>
-
-      {loading ? (
+    <PageLayout
+      title="Courses & Resources"
+      titleInHeader={titleInHeader}
+      header={isRoleTab ? "compact" : "back"}
+      headerProps={
+        isRoleTab
+          ? {
+              onProfilePress: () =>
+                openDrawerForRole({ isSeller: isSellerTab, isPractitioner: isPractitionerTab }),
+            }
+          : undefined
+      }
+      footerInset={isSellerTab ? tabBarHeight : 0}
+      scrollable={!dataLoading}
+    >
+      {dataLoading ? (
         <View style={styles.loadingContainer}>
-          <ThemedText style={styles.sectionTitle}>Courses</ThemedText>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.sectionTitle}>Loading resources…</ThemedText>
           <SkeletonCard />
           <SkeletonCard />
         </View>
+      ) : dataError ? (
+        <View style={styles.emptyState}>
+          <Feather name="alert-circle" size={28} color={Colors.light.textMuted} />
+          <ThemedText style={styles.emptyStateText}>{dataError}</ThemedText>
+          <Pressable style={styles.retryButton} onPress={() => void refreshContent()}>
+            <ThemedText style={styles.retryButtonText}>Try again</ThemedText>
+          </Pressable>
+        </View>
       ) : (
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
-          showsVerticalScrollIndicator={false}
-        >
+        <>
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Feather name="book-open" size={18} color={Colors.light.accent} />
@@ -200,6 +190,9 @@ export default function ResourcesScreen() {
                 onPress={() => openResource(resource.id)}
               />
             ))}
+            {courses.length === 0 ? (
+              <ThemedText style={styles.emptySectionText}>No courses published yet.</ThemedText>
+            ) : null}
             {enrollmentsLoading && courses.length > 0 ? (
               <ThemedText style={styles.enrollmentsLoadingText}>Checking enrollments…</ThemedText>
             ) : null}
@@ -222,8 +215,12 @@ export default function ResourcesScreen() {
             {videos.map((resource) => (
               <VideoCard key={resource.id} resource={resource} />
             ))}
+            {videos.length === 0 ? (
+              <ThemedText style={styles.emptySectionText}>No video resources yet.</ThemedText>
+            ) : null}
           </View>
 
+          {youtubeChannelUrl ? (
           <Pressable style={styles.channelCard} onPress={openYouTubeChannel} testID="button-youtube-channel">
             <View style={styles.channelLeft}>
               <View style={styles.channelIconWrap}>
@@ -236,55 +233,19 @@ export default function ResourcesScreen() {
             </View>
             <Feather name="external-link" size={18} color="#FFFFFF" />
           </Pressable>
-        </ScrollView>
+          ) : null}
+        </>
       )}
-    </View>
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 28,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-  },
   loadingContainer: {
-    flex: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
+    paddingTop: LayoutSpacing.sm,
   },
   section: {
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -301,7 +262,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
-    marginBottom: Spacing.md,
+    marginBottom: LayoutSpacing.md,
   },
   courseCard: {
     backgroundColor: Colors.light.cardBackground,
@@ -372,14 +333,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Nunito_400Regular",
     color: "#B33A3A",
-    marginBottom: Spacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   dividerLine: {
     flex: 1,
@@ -434,7 +395,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: Spacing.sm,
+    marginTop: LayoutSpacing.sm,
   },
   channelLeft: {
     flexDirection: "row",
@@ -467,10 +428,34 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.backgroundSecondary,
   },
   emptyState: {
-    flex: 1,
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
     gap: 12,
+    paddingVertical: LayoutSpacing.xl * 2,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    paddingHorizontal: LayoutSpacing.lg,
+  },
+  emptySectionText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    marginTop: LayoutSpacing.sm,
+  },
+  retryButton: {
+    paddingHorizontal: LayoutSpacing.lg,
+    paddingVertical: LayoutSpacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.light.accent,
+  },
+  retryButtonText: {
+    fontSize: 14,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
   },
   emptyText: {
     fontSize: 16,

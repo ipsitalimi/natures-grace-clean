@@ -9,6 +9,13 @@ import type { JournalEntry } from "@/data/journal";
 import { toISODateString } from "@/data/journal";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import {
+  formatMoodsForStorage,
+  loadCustomMoods,
+  MAX_CUSTOM_MOODS,
+  MAX_SELECTED_MOODS,
+  saveCustomMoods,
+} from "@/lib/journalMoods";
 import * as journalService from "@/services/wellness/journalService";
 
 export type { JournalEntry } from "@/data/journal";
@@ -17,10 +24,15 @@ interface JournalContextType {
   entries: JournalEntry[];
   journalLoading: boolean;
   journalError: string | null;
-  selectedMood: string | null;
-  setSelectedMood: (mood: string | null) => void;
+  selectedMoods: string[];
+  customMoods: string[];
+  toggleSelectedMood: (mood: string) => void;
+  setSelectedMoods: (moods: string[]) => void;
+  clearSelectedMoods: () => void;
+  addCustomMood: (name: string) => Promise<boolean>;
+  removeCustomMood: (name: string) => Promise<void>;
   refreshJournal: () => Promise<void>;
-  addEntry: (text: string, mood: string | null, prompt?: string) => Promise<boolean>;
+  addEntry: (text: string, moods: string[], prompt?: string) => Promise<boolean>;
   updateEntry: (
     id: string,
     patch: { body?: string; mood?: string | null }
@@ -40,7 +52,56 @@ export function JournalProvider({ children }: { children: React.ReactNode }) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [journalLoading, setJournalLoading] = useState(isSupabaseConfigured());
   const [journalError, setJournalError] = useState<string | null>(null);
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [selectedMoods, setSelectedMoods] = useState<string[]>([]);
+  const [customMoods, setCustomMoods] = useState<string[]>([]);
+
+  useEffect(() => {
+    void loadCustomMoods().then(setCustomMoods);
+  }, []);
+
+  const toggleSelectedMood = useCallback((mood: string) => {
+    const trimmed = mood.trim();
+    if (!trimmed) return;
+    setSelectedMoods((prev) => {
+      if (prev.includes(trimmed)) {
+        return prev.filter((m) => m !== trimmed);
+      }
+      if (prev.length >= MAX_SELECTED_MOODS) return prev;
+      return [...prev, trimmed];
+    });
+  }, []);
+
+  const clearSelectedMoods = useCallback(() => {
+    setSelectedMoods([]);
+  }, []);
+
+  const setSelectedMoodsDirect = useCallback((moods: string[]) => {
+    setSelectedMoods(moods.slice(0, MAX_SELECTED_MOODS));
+  }, []);
+
+  const addCustomMood = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed.length > 24) return false;
+    const normalized = trimmed.replace(/\s+/g, " ");
+    const exists = customMoods.some((m) => m.toLowerCase() === normalized.toLowerCase());
+    if (exists) {
+      toggleSelectedMood(normalized);
+      return true;
+    }
+    if (customMoods.length >= MAX_CUSTOM_MOODS) return false;
+    const next = [...customMoods, normalized];
+    setCustomMoods(next);
+    await saveCustomMoods(next);
+    toggleSelectedMood(normalized);
+    return true;
+  }, [customMoods, toggleSelectedMood]);
+
+  const removeCustomMood = useCallback(async (name: string) => {
+    const next = customMoods.filter((m) => m !== name);
+    setCustomMoods(next);
+    setSelectedMoods((prev) => prev.filter((m) => m !== name));
+    await saveCustomMoods(next);
+  }, [customMoods]);
 
   const refreshJournal = useCallback(async () => {
     if (!isSupabaseConfigured()) {
@@ -82,12 +143,12 @@ export function JournalProvider({ children }: { children: React.ReactNode }) {
   }, [refreshJournal, authConfigured, authLoading, session?.user?.id]);
 
   const addEntry = useCallback(
-    async (text: string, mood: string | null, prompt?: string) => {
+    async (text: string, moods: string[], prompt?: string) => {
       if (!isSupabaseConfigured() || !session?.user) return false;
 
       const created = await journalService.insertJournalEntry({
         body: text.trim(),
-        mood,
+        mood: formatMoodsForStorage(moods),
         prompt,
       });
       if (!created) return false;
@@ -153,8 +214,13 @@ export function JournalProvider({ children }: { children: React.ReactNode }) {
         entries,
         journalLoading,
         journalError,
-        selectedMood,
-        setSelectedMood,
+        selectedMoods,
+        customMoods,
+        toggleSelectedMood,
+        setSelectedMoods: setSelectedMoodsDirect,
+        clearSelectedMoods,
+        addCustomMood,
+        removeCustomMood,
         refreshJournal,
         addEntry,
         updateEntry,

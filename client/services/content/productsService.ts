@@ -34,15 +34,25 @@ export async function fetchProductsBySellerId(sellerId: string): Promise<StorePr
 }
 
 export async function insertProduct(
-  product: Omit<StoreProduct, "id"> & { id?: string; sellerId?: string | null }
+  product: Omit<StoreProduct, "id"> & { id?: string; sellerId?: string | null },
+  options?: { autoApproveProducts?: boolean }
 ): Promise<StoreProduct | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
   let approvalStatus = product.approvalStatus;
   if (!approvalStatus) {
-    const config = await fetchPlatformConfig();
-    approvalStatus = config?.settings.autoApproveProducts ? "Approved" : "Pending";
+    // Approved sellers' listings go live in the store immediately.
+    if (product.sellerId) {
+      approvalStatus = "Approved";
+    } else {
+      let autoApprove = options?.autoApproveProducts;
+      if (autoApprove === undefined) {
+        const config = await fetchPlatformConfig();
+        autoApprove = config?.settings.autoApproveProducts ?? __DEV__;
+      }
+      approvalStatus = autoApprove ? "Approved" : "Pending";
+    }
   }
 
   const { data, error } = await supabase

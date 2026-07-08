@@ -25,6 +25,15 @@ export type PublishedFaqSection = {
   items: { id: string; question: string; answer: string; sortOrder: number }[];
 };
 
+/** Contact page — default values when support_copy row is missing or empty. */
+export const DEFAULT_SUPPORT_EMAIL = "naturesgraceapp@gmail.com";
+export const DEFAULT_SUPPORT_PHONE = "+91 9560424609";
+
+const SUPPORT_COPY_DEFAULTS: Record<string, string> = {
+  support_email: DEFAULT_SUPPORT_EMAIL,
+  support_phone: DEFAULT_SUPPORT_PHONE,
+};
+
 /** Shown in user UI when Supabase succeeded but key is empty (seed / Admin fills content). */
 export const SUPPORT_COPY_EMPTY_DISPLAY = "—";
 
@@ -167,7 +176,9 @@ export async function fetchSupportCopyMap(): Promise<
 
 export function getSupportCopyKey(map: Record<string, string> | null | undefined, key: string): string {
   const raw = map?.[key];
-  return raw?.trim() ?? "";
+  const trimmed = raw?.trim() ?? "";
+  if (trimmed) return trimmed;
+  return SUPPORT_COPY_DEFAULTS[key] ?? "";
 }
 
 export function formatSupportCopyForDisplay(raw: string, emptyPlaceholder = SUPPORT_COPY_EMPTY_DISPLAY): string {

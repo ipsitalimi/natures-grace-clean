@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/supabase";
-import { resolveSellerIdByProfileId } from "@/services/commerce/sellerId";
+import { peekLastSellerProvisionError, resolveSellerIdByProfileId } from "@/services/commerce/sellerId";
 
 export type StorefrontSettings = {
   accent_color: string;
@@ -74,7 +74,10 @@ export async function fetchSellerStorefrontByProfileId(
   if (!supabase) return { ok: false, error: "Supabase not configured" };
 
   const sellerId = await resolveSellerIdByProfileId(profileId);
-  if (!sellerId) return { ok: false, error: "Seller profile not found." };
+  if (!sellerId) {
+    const provision = peekLastSellerProvisionError();
+    return { ok: false, error: provision?.ok === false ? provision.error : "Seller profile not found." };
+  }
 
   const { data, error } = await supabase
     .from("sellers")
@@ -106,7 +109,37 @@ export async function updateSellerStorefrontByProfileId(
   if (!supabase) return { ok: false, error: "Supabase not configured" };
 
   const sellerId = await resolveSellerIdByProfileId(profileId);
-  if (!sellerId) return { ok: false, error: "Seller profile not found." };
+  if (!sellerId) {
+    const provision = peekLastSellerProvisionError();
+    return { ok: false, error: provision?.ok === false ? provision.error : "Seller profile not found." };
+  }
+
+  const { data: existingRow, error: fetchError } = await supabase
+    .from("sellers")
+    .select("storefront_settings")
+    .eq("id", sellerId)
+    .maybeSingle();
+
+  if (fetchError) {
+    console.error("[sellerStorefrontService] fetch before update:", fetchError.message);
+    return { ok: false, error: fetchError.message };
+  }
+
+  const previousSettings = parseSettings(
+    (existingRow as { storefront_settings?: unknown } | null)?.storefront_settings
+  );
+
+  const mergedSettings: StorefrontSettings = {
+    accent_color: input.settings.accent_color ?? previousSettings.accent_color,
+    banner_theme_index:
+      input.settings.banner_theme_index ?? previousSettings.banner_theme_index,
+    featured_product_ids:
+      input.settings.featured_product_ids ?? previousSettings.featured_product_ids,
+    onboarding_complete:
+      input.settings.onboarding_complete !== undefined
+        ? input.settings.onboarding_complete === true
+        : previousSettings.onboarding_complete === true,
+  };
 
   const { data, error } = await supabase
     .from("sellers")
@@ -114,12 +147,7 @@ export async function updateSellerStorefrontByProfileId(
       store_name: input.storeName.trim(),
       description: input.description.trim(),
       philosophy: input.philosophy.trim(),
-      storefront_settings: {
-        accent_color: input.settings.accent_color,
-        banner_theme_index: input.settings.banner_theme_index,
-        featured_product_ids: input.settings.featured_product_ids,
-        onboarding_complete: input.settings.onboarding_complete === true,
-      },
+      storefront_settings: mergedSettings,
       updated_at: new Date().toISOString(),
     })
     .eq("id", sellerId)

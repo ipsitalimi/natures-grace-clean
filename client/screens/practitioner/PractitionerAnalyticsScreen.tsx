@@ -6,14 +6,13 @@ import {
   Pressable,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr, formatInrCompact } from "@/lib/formatCurrency";
+import { Feather } from "@expo/vector-icons";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 
@@ -51,8 +50,7 @@ function BarChart({ data }: { data: { label: string; amount: number }[] }) {
 }
 
 export default function PractitionerAnalyticsScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const { scrollPaddingBottom } = useLayoutInsets(32);
   const { dashboard, stats, sessions, loading, loadError, refresh } = usePractitionerContext();
   const [period, setPeriod] = useState<Period>("Weekly");
   const [refreshing, setRefreshing] = useState(false);
@@ -76,23 +74,24 @@ export default function PractitionerAnalyticsScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerTitleBlock}>
-          <ThemedText style={styles.headerKicker}>Your practice</ThemedText>
-          <ThemedText style={styles.headerTitle}>Analytics</ThemedText>
-        </View>
-        <Pressable style={styles.backBtn} onPress={() => void handleRefresh()} testID="button-refresh-analytics">
-          <Feather name="refresh-cw" size={18} color={Colors.light.accent} />
-        </Pressable>
-      </View>
+    <View style={styles.container}>
+      <BackHeader
+        showNotifications={false}
+        rightAction={
+          <Pressable
+            style={styles.refreshBtn}
+            onPress={() => void handleRefresh()}
+            testID="button-refresh-analytics"
+          >
+            <Feather name="refresh-cw" size={18} color={Colors.light.accent} />
+          </Pressable>
+        }
+      />
+      <BelowHeaderTitle>Analytics</BelowHeaderTitle>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 32) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
       >
         <ThemedText style={styles.introLine}>
           Sessions and earnings from your live booking data.
@@ -121,7 +120,7 @@ export default function PractitionerAnalyticsScreen() {
                     ? formatInrCompact(dashboard.monthlyEarnings)
                     : formatInr(dashboard.monthlyEarnings)}
                 </ThemedText>
-                <ThemedText style={styles.overviewHint}>paid sessions</ThemedText>
+                <ThemedText style={styles.overviewHint}>earnings</ThemedText>
               </View>
               <View style={[styles.overviewCard, styles.cardElevated]}>
                 <ThemedText style={styles.overviewLabel}>Rating</ThemedText>
@@ -245,31 +244,13 @@ function buildServiceBreakdown(
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  backBtn: {
+  refreshBtn: {
     width: 38,
     height: 38,
     borderRadius: 19,
     backgroundColor: Colors.light.cardBackground,
     justifyContent: "center",
     alignItems: "center",
-  },
-  headerTitleBlock: { flex: 1, alignItems: "center" },
-  headerKicker: {
-    fontSize: 12,
-    color: Colors.light.textMuted,
-    fontFamily: "Nunito_400Regular",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.text,
   },
   content: { paddingHorizontal: Spacing.lg, gap: Spacing.lg },
   introLine: {

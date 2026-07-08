@@ -1,7 +1,7 @@
 import Constants from "expo-constants";
 import * as Linking from "expo-linking";
 
-const AUTH_REDIRECT_PATH = "login";
+const AUTH_REDIRECT_PATH = "auth/callback";
 
 function readAuthRedirectOverride(): string | undefined {
   const fromProcess = process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL?.trim();

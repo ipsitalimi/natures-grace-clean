@@ -1,19 +1,19 @@
 import React, { useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Rect } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { BackHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { getStockColor } from "@/data/sellerMockData";
 import { useDataContext } from "@/context/DataContext";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { formatInr } from "@/lib/formatCurrency";
 
 export default function SellerProductDetailScreen() {
-  const insets = useSafeAreaInsets();
+  const { scrollPaddingBottom } = useLayoutInsets(30);
   const navigation = useNavigation();
   const route = useRoute<any>();
   const { productId } = route.params || {};
@@ -24,10 +24,8 @@ export default function SellerProductDetailScreen() {
 
   if (!product) {
     return (
-      <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
+      <View style={styles.container}>
+        <BackHeader title="Product Details" showNotifications={false} />
         <View style={styles.emptyState}>
           <ThemedText style={styles.emptyText}>Product not found</ThemedText>
         </View>
@@ -39,17 +37,11 @@ export default function SellerProductDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Product Details</ThemedText>
-        <View style={{ width: 38 }} />
-      </View>
+      <BackHeader title="Product Details" showNotifications={false} />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: getScrollBottomPadding(insets.bottom, 30) }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.imagePlaceholder}>
@@ -132,21 +124,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.light.backgroundRoot,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: "600",
-    color: Colors.light.text,
   },
   scrollView: {
     flex: 1,

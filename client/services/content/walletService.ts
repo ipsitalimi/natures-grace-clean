@@ -60,22 +60,25 @@ export async function getOrCreateWallet(commissionRate = 10): Promise<DbSellerWa
 
   if (existing) return existing as DbSellerWalletRow;
 
-  const { data, error } = await supabase
-    .from("seller_wallets")
-    .insert({
-      seller_id: sellerId,
-      commission_rate: commissionRate,
-      bank_account_label: null,
-      next_payout_date: null,
-    })
-    .select()
-    .single();
+  const { data, error } = await supabase.rpc("ensure_seller_wallet", {
+    p_commission_rate: commissionRate,
+  });
+
+  if (!error && data) {
+    return data as DbSellerWalletRow;
+  }
 
   if (error) {
-    console.error("[walletService] create wallet:", error.message);
-    return null;
+    console.error("[walletService] ensure wallet:", error.message);
   }
-  return data as DbSellerWalletRow;
+
+  const { data: retry } = await supabase
+    .from("seller_wallets")
+    .select("*")
+    .eq("seller_id", sellerId)
+    .maybeSingle();
+
+  return (retry as DbSellerWalletRow | null) ?? null;
 }
 
 export type DbSellerPayoutRow = {
@@ -147,7 +150,7 @@ export async function fetchWalletSnapshot(commissionRate = 10): Promise<SellerWa
 
   const payoutRows = (payouts ?? []) as DbSellerPayoutRow[];
   const activePayoutCount = payoutRows.filter((p) =>
-    p.status === "Pending" || p.status === "Processing"
+    p.status === "Pending" || p.status === "Processing" || p.status === "Under Review"
   ).length;
 
   return {

@@ -58,6 +58,8 @@ export interface StoreProduct {
   stock?: number;
   status?: ProductStockStatus;
   approvalStatus?: ProductApprovalStatus;
+  /** Supabase seller UUID when synced */
+  sellerId?: string;
   /** Maps to productImages keys e.g. sp-1 */
   imageKey?: string;
   imageUrl?: string | null;

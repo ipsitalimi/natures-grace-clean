@@ -5,6 +5,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 
@@ -56,6 +57,12 @@ export default function ForgotPasswordScreen() {
         </Pressable>
       </View>
 
+      <KeyboardAwareScrollViewCompat
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        bottomOffset={insets.bottom}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.content}>
         <View style={styles.logoArea}>
           <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
@@ -115,6 +122,7 @@ export default function ForgotPasswordScreen() {
           <ThemedText style={styles.switchLink}>Login</ThemedText>
         </Pressable>
       </View>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
@@ -134,8 +142,15 @@ const styles = StyleSheet.create({
     padding: 8,
     marginLeft: -8,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: "center",
   },
   logoArea: {

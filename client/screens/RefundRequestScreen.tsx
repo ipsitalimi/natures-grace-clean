@@ -1,25 +1,23 @@
 import React, { useCallback, useState } from "react";
 import {
   View,
-  ScrollView,
   StyleSheet,
   Pressable,
   TextInput,
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
+import { useRoute, RouteProp } from "@react-navigation/native";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import {
   fetchMyRefundRequests,
   submitRefundRequest,
   type RefundRequest,
 } from "@/services/refundRequestsService";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 type ParamList = {
   RefundRequest: { orderId?: string; bookingId?: string };
@@ -54,8 +52,6 @@ function StatusTimeline({ requests }: { requests: RefundRequest[] }) {
 }
 
 export default function RefundRequestScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const route = useRoute<RouteProp<ParamList, "RefundRequest">>();
   const { orderId, bookingId } = route.params ?? {};
 
@@ -116,94 +112,71 @@ export default function RefundRequestScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Refund Request</ThemedText>
-        <View style={styles.headerIconButton} />
+    <PageLayout
+      title="Refund Request"
+      titleInHeader
+      header="back"
+      contentContainerStyle={styles.content}
+    >
+      <ThemedText style={styles.intro}>
+        Submit a refund request with details. Our team reviews requests per the Refund Policy.
+      </ThemedText>
+
+      <ThemedText style={styles.label}>Reason</ThemedText>
+      <View style={styles.reasonRow}>
+        {REASONS.map((r) => (
+          <Pressable
+            key={r}
+            style={[styles.reasonChip, reason === r && styles.reasonChipActive]}
+            onPress={() => setReason(r)}
+          >
+            <ThemedText style={[styles.reasonText, reason === r && styles.reasonTextActive]}>
+              {r}
+            </ThemedText>
+          </Pressable>
+        ))}
       </View>
 
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
+      <ThemedText style={styles.label}>Description</ThemedText>
+      <TextInput
+        style={styles.textArea}
+        multiline
+        placeholder="Describe what happened…"
+        placeholderTextColor={Colors.light.textMuted}
+        value={description}
+        onChangeText={setDescription}
+      />
+
+      {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+
+      <Pressable
+        style={[styles.submitBtn, submitting && styles.submitDisabled]}
+        onPress={() => void handleSubmit()}
+        disabled={submitting}
       >
-        <ThemedText style={styles.intro}>
-          Submit a refund request with details. Our team reviews requests per the Refund Policy.
-        </ThemedText>
-
-        <ThemedText style={styles.label}>Reason</ThemedText>
-        <View style={styles.reasonRow}>
-          {REASONS.map((r) => (
-            <Pressable
-              key={r}
-              style={[styles.reasonChip, reason === r && styles.reasonChipActive]}
-              onPress={() => setReason(r)}
-            >
-              <ThemedText style={[styles.reasonText, reason === r && styles.reasonTextActive]}>
-                {r}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-
-        <ThemedText style={styles.label}>Description</ThemedText>
-        <TextInput
-          style={styles.textArea}
-          multiline
-          placeholder="Describe what happened…"
-          placeholderTextColor={Colors.light.textMuted}
-          value={description}
-          onChangeText={setDescription}
-        />
-
-        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
-
-        <Pressable
-          style={[styles.submitBtn, submitting && styles.submitDisabled]}
-          onPress={() => void handleSubmit()}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <ThemedText style={styles.submitText}>Submit request</ThemedText>
-          )}
-        </Pressable>
-
-        {loadingHistory ? (
-          <ActivityIndicator color={Colors.light.accent} style={{ marginTop: 24 }} />
+        {submitting ? (
+          <ActivityIndicator color="#fff" />
         ) : (
-          <StatusTimeline requests={history} />
+          <ThemedText style={styles.submitText}>Submit request</ThemedText>
         )}
-      </ScrollView>
-    </View>
+      </Pressable>
+
+      {loadingHistory ? (
+        <ActivityIndicator color={Colors.light.accent} style={{ marginTop: 24 }} />
+      ) : (
+        <StatusTimeline requests={history} />
+      )}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
+  content: {
+    paddingTop: LayoutSpacing.xs,
   },
-  headerIconButton: { padding: 8, width: 40 },
-  headerTitle: {
-    flex: 1,
-    textAlign: "center",
-    fontSize: 17,
-    fontWeight: "600",
-    color: Colors.light.accent,
-  },
-  scroll: { paddingHorizontal: Spacing.lg, paddingTop: Spacing.md },
-  intro: { fontSize: 14, color: Colors.light.textMuted, lineHeight: 20, marginBottom: Spacing.lg },
+  intro: { fontSize: 14, color: Colors.light.textMuted, lineHeight: 20, marginBottom: LayoutSpacing.lg },
   label: { fontSize: 13, fontWeight: "600", color: Colors.light.text, marginBottom: 8 },
-  reasonRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: Spacing.lg },
+  reasonRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: LayoutSpacing.lg },
   reasonChip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -220,11 +193,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.light.divider,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
+    padding: LayoutSpacing.md,
     fontSize: 14,
     color: Colors.light.text,
     textAlignVertical: "top",
-    marginBottom: Spacing.lg,
+    marginBottom: LayoutSpacing.lg,
   },
   submitBtn: {
     backgroundColor: Colors.light.accent,
@@ -236,20 +209,20 @@ const styles = StyleSheet.create({
   },
   submitDisabled: { opacity: 0.6 },
   submitText: { color: "#fff", fontWeight: "600" },
-  errorText: { color: "#8B3A3A", marginBottom: Spacing.md },
+  errorText: { color: "#8B3A3A", marginBottom: LayoutSpacing.md },
   sectionTitle: {
     fontSize: 13,
     fontWeight: "700",
     color: Colors.light.textMuted,
     textTransform: "uppercase",
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.lg,
+    marginBottom: LayoutSpacing.sm,
+    marginTop: LayoutSpacing.lg,
   },
   timeline: { gap: 8 },
   timelineItem: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
+    padding: LayoutSpacing.md,
     borderWidth: 1,
     borderColor: Colors.light.divider,
   },

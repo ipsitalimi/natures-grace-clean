@@ -75,7 +75,8 @@ export default function AdminScreen() {
     setSubScreen({ type: "main" });
   };
 
-  const handleBack = async () => {
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem(ADMIN_NAV_KEY);
     await signOut();
   };
 
@@ -175,7 +176,7 @@ export default function AdminScreen() {
     <AdminLayout
       activeScreen={activeScreen}
       onNavigate={handleNavigate}
-      onBack={handleBack}
+      onLogout={handleLogout}
     >
       {renderContent()}
     </AdminLayout>

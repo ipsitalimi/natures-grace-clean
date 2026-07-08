@@ -7,16 +7,15 @@ import {
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { BackHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import type { SellerReviewView } from "@/data/sellerReviews";
 import { useReviews } from "@/context/ReviewsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 function StarRating({ rating, size = 14 }: { rating: number; size?: number }) {
   return (
@@ -151,8 +150,7 @@ function ReviewCard({
 }
 
 export default function SellerReviewsScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const { scrollPaddingBottom } = useLayoutInsets(24);
   const {
     sellerReviews,
     sellerStoreStats,
@@ -175,18 +173,12 @@ export default function SellerReviewsScreen() {
   }));
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Reviews & Ratings</ThemedText>
-        <View style={{ width: 38 }} />
-      </View>
+    <View style={styles.container}>
+      <BackHeader title="Reviews & Ratings" showNotifications={false} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
       >
         {sellerReviewsLoading ? (
           <View style={styles.centered}>
@@ -287,26 +279,6 @@ export default function SellerReviewsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.light.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.text,
-  },
   content: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,

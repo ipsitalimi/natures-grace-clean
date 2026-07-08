@@ -5,6 +5,7 @@ import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { getAuthScreenPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
@@ -25,11 +26,15 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList, "Login">;
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
-  const { isConfigured, signIn, loading: authLoading, emailConfirmedMessage, consumeEmailConfirmedMessage } = useAuth();
+  const { isConfigured, signIn, loading: authLoading, emailConfirmedMessage, consumeEmailConfirmedMessage, resendVerificationEmail } = useAuth();
   const { syncSessionFromProfile, isAccountSuspended, refreshRemoteConfig } = usePlatformConfig();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [copyMap, setCopyMap] = useState<Record<string, string> | null>(null);
 
@@ -61,6 +66,8 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setError("");
+    setNeedsVerification(false);
+    setResent(false);
     const trimmedEmail = email.trim().toLowerCase();
 
     if (!trimmedEmail || !password) {
@@ -83,6 +90,12 @@ export default function LoginScreen() {
 
     const result = await signIn(trimmedEmail, password);
     setSubmitting(false);
+    if (result.needsEmailVerification) {
+      setNeedsVerification(true);
+      setVerificationEmail(result.email ?? trimmedEmail);
+      setError(result.error ?? "Please verify your email before signing in.");
+      return;
+    }
     if (result.error) {
       setError(result.error);
       return;
@@ -94,6 +107,20 @@ export default function LoginScreen() {
       }
     }
     // RootNavigation handles post-login routing when session is restored.
+  };
+
+  const handleResendVerification = async () => {
+    const targetEmail = verificationEmail || email.trim().toLowerCase();
+    if (!targetEmail) return;
+    setResending(true);
+    setResent(false);
+    const result = await resendVerificationEmail(targetEmail);
+    setResending(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setResent(true);
   };
 
   const busy = submitting || authLoading;
@@ -108,6 +135,12 @@ export default function LoginScreen() {
         },
       ]}
     >
+      <KeyboardAwareScrollViewCompat
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        bottomOffset={insets.bottom}
+        showsVerticalScrollIndicator={false}
+      >
       <View style={styles.topSection}>
         <View style={styles.logoArea}>
           <Image source={appLogo} style={styles.logoImage} resizeMode="contain" />
@@ -166,7 +199,44 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
-          {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+          {error ? (
+            <ThemedText style={needsVerification ? styles.verifyText : styles.errorText}>
+              {error}
+            </ThemedText>
+          ) : null}
+
+          {needsVerification ? (
+            <>
+              {resent ? (
+                <ThemedText style={styles.confirmationText} testID="text-resend-success">
+                  Verification email sent again.
+                </ThemedText>
+              ) : null}
+              <Pressable
+                style={[styles.secondaryButton, resending && styles.primaryButtonDisabled]}
+                onPress={() => void handleResendVerification()}
+                disabled={resending}
+                testID="button-resend-verification-login"
+              >
+                {resending ? (
+                  <ActivityIndicator color={Colors.light.accent} />
+                ) : (
+                  <ThemedText style={styles.secondaryButtonText}>Resend verification email</ThemedText>
+                )}
+              </Pressable>
+              <Pressable
+                style={styles.verifyLink}
+                onPress={() =>
+                  navigation.navigate("VerifyEmail", {
+                    email: verificationEmail || email.trim().toLowerCase(),
+                  })
+                }
+                testID="link-verify-email-screen"
+              >
+                <ThemedText style={styles.forgotText}>Open verify email screen</ThemedText>
+              </Pressable>
+            </>
+          ) : null}
 
           <Pressable
             style={[styles.primaryButton, busy && styles.primaryButtonDisabled]}
@@ -189,6 +259,7 @@ export default function LoginScreen() {
           <ThemedText style={styles.switchLink}>Create account</ThemedText>
         </Pressable>
       </View>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
@@ -199,8 +270,15 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.backgroundRoot,
     paddingHorizontal: Spacing["2xl"],
   },
-  topSection: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: "space-between",
+  },
+  topSection: {
+    flexGrow: 1,
     justifyContent: "center",
   },
   logoArea: {
@@ -253,6 +331,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#C0392B",
     textAlign: "center",
+  },
+  verifyText: {
+    fontSize: 14,
+    color: Colors.light.accent,
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  secondaryButton: {
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: Colors.light.divider,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  secondaryButtonText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: Colors.light.accent,
+  },
+  verifyLink: {
+    alignSelf: "center",
+    marginTop: -4,
   },
   confirmationBox: {
     backgroundColor: "#E8F5EE",

@@ -47,7 +47,8 @@ export type CompleteAuthSessionResult = {
 };
 
 export function isSignupConfirmationCallback(url: string): boolean {
-  return parseAuthCallbackParams(url).type === "signup";
+  const type = parseAuthCallbackParams(url).type;
+  return type === "signup" || type === "email" || type === "email_change";
 }
 
 /** Complete signup confirmation or password-recovery sessions from a native deep link. */
@@ -86,4 +87,30 @@ export async function completeAuthSessionFromUrl(
   }
 
   return { session: null, isPasswordRecovery };
+}
+
+/** Remove Supabase auth tokens from the browser URL after session is established. */
+export function stripAuthParamsFromBrowserUrl(): void {
+  if (typeof window === "undefined") return;
+
+  const href = window.location.href;
+  if (!isAuthCallbackUrl(href)) return;
+
+  const url = new URL(href);
+  if (url.hash) {
+    url.hash = "";
+  }
+  for (const key of [
+    "code",
+    "error",
+    "error_description",
+    "access_token",
+    "refresh_token",
+    "type",
+  ]) {
+    url.searchParams.delete(key);
+  }
+
+  const next = `${url.pathname}${url.search}${url.hash}`;
+  window.history.replaceState({}, document.title, next || "/");
 }

@@ -2,9 +2,10 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import type { Discussion, DiscussionReply } from "@/data/discussions";
 import type { ResourceItem } from "@/data/mockResources";
 import type { StoreCategory, StoreProduct } from "@/data/storeProducts";
-import { categories as practitionerCategoryTemplates, Practitioner, Category, drNeelamLocalPhoto } from "@/data/practitioners";
+import { categories as practitionerCategoryTemplates, Practitioner, Category, emptyCategoryTemplates } from "@/data/practitioners";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { useAuth } from "@/context/AuthContext";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import * as eventsService from "@/services/content/eventsService";
 import * as productsService from "@/services/content/productsService";
 import * as resourcesService from "@/services/content/resourcesService";
@@ -104,16 +105,7 @@ const SUPABASE_REQUIRED_MESSAGE =
   "Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.";
 
 function emptyPractitionerCategories(): Category[] {
-  return practitionerCategoryTemplates.map((c) => ({ ...c, practitioners: [] }));
-}
-
-function applyLocalPhotos(practitioners: Practitioner[]): Practitioner[] {
-  return practitioners.map((p) => {
-    if (p.name.toLowerCase().includes("neelam")) {
-      return { ...p, localPhoto: drNeelamLocalPhoto };
-    }
-    return p;
-  });
+  return emptyCategoryTemplates();
 }
 
 let idCounter = 1000;
@@ -124,6 +116,7 @@ function generateId(prefix: string): string {
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { session, loading: authLoading, isConfigured: authConfigured, profile } = useAuth();
+  const { settings: platformSettings } = usePlatformConfig();
   const [dataLoading, setDataLoading] = useState(isSupabaseConfigured());
   const [dataError, setDataError] = useState<string | null>(
     isSupabaseConfigured() ? null : SUPABASE_REQUIRED_MESSAGE
@@ -175,7 +168,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setAllProducts(remoteProducts);
       setPractitionerCats(
         groupPractitionersIntoCategories(
-          applyLocalPhotos(remotePractitioners),
+          remotePractitioners,
           practitionerCategoryTemplates
         )
       );
@@ -403,7 +396,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           return null;
         }
       }
-      const created = await productsService.insertProduct({ ...product, sellerId });
+      const created = await productsService.insertProduct(
+        { ...product, sellerId: sellerId ?? undefined },
+        { autoApproveProducts: platformSettings.autoApproveProducts }
+      );
       if (created) {
         setAllProducts((prev) => [...prev, created]);
         if (sellerId) {
@@ -413,7 +409,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
       return null;
     },
-    [profile?.id, profile?.role]
+    [profile?.id, profile?.role, platformSettings.autoApproveProducts]
   );
 
   const updateProduct = useCallback(async (id: string, updates: Partial<StoreProduct>) => {
@@ -442,10 +438,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (!isSupabaseConfigured()) return;
       const created = await practitionersService.insertPractitioner(practitioner);
       if (created) {
-        const withPhoto = applyLocalPhotos([created])[0];
         setPractitionerCats((prev) =>
           groupPractitionersIntoCategories(
-            [...prev.flatMap((c) => c.practitioners), withPhoto],
+            [...prev.flatMap((c) => c.practitioners), created],
             practitionerCategoryTemplates
           )
         );

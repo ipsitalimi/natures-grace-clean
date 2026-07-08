@@ -53,6 +53,10 @@ export async function fetchOfferings(
   if (!supabase) return [];
 
   const practitionerId = await resolvePractitionerId(profileId);
+  if (profileId && !practitionerId) {
+    return [];
+  }
+
   let query = supabase
     .from("practitioner_offerings")
     .select("*")

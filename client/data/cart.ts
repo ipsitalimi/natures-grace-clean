@@ -1,5 +1,7 @@
 /** Shopping cart types (Supabase-backed). */
 
+import type { DeliveryTierId } from "@/constants/sellerDelivery";
+
 export type CartCheckoutStatus = "active" | "checkout" | "completed";
 
 export interface CartItem {
@@ -14,6 +16,7 @@ export interface CartItem {
 export interface CartCheckoutState {
   sessionId: string | null;
   deliveryOption: string;
+  sellerDeliveryOptions: Record<string, DeliveryTierId>;
   orderNote: string;
   checkoutStatus: CartCheckoutStatus;
   subtotal: number;
@@ -34,6 +37,7 @@ export interface ProductSnapshot {
 export const EMPTY_CHECKOUT: CartCheckoutState = {
   sessionId: null,
   deliveryOption: "standard",
+  sellerDeliveryOptions: {},
   orderNote: "",
   checkoutStatus: "active",
   subtotal: 0,

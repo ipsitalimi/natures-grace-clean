@@ -31,6 +31,18 @@ export type CheckoutConfirmResult = {
   error?: string;
 };
 
+async function readResponseBodyForDevLog(res: Response): Promise<string | null> {
+  if (!__DEV__) return null;
+  try {
+    return await res.clone().text();
+  } catch (err) {
+    console.log("[bookingCheckout][client] response body log failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 export async function createCheckoutOrder(params: {
   amountInr: number;
   durationMinutes: number;
@@ -42,9 +54,22 @@ export async function createCheckoutOrder(params: {
   notes?: Record<string, string>;
 }): Promise<CheckoutOrderResult> {
   try {
-    const res = await fetch(`${getApiBaseUrl()}/api/bookings/checkout/create-order`, {
+    const apiUrl = getApiBaseUrl();
+    const requestUrl = `${apiUrl}/api/bookings/checkout/create-order`;
+    const headers = authJsonHeaders(params.accessToken);
+    if (__DEV__) {
+      console.log("[bookingCheckout][client] create-order request", {
+        apiUrl,
+        accessTokenPresent: Boolean(params.accessToken),
+        url: requestUrl,
+        method: "POST",
+        authorizationHeaderPresent: Boolean(headers.Authorization),
+      });
+    }
+
+    const res = await fetch(requestUrl, {
       method: "POST",
-      headers: authJsonHeaders(params.accessToken),
+      headers,
       body: JSON.stringify({
         amountInr: params.amountInr,
         durationMinutes: params.durationMinutes,
@@ -55,10 +80,29 @@ export async function createCheckoutOrder(params: {
         notes: params.notes,
       }),
     });
+    const responseBody = await readResponseBodyForDevLog(res);
+    if (__DEV__) {
+      console.log("[bookingCheckout][client] create-order response", {
+        status: res.status,
+        body: responseBody,
+      });
+    }
     const json = (await res.json()) as CheckoutOrderResult & { error?: string };
-    if (!res.ok) return { error: json.error ?? `Server error (${res.status})` };
+    if (!res.ok) {
+      if (res.status === 401) {
+        return {
+          error: "Your session expired. Please sign out, sign in again, and retry.",
+        };
+      }
+      return { error: json.error ?? `Server error (${res.status})` };
+    }
     return json;
   } catch (err) {
+    if (__DEV__) {
+      console.log("[bookingCheckout][client] create-order fetch threw", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return { error: err instanceof Error ? err.message : "Could not reach checkout server" };
   }
 }
@@ -72,9 +116,22 @@ export async function confirmCheckoutPayment(params: {
   accessToken: string;
 }): Promise<CheckoutConfirmResult> {
   try {
-    const res = await fetch(`${getApiBaseUrl()}/api/bookings/checkout/confirm`, {
+    const apiUrl = getApiBaseUrl();
+    const requestUrl = `${apiUrl}/api/bookings/checkout/confirm`;
+    const headers = authJsonHeaders(params.accessToken);
+    if (__DEV__) {
+      console.log("[bookingCheckout][client] confirm request", {
+        apiUrl,
+        accessTokenPresent: Boolean(params.accessToken),
+        url: requestUrl,
+        method: "POST",
+        authorizationHeaderPresent: Boolean(headers.Authorization),
+      });
+    }
+
+    const res = await fetch(requestUrl, {
       method: "POST",
-      headers: authJsonHeaders(params.accessToken),
+      headers,
       body: JSON.stringify({
         orderId: params.orderId,
         paymentId: params.paymentId,
@@ -83,10 +140,29 @@ export async function confirmCheckoutPayment(params: {
         booking: params.booking,
       }),
     });
+    const responseBody = await readResponseBodyForDevLog(res);
+    if (__DEV__) {
+      console.log("[bookingCheckout][client] confirm response", {
+        status: res.status,
+        body: responseBody,
+      });
+    }
     const json = (await res.json()) as CheckoutConfirmResult & { error?: string };
-    if (!res.ok) return { error: json.error ?? `Server error (${res.status})` };
+    if (!res.ok) {
+      if (res.status === 401) {
+        return {
+          error: "Your session expired. Please sign out, sign in again, and retry.",
+        };
+      }
+      return { error: json.error ?? `Server error (${res.status})` };
+    }
     return json;
   } catch (err) {
+    if (__DEV__) {
+      console.log("[bookingCheckout][client] confirm fetch threw", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     return { error: err instanceof Error ? err.message : "Could not confirm payment" };
   }
 }

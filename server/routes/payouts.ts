@@ -1,27 +1,23 @@
 import type { Express, Request, Response } from "express";
 import { requireSupabaseAdmin } from "../lib/supabaseAdmin";
 import {
-  applyRazorpayPayoutStatus,
   completePayout,
   getPayoutById,
-  markPayoutProcessing,
+  reconcilePendingPayout,
 } from "../services/payoutLifecycle";
-import { applyRazorpayPayoutStatus as applyPractitionerPayoutStatus } from "../services/practitionerPayoutLifecycle";
-import {
-  createRazorpayPayout,
-  isRazorpayConfigured,
-  verifyWebhookSignature,
-} from "../services/razorpayX";
 import { getBearerUser } from "../middleware/auth";
 import { verifySellerPayoutOwnership } from "../services/sellerWalletLedger";
+import {
+  MANUAL_PAYOUT_MESSAGE,
+  MANUAL_PAYOUT_NOTES,
+  MANUAL_PAYOUT_STATUS,
+} from "../lib/manualPayouts";
 
 function paramId(value: string | string[]): string {
   return Array.isArray(value) ? value[0] : value;
 }
 
-import { devAutoCompleteEnabled } from "../lib/payoutDev";
-
-/** POST /api/payouts/:payoutId/dispatch — send to RazorpayX after client creates Pending payout */
+/** POST /api/payouts/:payoutId/dispatch — queue payout for manual admin transfer */
 async function handleDispatch(req: Request, res: Response) {
   try {
     const user = await getBearerUser(req);
@@ -31,136 +27,65 @@ async function handleDispatch(req: Request, res: Response) {
 
     const payoutId = paramId(req.params.payoutId);
     const supabase = requireSupabaseAdmin();
-    const payout = await getPayoutById(supabase, payoutId);
-
-    if (!payout) {
-      return res.status(404).json({ error: "Payout not found" });
-    }
 
     const ownsPayout = await verifySellerPayoutOwnership(supabase, payoutId, user.id);
     if (!ownsPayout) {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    if (payout.status !== "Pending") {
+    const existing = await getPayoutById(supabase, payoutId);
+    if (!existing) {
+      return res.status(404).json({ error: "Payout not found" });
+    }
+
+    if (existing.status !== "Pending") {
       return res.status(200).json({
-        payoutId: payout.id,
-        status: payout.status,
-        message: "Payout already dispatched",
+        payoutId: existing.id,
+        status: existing.status,
+        message:
+          existing.status === MANUAL_PAYOUT_STATUS
+            ? MANUAL_PAYOUT_MESSAGE
+            : "Payout already submitted",
+        manualPayouts: true,
       });
     }
 
-    if (isRazorpayConfigured()) {
-      const result = await createRazorpayPayout({
-        referenceId: payout.id,
-        amountInr: Number(payout.amount),
-        fundAccountId: payout.razorpay_fund_account_id ?? undefined,
-        narration: "NG seller payout",
-      });
+    const { data: updated, error } = await supabase
+      .from("seller_payouts")
+      .update({
+        status: MANUAL_PAYOUT_STATUS,
+        notes: MANUAL_PAYOUT_NOTES,
+      })
+      .eq("id", payoutId)
+      .eq("status", "Pending")
+      .select()
+      .maybeSingle();
 
-      if (!result.ok) {
-        return res.status(502).json({ error: result.error });
-      }
+    if (error) {
+      throw new Error(error.message);
+    }
 
-      await markPayoutProcessing(supabase, payoutId, {
-        razorpayPayoutId: result.payoutId,
-        razorpayFundAccountId: result.fundAccountId,
-        notes: "Submitted to RazorpayX",
-      });
-
-      const normalized = (result.status ?? "").toLowerCase();
-      if (normalized === "processed") {
-        const done = await completePayout(supabase, payoutId, {
-          razorpayPayoutId: result.payoutId,
-          razorpayFundAccountId: result.fundAccountId,
-        });
-        return res.json({
-          payoutId: done.id,
-          status: done.status,
-          razorpayPayoutId: done.razorpay_payout_id,
-        });
-      }
-
-      return res.json({
-        payoutId,
-        status: "Processing",
-        razorpayPayoutId: result.payoutId,
-        message: "Payout submitted to RazorpayX",
+    if (!updated) {
+      const latest = await getPayoutById(supabase, payoutId);
+      return res.status(200).json({
+        payoutId: latest?.id ?? payoutId,
+        status: latest?.status ?? MANUAL_PAYOUT_STATUS,
+        message: MANUAL_PAYOUT_MESSAGE,
+        manualPayouts: true,
       });
     }
 
-    if (devAutoCompleteEnabled()) {
-      const done = await completePayout(supabase, payoutId, {
-        notes: "Dev auto-complete (no RazorpayX keys)",
-        webhookEvent: "dev.auto_complete",
-      });
-      return res.json({
-        payoutId: done.id,
-        status: done.status,
-        message: "Payout auto-completed (dev mode)",
-        devMode: true,
-      });
-    }
+    await reconcilePendingPayout(supabase, (updated as { wallet_id: string }).wallet_id);
 
     return res.json({
-      payoutId,
-      status: "Pending",
-      message:
-        "Payout queued. Configure RAZORPAYX_* keys or set PAYOUT_DEV_AUTO_COMPLETE=true for local testing.",
-      razorpayConfigured: false,
+      payoutId: updated.id,
+      status: MANUAL_PAYOUT_STATUS,
+      message: MANUAL_PAYOUT_MESSAGE,
+      manualPayouts: true,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Dispatch failed";
     console.error("[payouts] dispatch:", err);
-    return res.status(500).json({ error: message });
-  }
-}
-
-/** POST /api/webhooks/razorpayx — RazorpayX payout status updates */
-async function handleRazorpayWebhook(req: Request, res: Response) {
-  try {
-    const signature = req.header("x-razorpay-signature");
-    const rawBody =
-      (req as Request & { rawBody?: Buffer }).rawBody ??
-      Buffer.from(JSON.stringify(req.body));
-
-    if (!verifyWebhookSignature(rawBody, signature)) {
-      return res.status(401).json({ error: "Invalid webhook signature" });
-    }
-
-    const payload = req.body as {
-      event?: string;
-      payload?: { payout?: { entity?: Record<string, unknown> } };
-    };
-
-    const event = payload.event ?? "unknown";
-    const entity = (payload.payload?.payout?.entity ?? {}) as {
-      id?: string;
-      status?: string;
-      fund_account_id?: string;
-      reference_id?: string;
-      failure_reason?: string;
-    };
-
-    const supabase = requireSupabaseAdmin();
-    const result =
-      (await applyRazorpayPayoutStatus(supabase, entity, event)) ??
-      (await applyPractitionerPayoutStatus(supabase, entity, event));
-
-    if (!result) {
-      return res.status(200).json({ received: true, matched: false });
-    }
-
-    return res.status(200).json({
-      received: true,
-      matched: true,
-      payoutId: result.payoutId,
-      status: result.status,
-      entity: "seller_or_practitioner",
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Webhook failed";
-    console.error("[payouts] webhook:", err);
     return res.status(500).json({ error: message });
   }
 }
@@ -198,5 +123,4 @@ async function handleDevComplete(req: Request, res: Response) {
 export function registerPayoutRoutes(app: Express) {
   app.post("/api/payouts/:payoutId/dispatch", handleDispatch);
   app.post("/api/payouts/:payoutId/dev-complete", handleDevComplete);
-  app.post("/api/webhooks/razorpayx", handleRazorpayWebhook);
 }

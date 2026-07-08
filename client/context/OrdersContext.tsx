@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import * as ordersService from "@/services/content/ordersService";
+import { createStoreOrderViaApi } from "@/services/storeCheckoutService";
 import { resolveSellerIdByProfileId } from "@/services/commerce/sellerId";
 
 interface OrdersContextType {
@@ -134,22 +135,57 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
         customerEmail: input.customerEmail ?? profile?.email,
       };
 
-      if (isSupabaseConfigured()) {
-        const created = await ordersService.createOrder(payload);
-        if (created) {
-          setOrders((prev) => [created, ...prev]);
-          if (session?.user?.id) {
-            setUserOrders((prev) => [created, ...prev]);
-          }
-          setIsRemoteOrders(true);
-          return created;
-        }
+      if (!isSupabaseConfigured()) {
         return null;
+      }
+
+      if (!session?.access_token) {
+        return null;
+      }
+
+      const lineItems = payload.items
+        .filter((item): item is typeof item & { productId: string } => Boolean(item.productId))
+        .map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+        }));
+
+      if (lineItems.length === 0) {
+        return null;
+      }
+
+      const apiResult = await createStoreOrderViaApi({
+        customerName: payload.customerName,
+        customerEmail: payload.customerEmail,
+        items: lineItems,
+        deliveryOption: payload.deliveryOption,
+        notes: payload.notes,
+        sellerPromoId: payload.sellerPromoId ?? null,
+        platformPromoId: payload.platformPromoId ?? null,
+        accessToken: session.access_token,
+      });
+
+      if (apiResult.error || !apiResult.orderId) {
+        console.error("[OrdersContext] create order:", apiResult.error);
+        return null;
+      }
+
+      const detail = await ordersService.fetchOrderForUser(
+        apiResult.orderId,
+        session.user.id
+      );
+
+      if (detail) {
+        const created = ordersService.toSellerOrder(detail.order, detail.items);
+        setOrders((prev) => [created, ...prev]);
+        setUserOrders((prev) => [created, ...prev]);
+        setIsRemoteOrders(true);
+        return created;
       }
 
       return null;
     },
-    [session?.user?.id, profile]
+    [session?.user?.id, session?.access_token, profile]
   );
 
   const pendingOrderCount = useMemo(

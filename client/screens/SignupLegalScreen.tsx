@@ -34,7 +34,7 @@ export default function SignupLegalScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteProps>();
   const { name, email, password } = route.params;
-  const { signUp, refreshProfile } = useAuth();
+  const { signUp, refreshProfile, setPendingSignupLegal } = useAuth();
   const { syncSessionFromProfile } = usePlatformConfig();
 
   const [versions, setVersions] = useState<LegalVersions | null>(null);
@@ -78,10 +78,12 @@ export default function SignupLegalScreen() {
     }
 
     if (signupResult.needsEmailConfirmation) {
+      const keys = Object.keys(checked) as UserMandatoryLegalKey[];
+      setPendingSignupLegal({ keys, versions });
       setSubmitting(false);
       navigation.reset({
         index: 0,
-        routes: [{ name: "Login" }],
+        routes: [{ name: "VerifyEmail", params: { email } }],
       });
       return;
     }
@@ -92,8 +94,13 @@ export default function SignupLegalScreen() {
     );
 
     if (!recordResult.ok) {
+      const keys = Object.keys(checked) as UserMandatoryLegalKey[];
+      setPendingSignupLegal({ keys, versions });
       setSubmitting(false);
-      setError(recordResult.error ?? "Could not save legal acceptances");
+      setError(
+        recordResult.error ??
+          "Account created, but legal acceptances could not be saved. Sign in to complete setup."
+      );
       return;
     }
 

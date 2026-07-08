@@ -20,7 +20,12 @@ import type {
   SessionOffering,
   UserSessionHistory,
 } from "@/data/practitionerBookings";
-import { clearPractitionerIdCache } from "@/services/content/practitionerId";
+import {
+  canSelfProvisionPractitionerProfile,
+  clearPractitionerIdCache,
+  consumeLastPractitionerProvisionError,
+  resolvePractitionerId,
+} from "@/services/content/practitionerId";
 import * as bookingsService from "@/services/content/practitionerBookingsService";
 import * as earningsService from "@/services/content/practitionerEarningsService";
 import * as offeringsService from "@/services/content/practitionerOfferingsService";
@@ -110,7 +115,7 @@ const emptyDashboard = (): PractitionerDashboard => ({
 const PractitionerContext = createContext<PractitionerContextType | null>(null);
 
 export function PractitionerProvider({ children }: { children: React.ReactNode }) {
-  const { session, loading: authLoading, isConfigured: authConfigured, profile } =
+  const { session, loading: authLoading, isConfigured: authConfigured, profile, refreshProfile } =
     useAuth();
   const { settings } = usePlatformConfig();
   const [loading, setLoading] = useState(isSupabaseConfigured());
@@ -138,8 +143,42 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
       setLoading(true);
     }
     setLoadError(null);
+
+    const isPractitionerAccount =
+      profile?.role === "Practitioner" ||
+      (profileId ? await canSelfProvisionPractitionerProfile(profileId) : false);
+
+    const userId = session?.user?.id;
+
     try {
+      if (!isPractitionerAccount) {
+        const remoteUser = userId
+          ? await bookingsService.fetchUserBookings(userId)
+          : [];
+        setSessions([]);
+        setOfferings([]);
+        setUserSessions(remoteUser);
+        setSnapshot(emptyPractitionerWalletSnapshot(commissionRate));
+        setDashboard(emptyDashboard());
+        setPracticeName("My Practice");
+        setIsRemote(Boolean(userId));
+        if (!options?.silent) {
+          setLoading(false);
+        }
+        return;
+      }
+
       clearPractitionerIdCache();
+
+      if (profileId) {
+        await resolvePractitionerId(profileId);
+        const provisionError = consumeLastPractitionerProvisionError();
+        if (provisionError && !provisionError.ok) {
+          setLoadError(provisionError.error);
+        } else if (profile?.role !== "Practitioner") {
+          await refreshProfile();
+        }
+      }
 
       const [remoteSessions, remoteOfferings, remoteWallet, remoteUser] =
         await Promise.all([
@@ -156,7 +195,10 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
       setOfferings(remoteOfferings);
       setUserSessions(remoteUser);
       if (session?.access_token) {
-        await syncPractitionerWallet(session.access_token);
+        const syncResult = await syncPractitionerWallet(session.access_token);
+        if (syncResult?.error) {
+          console.warn("[PractitionerContext] wallet sync:", syncResult.error);
+        }
       }
       setIsRemote(true);
 
@@ -188,7 +230,7 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
         setLoading(false);
       }
     }
-  }, [commissionRate, profileId, session?.user?.id, session?.access_token]);
+  }, [commissionRate, profileId, profile?.role, refreshProfile, session?.user?.id, session?.access_token]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {

@@ -123,6 +123,10 @@ export async function fetchPractitionerBookings(
   if (!supabase) return [];
 
   const practitionerId = await resolvePractitionerId(profileId);
+  if (profileId && !practitionerId) {
+    return [];
+  }
+
   let query = supabase
     .from("practitioner_bookings")
     .select("*")
@@ -399,6 +403,10 @@ export async function fetchAllBookingRows(
   if (!supabase) return [];
 
   const practitionerId = await resolvePractitionerId(profileId);
+  if (profileId && !practitionerId) {
+    return [];
+  }
+
   let query = supabase
     .from("practitioner_bookings")
     .select("*")

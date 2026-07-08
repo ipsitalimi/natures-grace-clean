@@ -1,15 +1,17 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { View, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { WalletTransaction } from "@/data/wallet";
 import { useWalletContext } from "@/context/WalletContext";
-import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { useAuth } from "@/context/AuthContext";
 import { formatInr, formatInrSigned } from "@/lib/formatCurrency";
+import { BackHeader } from "@/components/layout";
+import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import BankDetailsCard from "@/components/wallet/BankDetailsCard";
+import { updateSellerBankDetails } from "@/services/walletLedgerApi";
 import {
   BANK_NOT_LINKED_NOTICE,
   isBankAccountLinked,
@@ -39,9 +41,9 @@ function TransactionRow({ txn }: { txn: WalletTransaction }) {
 }
 
 export default function SellerWalletScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
-  const { snapshot, requestPayout } = useWalletContext();
+  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { snapshot, requestPayout, walletLoading, walletLoadError, refreshWallet } = useWalletContext();
+  const { session } = useAuth();
   const [withdrawing, setWithdrawing] = useState(false);
 
   const bankLinked = isBankAccountLinked(snapshot.bankAccountLabel);
@@ -69,29 +71,59 @@ export default function SellerWalletScreen() {
   };
 
   return (
-    <View style={[styles.container, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => navigation.goBack()} testID="button-back">
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <ThemedText style={styles.headerTitle}>Wallet & Earnings</ThemedText>
-        <View style={{ width: 38 }} />
-      </View>
+    <View style={styles.container}>
+      <BackHeader title="Wallet & Earnings" showNotifications={false} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.content, { paddingBottom: getScrollBottomPadding(insets.bottom, 24) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
       >
+        {walletLoading ? (
+          <View style={styles.stateBlock}>
+            <ActivityIndicator color={Colors.light.accent} />
+            <ThemedText style={styles.stateText}>Loading wallet…</ThemedText>
+          </View>
+        ) : walletLoadError ? (
+          <View style={styles.stateBlock}>
+            <Feather name="alert-circle" size={24} color={Colors.light.textMuted} />
+            <ThemedText style={styles.stateText}>{walletLoadError}</ThemedText>
+            <Pressable style={styles.retryBtn} onPress={() => void refreshWallet()}>
+              <ThemedText style={styles.retryBtnText}>Try again</ThemedText>
+            </Pressable>
+          </View>
+        ) : (
+          <>
         <View style={styles.disclosureCard}>
           <Feather name="info" size={16} color={Colors.light.accent} />
           <ThemedText style={styles.disclosureText}>{MANUAL_PAYOUT_NOTICE}</ThemedText>
         </View>
 
+        <BankDetailsCard
+          bankAccountLabel={snapshot.bankAccountLabel}
+          onSave={async (input) => {
+            if (!session?.access_token) {
+              return { error: "Sign in to save bank details." };
+            }
+            const result = await updateSellerBankDetails(input, session.access_token);
+            if (result.error) return result;
+            await refreshWallet();
+            return {};
+          }}
+        />
+
         <View style={styles.balanceCard}>
           <ThemedText style={styles.balanceLabel}>Available Balance</ThemedText>
-          <ThemedText style={styles.balanceAmount}>
-            {formatInr(snapshot.availableBalance)}
-          </ThemedText>
+          <View style={styles.balanceAmountWrap}>
+            <ThemedText
+              style={styles.balanceAmount}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.45}
+              maxFontSizeMultiplier={1}
+            >
+              {formatInr(snapshot.availableBalance)}
+            </ThemedText>
+          </View>
           <Pressable
             style={[styles.withdrawBtn, !bankLinked && styles.withdrawBtnDisabled]}
             testID="button-withdraw"
@@ -108,7 +140,12 @@ export default function SellerWalletScreen() {
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <Feather name="clock" size={18} color="#D4943A" />
-            <ThemedText style={styles.summaryValue}>
+            <ThemedText
+              style={styles.summaryValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
               {formatInr(snapshot.pendingPayout)}
             </ThemedText>
             <ThemedText style={styles.summaryLabel}>
@@ -117,7 +154,12 @@ export default function SellerWalletScreen() {
           </View>
           <View style={styles.summaryCard}>
             <Feather name="trending-up" size={18} color="#4A5A2B" />
-            <ThemedText style={styles.summaryValue}>
+            <ThemedText
+              style={styles.summaryValue}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
               {formatInr(snapshot.totalEarned)}
             </ThemedText>
             <ThemedText style={styles.summaryLabel}>Total Earned</ThemedText>
@@ -161,6 +203,8 @@ export default function SellerWalletScreen() {
             <TransactionRow key={txn.id} txn={txn} />
           ))}
         </View>
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -168,26 +212,6 @@ export default function SellerWalletScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.light.backgroundRoot },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-  },
-  backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.light.cardBackground,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontFamily: "Nunito_700Bold",
-    color: Colors.light.text,
-  },
   content: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing.lg,
@@ -211,25 +235,41 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.accent,
     borderRadius: BorderRadius.md,
     padding: Spacing.xl,
-    alignItems: "center",
+    alignItems: "stretch",
     gap: Spacing.md,
   },
   balanceLabel: {
     fontSize: 14,
     fontFamily: "Nunito_400Regular",
     color: "rgba(255,255,255,0.75)",
+    textAlign: "center",
+  },
+  balanceAmountWrap: {
+    width: "100%",
+    alignSelf: "stretch",
+    paddingHorizontal: Spacing.sm,
+    minHeight: 48,
+    justifyContent: "center",
+    alignItems: "center",
   },
   balanceAmount: {
     fontSize: 36,
+    lineHeight: 44,
     fontFamily: "Nunito_700Bold",
     color: "#FFFFFF",
+    width: "100%",
+    textAlign: "center",
+    paddingHorizontal: Spacing.xs,
   },
   withdrawBtn: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    width: "100%",
     gap: 6,
     backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
     paddingVertical: 10,
     borderRadius: BorderRadius.full,
     marginTop: Spacing.sm,
@@ -256,8 +296,11 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     fontSize: 16,
+    lineHeight: 22,
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
+    width: "100%",
+    textAlign: "center",
   },
   summaryLabel: {
     fontSize: 12,
@@ -341,5 +384,29 @@ const styles = StyleSheet.create({
   txnAmount: {
     fontSize: 14,
     fontFamily: "Nunito_700Bold",
+  },
+  stateBlock: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.xl * 2,
+  },
+  stateText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    paddingHorizontal: Spacing.lg,
+  },
+  retryBtn: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    backgroundColor: Colors.light.accent,
+  },
+  retryBtnText: {
+    fontSize: 14,
+    fontFamily: "Nunito_700Bold",
+    color: "#FFFFFF",
   },
 });

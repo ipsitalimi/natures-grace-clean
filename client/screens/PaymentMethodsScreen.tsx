@@ -2,22 +2,20 @@ import React, { useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   Pressable,
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { Colors, Spacing, BorderRadius } from "@/constants/theme";
+import { PageLayout, Card } from "@/components/layout";
+import { LayoutSpacing } from "@/constants/layout";
+import { Colors, BorderRadius } from "@/constants/theme";
 import { useAuth } from "@/context/AuthContext";
 import { usePaymentMethods } from "@/context/PaymentMethodsContext";
 import type { PaymentMethodCardView } from "@/data/paymentMethods";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
 
 function PaymentCard({
   card,
@@ -29,10 +27,8 @@ function PaymentCard({
   onSetDefault: () => void;
 }) {
   return (
-    <Pressable
-      style={styles.card}
-      onPress={onSetDefault}
-      disabled={card.isDefault}
+    <Card
+      onPress={card.isDefault ? undefined : onSetDefault}
       testID={`payment-card-${card.id}`}
     >
       <View style={styles.cardContent}>
@@ -60,13 +56,11 @@ function PaymentCard({
           <Feather name="trash-2" size={18} color="#D4534A" />
         </Pressable>
       </View>
-    </Pressable>
+    </Card>
   );
 }
 
 export default function PaymentMethodsScreen() {
-  const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
   const { session } = useAuth();
   const {
     cardViews,
@@ -150,196 +144,139 @@ export default function PaymentMethodsScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.headerRow, { paddingTop: getHeaderPaddingTop(insets.top) }]}>
-        <Pressable style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <Feather name="arrow-left" size={22} color={Colors.light.accent} />
-        </Pressable>
-        <View style={styles.headerCenter} />
-        <Pressable
-          style={styles.headerIconButton}
-          onPress={() => navigation.navigate("Notifications" as never)}
-          testID="button-notifications"
-        >
-          <Feather name="bell" size={22} color={Colors.light.accent} />
-        </Pressable>
+    <PageLayout
+      title="Payment References"
+      titleInHeader
+      header="back"
+      contentContainerStyle={styles.content}
+    >
+      <View style={styles.infoBanner}>
+        <Feather name="info" size={16} color={Colors.light.accent} />
+        <ThemedText style={styles.infoBannerText}>
+          Saved cards are stored for your reference only. Checkout still uses Razorpay and does not charge these cards automatically.
+        </ThemedText>
       </View>
 
-      <View style={styles.titleSection}>
-        <ThemedText style={styles.pageTitle}>Payment References</ThemedText>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
-        ]}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.infoBanner}>
-          <Feather name="info" size={16} color={Colors.light.accent} />
-          <ThemedText style={styles.infoBannerText}>
-            Saved cards are stored for your reference only. Checkout still uses Razorpay and does not charge these cards automatically.
-          </ThemedText>
+      {methodsLoading ? (
+        <View style={styles.loadingRow}>
+          <ActivityIndicator color={Colors.light.accent} />
+          <ThemedText style={styles.loadingText}>Loading payment methods…</ThemedText>
         </View>
+      ) : null}
 
-        {methodsLoading ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={Colors.light.accent} />
-            <ThemedText style={styles.loadingText}>Loading payment methods…</ThemedText>
-          </View>
-        ) : null}
+      {methodsError ? (
+        <ThemedText style={styles.errorText}>{methodsError}</ThemedText>
+      ) : null}
 
-        {methodsError ? (
-          <ThemedText style={styles.errorText}>{methodsError}</ThemedText>
-        ) : null}
+      {actionError ? <ThemedText style={styles.errorText}>{actionError}</ThemedText> : null}
 
-        {actionError ? <ThemedText style={styles.errorText}>{actionError}</ThemedText> : null}
+      {!session?.user && isSupabaseConfigured() ? (
+        <ThemedText style={styles.errorText}>Sign in to manage payment methods.</ThemedText>
+      ) : null}
 
-        {!session?.user && isSupabaseConfigured() ? (
-          <ThemedText style={styles.errorText}>Sign in to manage payment methods.</ThemedText>
-        ) : null}
+      {!methodsLoading && !methodsError && cardViews.length === 0 ? (
+        <ThemedText style={styles.emptyText}>No saved payment references yet.</ThemedText>
+      ) : null}
 
-        {!methodsLoading && !methodsError && cardViews.length === 0 ? (
-          <ThemedText style={styles.emptyText}>No saved payment references yet.</ThemedText>
-        ) : null}
+      {cardViews.map((card) => (
+        <PaymentCard
+          key={card.id}
+          card={card}
+          onDelete={() => handleDelete(card.id)}
+          onSetDefault={() => handleSetDefault(card.id)}
+        />
+      ))}
 
-        {cardViews.map((card) => (
-          <PaymentCard
-            key={card.id}
-            card={card}
-            onDelete={() => handleDelete(card.id)}
-            onSetDefault={() => handleSetDefault(card.id)}
+      {showAddForm ? (
+        <Card style={styles.addForm}>
+          <ThemedText style={styles.formLabel}>Card brand</ThemedText>
+          <TextInput
+            style={styles.input}
+            value={brand}
+            onChangeText={setBrand}
+            placeholder="Visa"
+            placeholderTextColor={Colors.light.textSecondary}
+            testID="input-card-brand"
           />
-        ))}
-
-        {showAddForm ? (
-          <View style={styles.addForm}>
-            <ThemedText style={styles.formLabel}>Card brand</ThemedText>
-            <TextInput
-              style={styles.input}
-              value={brand}
-              onChangeText={setBrand}
-              placeholder="Visa"
-              placeholderTextColor={Colors.light.textSecondary}
-              testID="input-card-brand"
-            />
-            <ThemedText style={styles.formLabel}>Last 4 digits</ThemedText>
-            <TextInput
-              style={styles.input}
-              value={last4}
-              onChangeText={setLast4}
-              placeholder="4242"
-              placeholderTextColor={Colors.light.textSecondary}
-              keyboardType="number-pad"
-              maxLength={4}
-              testID="input-card-last4"
-            />
-            <ThemedText style={styles.formLabel}>Expiry (MM/YY)</ThemedText>
-            <TextInput
-              style={styles.input}
-              value={expires}
-              onChangeText={setExpires}
-              placeholder="09/27"
-              placeholderTextColor={Colors.light.textSecondary}
-              testID="input-card-expiry"
-            />
-            <ThemedText style={styles.formHint}>
-              Only masked details are stored — never your full card number or CVV.
-            </ThemedText>
-          </View>
-        ) : null}
-
-        {confirmation ? (
-          <ThemedText style={styles.confirmationText} testID="text-payment-added">
-            Payment Method Added
+          <ThemedText style={styles.formLabel}>Last 4 digits</ThemedText>
+          <TextInput
+            style={styles.input}
+            value={last4}
+            onChangeText={setLast4}
+            placeholder="4242"
+            placeholderTextColor={Colors.light.textSecondary}
+            keyboardType="number-pad"
+            maxLength={4}
+            testID="input-card-last4"
+          />
+          <ThemedText style={styles.formLabel}>Expiry (MM/YY)</ThemedText>
+          <TextInput
+            style={styles.input}
+            value={expires}
+            onChangeText={setExpires}
+            placeholder="09/27"
+            placeholderTextColor={Colors.light.textSecondary}
+            testID="input-card-expiry"
+          />
+          <ThemedText style={styles.formHint}>
+            Only masked details are stored — never your full card number or CVV.
           </ThemedText>
-        ) : null}
+        </Card>
+      ) : null}
 
+      {confirmation ? (
+        <ThemedText style={styles.confirmationText} testID="text-payment-added">
+          Payment Method Added
+        </ThemedText>
+      ) : null}
+
+      <Pressable
+        style={[styles.addButton, submitting && styles.addButtonDisabled]}
+        onPress={handleAddPress}
+        disabled={submitting}
+        testID="button-add-payment"
+      >
+        {submitting ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <>
+            <Feather name="plus" size={18} color="#FFFFFF" />
+            <ThemedText style={styles.addButtonText}>
+              {showAddForm ? "Save Payment Method" : "Add Payment Method"}
+            </ThemedText>
+          </>
+        )}
+      </Pressable>
+
+      {showAddForm ? (
         <Pressable
-          style={[styles.addButton, submitting && styles.addButtonDisabled]}
-          onPress={handleAddPress}
-          disabled={submitting}
-          testID="button-add-payment"
+          style={styles.cancelLink}
+          onPress={() => {
+            setShowAddForm(false);
+            setActionError(null);
+          }}
+          testID="button-cancel-add-payment"
         >
-          {submitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <>
-              <Feather name="plus" size={18} color="#FFFFFF" />
-              <ThemedText style={styles.addButtonText}>
-                {showAddForm ? "Save Payment Method" : "Add Payment Method"}
-              </ThemedText>
-            </>
-          )}
+          <ThemedText style={styles.cancelLinkText}>Cancel</ThemedText>
         </Pressable>
-
-        {showAddForm ? (
-          <Pressable
-            style={styles.cancelLink}
-            onPress={() => {
-              setShowAddForm(false);
-              setActionError(null);
-            }}
-            testID="button-cancel-add-payment"
-          >
-            <ThemedText style={styles.cancelLinkText}>Cancel</ThemedText>
-          </Pressable>
-        ) : null}
-      </ScrollView>
-    </View>
+      ) : null}
+    </PageLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: 8,
-    backgroundColor: Colors.light.backgroundRoot,
-  },
-  headerIconButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-  },
-  titleSection: {
-    alignItems: "center",
-    marginBottom: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
-  },
-  pageTitle: {
-    fontSize: 34,
-    fontWeight: "600",
-    color: Colors.light.accent,
-    fontFamily: "ui-serif",
-    letterSpacing: 0.5,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    gap: 10,
+  content: {
+    gap: LayoutSpacing.sm,
+    paddingTop: LayoutSpacing.sm,
   },
   infoBanner: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: Spacing.sm,
+    gap: LayoutSpacing.sm,
     backgroundColor: `${Colors.light.accent}12`,
     borderRadius: BorderRadius.sm,
-    padding: Spacing.md,
-    marginBottom: Spacing.sm,
+    padding: LayoutSpacing.md,
+    marginBottom: LayoutSpacing.sm,
   },
   infoBannerText: {
     flex: 1,
@@ -350,8 +287,8 @@ const styles = StyleSheet.create({
   loadingRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: Spacing.sm,
+    gap: LayoutSpacing.sm,
+    marginBottom: LayoutSpacing.sm,
   },
   loadingText: {
     fontSize: 14,
@@ -366,12 +303,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.light.textSecondary,
     textAlign: "center",
-    marginBottom: Spacing.sm,
-  },
-  card: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
+    marginBottom: LayoutSpacing.sm,
   },
   cardContent: {
     flexDirection: "row",
@@ -384,7 +316,7 @@ const styles = StyleSheet.create({
     backgroundColor: `${Colors.light.accent}10`,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: Spacing.md,
+    marginRight: LayoutSpacing.md,
   },
   cardInfo: {
     flex: 1,
@@ -392,7 +324,7 @@ const styles = StyleSheet.create({
   cardNameRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
+    gap: LayoutSpacing.sm,
     marginBottom: 2,
   },
   cardType: {
@@ -402,7 +334,7 @@ const styles = StyleSheet.create({
   },
   defaultBadge: {
     backgroundColor: `${Colors.light.accent}15`,
-    paddingHorizontal: 8,
+    paddingHorizontal: LayoutSpacing.sm,
     paddingVertical: 2,
     borderRadius: 6,
   },
@@ -416,24 +348,21 @@ const styles = StyleSheet.create({
     color: Colors.light.textSecondary,
   },
   deleteButton: {
-    padding: 8,
+    padding: LayoutSpacing.sm,
   },
   addForm: {
-    backgroundColor: Colors.light.cardBackground,
-    borderRadius: BorderRadius.sm,
-    padding: Spacing.lg,
     gap: 6,
   },
   formLabel: {
     fontSize: 13,
     fontWeight: "600",
     color: Colors.light.textSecondary,
-    marginTop: 4,
+    marginTop: LayoutSpacing.xs,
   },
   input: {
     backgroundColor: Colors.light.backgroundRoot,
     borderRadius: BorderRadius.sm,
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: LayoutSpacing.md,
     paddingVertical: 12,
     fontSize: 15,
     color: Colors.light.text,
@@ -443,7 +372,7 @@ const styles = StyleSheet.create({
   formHint: {
     fontSize: 12,
     color: Colors.light.textSecondary,
-    marginTop: Spacing.sm,
+    marginTop: LayoutSpacing.sm,
     lineHeight: 18,
   },
   confirmationText: {
@@ -451,17 +380,17 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Colors.light.accent,
     textAlign: "center",
-    marginTop: Spacing.sm,
+    marginTop: LayoutSpacing.sm,
   },
   addButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.sm,
-    paddingVertical: 16,
+    paddingVertical: LayoutSpacing.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: Spacing.md,
+    gap: LayoutSpacing.sm,
+    marginTop: LayoutSpacing.md,
   },
   addButtonDisabled: {
     opacity: 0.5,
@@ -473,7 +402,7 @@ const styles = StyleSheet.create({
   },
   cancelLink: {
     alignItems: "center",
-    paddingVertical: Spacing.sm,
+    paddingVertical: LayoutSpacing.sm,
   },
   cancelLinkText: {
     fontSize: 14,
