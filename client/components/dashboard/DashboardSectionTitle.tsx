@@ -33,10 +33,12 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontSize: 16,
+    lineHeight: 22,
     fontWeight: "700",
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
     marginBottom: LayoutSpacing.sm,
     marginTop: LayoutSpacing.xs,
+    includeFontPadding: false,
   },
 });

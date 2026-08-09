@@ -124,6 +124,7 @@ export default function SessionSummaryScreen() {
         durationMinutes: duration,
         practitionerId,
         accessToken,
+        userId: session?.user?.id,
         customerName: profile?.full_name ?? undefined,
         customerEmail: profile?.email ?? session?.user?.email ?? undefined,
         booking: {
@@ -164,7 +165,15 @@ export default function SessionSummaryScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.practitionerCard}>
-          <Image source={{ uri: practitioner.photo }} style={styles.practitionerPhoto} />
+          {practitioner.photo ? (
+            <Image source={{ uri: practitioner.photo }} style={styles.practitionerPhoto} />
+          ) : (
+            <View style={[styles.practitionerPhoto, styles.practitionerPhotoPlaceholder]}>
+              <ThemedText style={styles.practitionerPhotoInitial}>
+                {(practitioner.name || "?").charAt(0).toUpperCase()}
+              </ThemedText>
+            </View>
+          )}
           <View style={styles.practitionerInfo}>
             <ThemedText style={styles.practitionerName}>{practitioner.name}</ThemedText>
             <ThemedText style={styles.practitionerCategory}>
@@ -277,15 +286,28 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     backgroundColor: Colors.light.backgroundRoot,
   },
+  practitionerPhotoPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${Colors.light.accent}15`,
+  },
+  practitionerPhotoInitial: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: Colors.light.accent,
+  },
   practitionerInfo: {
     marginLeft: Spacing.md,
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   practitionerName: {
     fontSize: 16,
     fontWeight: "600",
     color: Colors.light.text,
     marginBottom: 2,
+    flexShrink: 1,
   },
   practitionerCategory: {
     fontSize: 13,
@@ -327,11 +349,17 @@ const styles = StyleSheet.create({
   summaryLabel: {
     fontSize: 14,
     color: Colors.light.textSecondary,
+    flexShrink: 0,
+    marginRight: 12,
   },
   summaryValue: {
     fontSize: 14,
     color: Colors.light.text,
     fontWeight: "500",
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    textAlign: "right",
   },
   divider: {
     height: 1,

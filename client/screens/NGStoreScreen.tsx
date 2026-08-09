@@ -443,13 +443,18 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
+    lineHeight: 24,
     fontWeight: "600",
     color: Colors.light.text,
     marginBottom: 2,
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   sectionDescription: {
     fontSize: 13,
+    lineHeight: 18,
     color: Colors.light.textSecondary,
+    flexShrink: 1,
   },
   productsGrid: {
     flexDirection: "row",

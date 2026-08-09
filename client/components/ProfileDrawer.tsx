@@ -309,7 +309,7 @@ export default function ProfileDrawer({ visible, onClose }: ProfileDrawerProps) 
               />
               <MenuItem
                 icon={<CreditCardIcon size={20} color={Colors.light.accent} />}
-                title="Payment references"
+                title="Payments"
                 badge={paymentBadge}
                 onPress={() => goTo("PaymentMethods")}
               />

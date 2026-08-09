@@ -105,15 +105,14 @@ BEGIN
   IF cardinality(v_product_ids) > 0 THEN
     DELETE FROM public.cart_items WHERE product_id = ANY (v_product_ids);
     DELETE FROM public.order_items WHERE product_id = ANY (v_product_ids);
-    DELETE FROM public.favorite_items
-    WHERE item_type = 'product' AND item_id IN (SELECT id::text FROM unnest(v_product_ids) AS id);
+    DELETE FROM public.favorite_items WHERE item_type = 'product' AND item_id = ANY (v_product_ids::text[]);
     DELETE FROM public.reviews WHERE product_id = ANY (v_product_ids);
     DELETE FROM public.products WHERE id = ANY (v_product_ids);
   END IF;
 
   IF cardinality(v_practitioner_ids) > 0 THEN
     DELETE FROM public.favorite_items
-    WHERE item_type = 'practitioner' AND item_id IN (SELECT id::text FROM unnest(v_practitioner_ids) AS id);
+    WHERE item_type = 'practitioner' AND item_id = ANY (v_practitioner_ids::text[]);
     DELETE FROM public.reviews WHERE practitioner_id = ANY (v_practitioner_ids);
     DELETE FROM public.practitioner_bookings WHERE practitioner_id = ANY (v_practitioner_ids);
     DELETE FROM public.practitioner_availability WHERE practitioner_id = ANY (v_practitioner_ids);

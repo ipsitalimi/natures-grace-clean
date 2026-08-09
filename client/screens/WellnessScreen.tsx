@@ -238,11 +238,13 @@ const styles = StyleSheet.create({
   },
   sectionHeading: {
     fontSize: 16,
+    lineHeight: 22,
     fontWeight: "700",
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
     textAlign: "center",
     marginBottom: LayoutSpacing.md,
+    includeFontPadding: false,
   },
   loadingContainer: {
     flex: 1,
@@ -317,8 +319,11 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     marginBottom: LayoutSpacing.xs,
     textAlign: "center",
-    lineHeight: 19,
-    minHeight: 38,
+    lineHeight: 20,
+    minHeight: 40,
+    width: "100%",
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   categoryDescriptionWrap: {
     flex: 1,

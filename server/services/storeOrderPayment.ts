@@ -26,7 +26,7 @@ export async function createStoreRazorpayOrder(params: {
 
   const { data: order, error: fetchError } = await supabase
     .from("orders")
-    .select("id, user_id, payment_status, total")
+    .select("id, user_id, payment_status, total, razorpay_order_id")
     .eq("id", params.storeOrderId)
     .maybeSingle();
 
@@ -48,6 +48,21 @@ export async function createStoreRazorpayOrder(params: {
   }
 
   const amountInr = validated.amountInr;
+
+  // Reuse an existing Razorpay order for this pending store order (idempotent retries).
+  const existingRazorpayOrderId = (order as { razorpay_order_id?: string | null }).razorpay_order_id;
+  if (existingRazorpayOrderId) {
+    const keyId = process.env.RAZORPAY_KEY_ID?.trim() ?? null;
+    return {
+      ok: true,
+      razorpayOrderId: existingRazorpayOrderId,
+      amountPaise: Math.round(amountInr * 100),
+      amountInr,
+      currency: "INR",
+      keyId,
+      devMode: !isCheckoutConfigured(),
+    };
+  }
 
   const result = await createBookingOrder({
     amountInr,

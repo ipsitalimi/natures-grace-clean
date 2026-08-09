@@ -49,7 +49,14 @@ export type DbBookingRow = {
   completed_at: string | null;
 };
 
-export type PayoutStatus = "Pending" | "Processing" | "Completed" | "Failed" | "Cancelled";
+export type PayoutStatus =
+  | "Pending"
+  | "Under Review"
+  | "Processing"
+  | "Completed"
+  | "Rejected"
+  | "Failed"
+  | "Cancelled";
 
 export type PractitionerWalletTransaction = {
   id: string;

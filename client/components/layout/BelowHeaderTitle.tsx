@@ -33,11 +33,15 @@ export default function BelowHeaderTitle({ children, style, testID }: BelowHeade
 
 const styles = StyleSheet.create({
   wrap: {
+    width: "100%",
     alignItems: "center",
     paddingHorizontal: Layout.gutter,
     marginBottom: LayoutSpacing.md,
+    overflow: "visible",
   },
   title: {
     ...BelowHeaderTitleStyle,
+    width: "100%",
+    flexShrink: 1,
   },
 });

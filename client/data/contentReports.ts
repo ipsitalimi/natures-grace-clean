@@ -6,6 +6,7 @@ export type ContentReportTargetType =
   | "discussion_thread"
   | "discussion_reply"
   | "review"
+  | "gratitude"
   | "event"
   | "product"
   | "other";

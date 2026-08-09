@@ -107,11 +107,13 @@ const styles = StyleSheet.create({
   },
   sectionHeading: {
     fontSize: 16,
+    lineHeight: 22,
     fontWeight: "700",
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
     textAlign: "center",
     marginBottom: LayoutSpacing.md,
+    includeFontPadding: false,
   },
   subcategoryCard: {
     flexDirection: "row",
@@ -123,13 +125,19 @@ const styles = StyleSheet.create({
   },
   subcategoryInfo: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    paddingRight: 8,
   },
   subcategoryName: {
     fontSize: 15,
+    lineHeight: 22,
     fontWeight: "600",
     color: Colors.light.text,
     marginBottom: 3,
     fontFamily: "Nunito_700Bold",
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   subcategoryCount: {
     fontSize: 12,

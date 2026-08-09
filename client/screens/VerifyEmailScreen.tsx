@@ -162,15 +162,19 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
+    lineHeight: 34,
     fontWeight: "700",
     color: Colors.light.accent,
     textAlign: "center",
     marginBottom: Spacing.sm,
+    includeFontPadding: false,
   },
   subtitle: {
     fontSize: 15,
+    lineHeight: 22,
     color: Colors.light.textMuted,
     textAlign: "center",
+    includeFontPadding: false,
   },
   emailText: {
     fontSize: 16,

@@ -201,9 +201,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
+    lineHeight: 34,
     fontWeight: "700",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
+    textAlign: "center",
+    includeFontPadding: false,
   },
   subtitle: {
     fontSize: 14,
@@ -211,6 +214,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 8,
     lineHeight: 20,
+    includeFontPadding: false,
   },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: Spacing.lg },

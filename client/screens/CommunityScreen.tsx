@@ -276,11 +276,14 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: 22,
+    lineHeight: 30,
     fontWeight: "600",
     color: "#FFFFFF",
     textAlign: "center",
     fontFamily: "ui-serif",
     marginBottom: 8,
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   heroSubtitle: {
     fontSize: 14,

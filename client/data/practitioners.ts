@@ -108,7 +108,7 @@ export const categories: Category[] = [
       { id: "naturopathy", name: "Naturopathy", icon: "sun" },
       { id: "hypnotherapy", name: "Hypnotherapy", icon: "eye" },
       { id: "yoga-pranayam", name: "Yoga", icon: "activity" },
-      { id: "neo-natal-pregnancy-yoga", name: "Neo Natal Peg Yoga", icon: "sunrise" },
+      { id: "neo-natal-pregnancy-yoga", name: "Pre Natal (Pregnancy) Yoga", icon: "sunrise" },
       { id: "garbsanskar-therapy", name: "Garbsanskar", icon: "sunrise" },
       { id: "homeopathy", name: "Homeopathy", icon: "droplet" },
       { id: "ayurveda", name: "Ayurveda", icon: "feather" },

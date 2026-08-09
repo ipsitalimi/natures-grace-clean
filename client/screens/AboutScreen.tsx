@@ -169,10 +169,13 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontSize: 24,
+    lineHeight: 32,
     fontWeight: "700",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
     marginBottom: LayoutSpacing.xs,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   version: {
     fontSize: 13,

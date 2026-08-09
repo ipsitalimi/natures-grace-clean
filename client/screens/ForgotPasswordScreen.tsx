@@ -164,10 +164,13 @@ const styles = StyleSheet.create({
   },
   pageTitle: {
     fontSize: 26,
+    lineHeight: 34,
     fontWeight: "700",
     color: Colors.light.accent,
     marginTop: Spacing.md,
     letterSpacing: 0.3,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   description: {
     fontSize: 15,

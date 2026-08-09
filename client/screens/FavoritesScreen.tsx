@@ -43,7 +43,7 @@ function FavoriteCard({
         </View>
         <Pressable
           onPress={onRemove}
-          hitSlop={8}
+          hitSlop={12}
           testID={`button-remove-favorite-${item.id}`}
         >
           <Feather name="heart" size={20} color="#D4534A" />

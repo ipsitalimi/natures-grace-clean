@@ -28,6 +28,8 @@ export default function PageSubtitle({ children, style, testID }: PageSubtitlePr
 const styles = StyleSheet.create({
   subtitle: {
     ...PageSubtitleStyle,
+    width: "100%",
+    flexShrink: 1,
     paddingHorizontal: Layout.gutter,
   },
 });

@@ -292,9 +292,12 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 15,
+    lineHeight: 22,
     fontWeight: "700",
     color: Colors.light.textMuted,
     marginTop: 10,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   formArea: {
     gap: 16,

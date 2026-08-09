@@ -140,9 +140,12 @@ const styles = StyleSheet.create({
     marginBottom: LayoutSpacing.md,
     gap: LayoutSpacing.xs,
     width: "100%",
+    overflow: "visible",
   },
   subtitleBlock: {
     alignItems: "center",
     marginBottom: LayoutSpacing.md,
+    width: "100%",
+    overflow: "visible",
   },
 });

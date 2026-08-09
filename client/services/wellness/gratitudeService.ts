@@ -157,3 +157,35 @@ export async function copyGratitudeToMine(input: {
     authorName: input.authorName,
   });
 }
+
+export async function deleteGratitudeEntry(id: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+
+  const { error } = await supabase
+    .from("gratitude_entries")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error("[gratitudeService] deleteGratitudeEntry:", error.message);
+    return false;
+  }
+  return true;
+}
+
+export async function hideGratitudeEntry(id: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+
+  const { error } = await supabase
+    .from("gratitude_entries")
+    .update({ is_public: false })
+    .eq("id", id);
+
+  if (error) {
+    console.error("[gratitudeService] hideGratitudeEntry:", error.message);
+    return false;
+  }
+  return true;
+}

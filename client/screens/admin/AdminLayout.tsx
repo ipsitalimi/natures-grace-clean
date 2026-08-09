@@ -14,6 +14,7 @@ import ScreenHeader from "@/components/layout/ScreenHeader";
 import { Colors } from "@/constants/theme";
 import { Layout, LayoutSpacing } from "@/constants/layout";
 import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const DRAWER_WIDTH = 260;
 
@@ -90,6 +91,7 @@ export default function AdminLayout({
   children,
 }: AdminLayoutProps) {
   const { appNameDisplay, appNameMuted, loading: brandLoading } = useAppBrandCopy();
+  const insets = useSafeAreaInsets();
   const [headerOffset, setHeaderOffset] = useState(0);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerMounted, setDrawerMounted] = React.useState(false);
@@ -294,9 +296,11 @@ export default function AdminLayout({
           <View style={styles.drawerDivider} />
 
           <Pressable
-            style={styles.drawerLogout}
+            style={[styles.drawerLogout, { paddingBottom: Math.max(insets.bottom, LayoutSpacing.md) }]}
             onPress={handleLogout}
             testID="button-admin-logout"
+            accessibilityRole="button"
+            accessibilityLabel="Log out"
           >
             <Feather name="log-out" size={18} color={Colors.light.textMuted} />
             <ThemedText style={styles.drawerLogoutText}>Logout</ThemedText>

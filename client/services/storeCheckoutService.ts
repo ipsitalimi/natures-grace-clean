@@ -1,3 +1,4 @@
+import { buildBookingReceipt } from "@/lib/checkoutIdempotency";
 import { tryGetApiBaseUrl } from "@/lib/apiBase";
 import { getRazorpayKeyId } from "@/lib/razorpayKey";
 import { openRazorpayCheckout } from "@/lib/razorpayCheckout";
@@ -202,16 +203,24 @@ export async function runBookingCheckoutPayment(params: {
   durationMinutes: number;
   practitionerId: string;
   accessToken: string;
+  userId?: string;
   booking: BookingCheckoutDraft;
   customerName?: string;
   customerEmail?: string;
 }): Promise<BookingCheckoutResult> {
-  const receipt = `bk_${Date.now().toString(36)}`;
+  const receipt = buildBookingReceipt({
+    userId: params.userId ?? "session",
+    practitionerId: params.practitionerId,
+    offeringId: params.booking.offeringId,
+    sessionDate: params.booking.sessionDate,
+    sessionTime: params.booking.sessionTime,
+  });
   if (__DEV__) {
     console.log("[bookingCheckout] runBookingCheckoutPayment start", {
       amountInr: params.amountInr,
       practitionerId: params.practitionerId,
       offeringId: params.booking.offeringId,
+      receipt,
     });
   }
   const order = await createCheckoutOrder({

@@ -673,13 +673,16 @@ const styles = StyleSheet.create({
   },
   appTitle: {
     fontSize: 24,
-    lineHeight: 30,
+    lineHeight: 32,
     fontWeight: "600",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
     letterSpacing: 0.3,
     textAlign: "center",
     maxWidth: "100%",
+    width: "100%",
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   appTitleMuted: {
     fontStyle: "italic",

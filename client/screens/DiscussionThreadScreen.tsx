@@ -104,41 +104,29 @@ export default function DiscussionThreadScreen() {
       return;
     }
 
+    const reportDiscussion = (reason: "Spam" | "Inappropriate" | "Other") => {
+      void submitReport({
+        targetType: "discussion_thread",
+        targetId: discussion.id,
+        reason,
+        contentPreview: discussion.question,
+      }).then((created) => {
+        if (created) {
+          Alert.alert("Report submitted", "Thank you. Our team will review this thread.");
+        } else {
+          Alert.alert(
+            "Could not submit report",
+            "Please try again. If this keeps happening, contact Support."
+          );
+        }
+      });
+    };
+
     Alert.alert("Report discussion", "Why are you reporting this thread?", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Spam",
-        onPress: () => void submitReport({
-          targetType: "discussion_thread",
-          targetId: discussion.id,
-          reason: "Spam",
-          contentPreview: discussion.question,
-        }).then((created) => {
-          if (created) Alert.alert("Report submitted", "Thank you. Our team will review this thread.");
-        }),
-      },
-      {
-        text: "Inappropriate",
-        onPress: () => void submitReport({
-          targetType: "discussion_thread",
-          targetId: discussion.id,
-          reason: "Inappropriate",
-          contentPreview: discussion.question,
-        }).then((created) => {
-          if (created) Alert.alert("Report submitted", "Thank you. Our team will review this thread.");
-        }),
-      },
-      {
-        text: "Other",
-        onPress: () => void submitReport({
-          targetType: "discussion_thread",
-          targetId: discussion.id,
-          reason: "Other",
-          contentPreview: discussion.question,
-        }).then((created) => {
-          if (created) Alert.alert("Report submitted", "Thank you. Our team will review this thread.");
-        }),
-      },
+      { text: "Spam", onPress: () => reportDiscussion("Spam") },
+      { text: "Inappropriate", onPress: () => reportDiscussion("Inappropriate") },
+      { text: "Other", onPress: () => reportDiscussion("Other") },
     ]);
   };
 

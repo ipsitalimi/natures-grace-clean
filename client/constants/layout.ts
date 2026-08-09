@@ -1,3 +1,5 @@
+import { Platform, type TextStyle } from "react-native";
+
 import { BorderRadius, Colors, Fonts, Shadows } from "@/constants/theme";
 
 /**
@@ -41,43 +43,60 @@ export const Layout = {
   headerIconSize: 24,
 } as const;
 
+/**
+ * Android often clips serif/custom fonts when includeFontPadding is on or
+ * lineHeight is too tight for device font metrics. Apply to page headings.
+ */
+export const TitleAntiClipStyle: TextStyle = Platform.select({
+  android: {
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  default: {},
+}) as TextStyle;
+
 /** Serif title rendered inline with header icons (same baseline row). */
-export const HeaderInlineTitleStyle = {
+export const HeaderInlineTitleStyle: TextStyle = {
   fontSize: 28,
-  lineHeight: 32,
-  fontWeight: "600" as const,
+  // Slightly taller than fontSize so descenders/diacritics aren't clipped on Android.
+  lineHeight: 36,
+  fontWeight: "600",
   fontFamily: Fonts?.serif ?? "serif",
   letterSpacing: 0.3,
   color: Colors.light.accent,
-  textAlign: "center" as const,
+  textAlign: "center",
+  ...TitleAntiClipStyle,
 };
 
-export const PageTitleStyle = {
+export const PageTitleStyle: TextStyle = {
   fontSize: 28,
-  lineHeight: 34,
-  fontWeight: "600" as const,
+  lineHeight: 36,
+  fontWeight: "600",
   fontFamily: Fonts?.serif ?? "serif",
   letterSpacing: 0.4,
   color: Colors.light.accent,
-  textAlign: "center" as const,
+  textAlign: "center",
+  ...TitleAntiClipStyle,
 };
 
-export const PageSubtitleStyle = {
+export const PageSubtitleStyle: TextStyle = {
   fontSize: 15,
   lineHeight: 22,
   color: Colors.light.textMuted,
-  textAlign: "center" as const,
+  textAlign: "center",
+  ...TitleAntiClipStyle,
 };
 
 /** Large serif title below the header row on legacy stack screens (34px — unchanged). */
-export const BelowHeaderTitleStyle = {
+export const BelowHeaderTitleStyle: TextStyle = {
   fontSize: 34,
-  lineHeight: 40,
-  fontWeight: "600" as const,
+  lineHeight: 42,
+  fontWeight: "600",
   fontFamily: Fonts?.serif ?? "serif",
   letterSpacing: 0.5,
   color: Colors.light.accent,
-  textAlign: "center" as const,
+  textAlign: "center",
+  ...TitleAntiClipStyle,
 };
 
 export const CardTokens = {

@@ -87,11 +87,19 @@ export async function createCheckoutOrder(params: {
         body: responseBody,
       });
     }
-    const json = (await res.json()) as CheckoutOrderResult & { error?: string };
+    const json = (await res.json()) as CheckoutOrderResult & {
+      error?: string;
+      bookingId?: string;
+    };
     if (!res.ok) {
       if (res.status === 401) {
         return {
           error: "Your session expired. Please sign out, sign in again, and retry.",
+        };
+      }
+      if (res.status === 409) {
+        return {
+          error: json.error ?? "You already have a booking for this session time.",
         };
       }
       return { error: json.error ?? `Server error (${res.status})` };

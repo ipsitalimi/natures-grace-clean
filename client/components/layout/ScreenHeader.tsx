@@ -84,7 +84,7 @@ export default function ScreenHeader({
       return (
         <ThemedText
           style={styles.headerTitle}
-          numberOfLines={1}
+          numberOfLines={2}
           adjustsFontSizeToFit
           minimumFontScale={0.75}
           maxFontSizeMultiplier={1.25}
@@ -171,6 +171,7 @@ const styles = StyleSheet.create({
   },
   side: {
     width: Layout.headerSideWidth,
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
@@ -180,9 +181,12 @@ const styles = StyleSheet.create({
   },
   center: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: LayoutSpacing.xs,
+    paddingVertical: LayoutSpacing.xs,
   },
   centerLogo: {
     width: 52,
@@ -221,5 +225,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     ...HeaderInlineTitleStyle,
+    width: "100%",
+    flexShrink: 1,
   },
 });

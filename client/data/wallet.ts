@@ -9,7 +9,14 @@ export type WalletTransactionCategory =
   | "refund"
   | "adjustment";
 
-export type PayoutStatus = "Pending" | "Processing" | "Completed" | "Failed" | "Cancelled";
+export type PayoutStatus =
+  | "Pending"
+  | "Under Review"
+  | "Processing"
+  | "Completed"
+  | "Rejected"
+  | "Failed"
+  | "Cancelled";
 
 export interface WalletTransaction {
   id: string;

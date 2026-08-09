@@ -30,6 +30,8 @@ export default function PageTitle({ children, muted, style, testID }: PageTitleP
 const styles = StyleSheet.create({
   title: {
     ...PageTitleStyle,
+    width: "100%",
+    flexShrink: 1,
     paddingHorizontal: Layout.gutter,
   },
   muted: {

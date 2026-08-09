@@ -266,10 +266,13 @@ const styles = StyleSheet.create({
   },
   eventTitle: {
     fontSize: 26,
+    lineHeight: 34,
     fontWeight: "600",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
     marginBottom: Spacing.md,
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   eventDescription: {
     fontSize: 15,

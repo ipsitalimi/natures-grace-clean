@@ -1,5 +1,10 @@
 export type UserRole = "User" | "Practitioner" | "Seller" | "Admin";
-export type AccountStatus = "Active" | "Inactive" | "Suspended";
+export type AccountStatus =
+  | "Active"
+  | "Inactive"
+  | "Suspended"
+  | "Deletion Requested"
+  | "Deleted";
 export type ApprovalStatus = "Approved" | "Pending" | "Rejected";
 
 export interface ProfileRow {

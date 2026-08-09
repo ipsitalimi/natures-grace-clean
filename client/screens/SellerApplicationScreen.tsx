@@ -152,7 +152,13 @@ export default function SellerApplicationScreen() {
         showNotifications={false}
         onBackPress={handleReturn}
         center={
-          <ThemedText style={styles.screenTitle} numberOfLines={1} adjustsFontSizeToFit>
+          <ThemedText
+            style={styles.screenTitle}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+            maxFontSizeMultiplier={1.25}
+          >
             Become a Seller
           </ThemedText>
         }
@@ -162,6 +168,7 @@ export default function SellerApplicationScreen() {
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <ThemedText style={styles.introText}>
           Sell your wellness products through the {appNameDisplay} community.
@@ -325,9 +332,14 @@ const styles = StyleSheet.create({
   },
   screenTitle: {
     fontSize: 20,
+    lineHeight: 26,
     fontWeight: "700",
     fontFamily: "Nunito_700Bold",
     color: Colors.light.accent,
+    textAlign: "center",
+    width: "100%",
+    flexShrink: 1,
+    includeFontPadding: false,
   },
   scrollView: {
     flex: 1,

@@ -7,6 +7,7 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
@@ -16,6 +17,7 @@ import { useEventRegistrations } from "@/context/EventRegistrationsContext";
 import type { EventRegistration } from "@/data/eventRegistrations";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useModeration } from "@/context/ModerationContext";
+import { useGratitude } from "@/context/GratitudeContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { formatInr } from "@/lib/formatCurrency";
 import { fetchActiveCommunityMemberCount } from "@/services/profileService";
@@ -148,6 +150,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     removeReportedContent,
     banFromReport,
   } = useModeration();
+  const { refreshGratitude } = useGratitude();
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
@@ -193,7 +196,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
 
   const afterModerationAction = async (ok: boolean) => {
     if (!ok) return;
-    await Promise.all([refreshContent(), refreshRemoteConfig()]);
+    await Promise.all([refreshContent(), refreshRemoteConfig(), refreshGratitude()]);
   };
 
   const resetForm = () => {
@@ -231,19 +234,31 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const handleDismissFlag = async (id: string) => {
     const ok = await dismissReport(id);
     await afterModerationAction(ok);
-    if (ok) logActivity(`Flagged item ${id} dismissed`, "event");
+    if (ok) {
+      logActivity(`Flagged item ${id} dismissed`, "event");
+    } else {
+      Alert.alert("Moderation", "Could not dismiss this report. Please try again.");
+    }
   };
 
   const handleRemoveFlag = async (id: string) => {
     const ok = await removeReportedContent(id);
     await afterModerationAction(ok);
-    if (ok) logActivity(`Flagged content ${id} removed`, "event");
+    if (ok) {
+      logActivity(`Flagged content ${id} removed`, "event");
+    } else {
+      Alert.alert("Moderation", "Could not remove this content. Please try again.");
+    }
   };
 
   const handleBanUser = async (id: string) => {
     const ok = await banFromReport(id);
     await afterModerationAction(ok);
-    if (ok) logActivity(`User banned from flagged report ${id}`, "user");
+    if (ok) {
+      logActivity(`User banned from flagged report ${id}`, "user");
+    } else {
+      Alert.alert("Moderation", "Could not ban this user. Please try again.");
+    }
   };
 
   const handleHideEvent = (eventId: string) => {
@@ -252,11 +267,12 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
       <View style={styles.titleRow}>
         <Pressable style={styles.backButton} onPress={onBackToDashboard} testID="button-back-dashboard">
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
@@ -375,7 +391,10 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
             </View>
           </View>
           <ThemedText style={styles.flaggedPreview} numberOfLines={2}>{item.contentPreview}</ThemedText>
-          <ThemedText style={styles.cardDate}>{item.date}</ThemedText>
+          <ThemedText style={styles.cardDate}>
+            {item.date}
+            {item.targetType ? ` · ${item.targetType.replace(/_/g, " ")}` : ""}
+          </ThemedText>
           <View style={styles.flaggedActions}>
             <Pressable
               style={styles.flagActionButton}

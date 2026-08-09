@@ -13,6 +13,7 @@ import { useGratitude, GratitudeEntry } from "@/context/GratitudeContext";
 import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import { useModeration } from "@/context/ModerationContext";
 
 type RootStackParamList = {
   AddGratitude: undefined;
@@ -82,9 +83,16 @@ interface CommunityGratitudeItemProps {
   entry: GratitudeEntry;
   onAddToMine: (entry: GratitudeEntry) => void;
   isOwn: boolean;
+  onReport: (entry: GratitudeEntry) => void;
 }
 
-function CommunityGratitudeItem({ entry, onAddToMine, isOwn, resetKey }: CommunityGratitudeItemProps & { resetKey: string }) {
+function CommunityGratitudeItem({
+  entry,
+  onAddToMine,
+  isOwn,
+  onReport,
+  resetKey,
+}: CommunityGratitudeItemProps & { resetKey: string }) {
   const [added, setAdded] = useState(false);
 
   useEffect(() => {
@@ -108,19 +116,36 @@ function CommunityGratitudeItem({ entry, onAddToMine, isOwn, resetKey }: Communi
           <ThemedText style={styles.communityDate}>{entry.date}</ThemedText>
         </View>
       </View>
-      {!isOwn ? (
-        <Pressable
-          style={[styles.addToMineBtn, added && styles.addToMineBtnDone]}
-          onPress={handleAdd}
-          disabled={added}
-          testID={`add-to-mine-${entry.id}`}
-        >
-          <Feather name={added ? "check" : "plus"} size={14} color={added ? Colors.light.accent : Colors.light.textSecondary} />
-          <ThemedText style={[styles.addToMineText, added && styles.addToMineTextDone]}>
-            {added ? "Added" : "Add to mine"}
-          </ThemedText>
-        </Pressable>
-      ) : null}
+      <View style={styles.communityActions}>
+        {!isOwn ? (
+          <Pressable
+            style={[styles.addToMineBtn, added && styles.addToMineBtnDone]}
+            onPress={handleAdd}
+            disabled={added}
+            testID={`add-to-mine-${entry.id}`}
+          >
+            <Feather
+              name={added ? "check" : "plus"}
+              size={14}
+              color={added ? Colors.light.accent : Colors.light.textSecondary}
+            />
+            <ThemedText style={[styles.addToMineText, added && styles.addToMineTextDone]}>
+              {added ? "Added" : "Add to mine"}
+            </ThemedText>
+          </Pressable>
+        ) : null}
+
+        {!isOwn ? (
+          <Pressable
+            style={styles.reportBtn}
+            onPress={() => onReport(entry)}
+            testID={`report-gratitude-${entry.id}`}
+          >
+            <Feather name="flag" size={14} color={Colors.light.textSecondary} />
+            <ThemedText style={styles.reportText}>Report</ThemedText>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -138,8 +163,46 @@ export default function GratitudeScreen() {
     gratitudeError,
   } = useGratitude();
   const { session } = useAuth();
+  const { submitReport } = useModeration();
   const [activeTab, setActiveTab] = useState<TabType>("mine");
   const communityResetKey = session?.user?.id ?? "guest";
+
+  const submitGratitudeReport = (entry: GratitudeEntry, reason: "Spam" | "Inappropriate" | "Misleading" | "Other") => {
+    void submitReport({
+      targetType: "gratitude",
+      targetId: entry.id,
+      reason,
+      contentPreview: entry.text,
+    }).then((created) => {
+      if (created) {
+        Alert.alert("Report submitted", "Thank you. Our team will review this gratitude.");
+      } else {
+        Alert.alert(
+          "Could not submit report",
+          "Please try again. If this keeps happening, contact Support."
+        );
+      }
+    });
+  };
+
+  const handleReport = (entry: GratitudeEntry) => {
+    if (!isSupabaseConfigured()) {
+      Alert.alert("Unavailable", "Reporting requires Supabase to be configured.");
+      return;
+    }
+    if (!session?.user) {
+      Alert.alert("Sign in required", "Sign in to report content.");
+      return;
+    }
+
+    Alert.alert("Report gratitude", "Why are you reporting this gratitude?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Spam", onPress: () => submitGratitudeReport(entry, "Spam") },
+      { text: "Inappropriate", onPress: () => submitGratitudeReport(entry, "Inappropriate") },
+      { text: "Misleading", onPress: () => submitGratitudeReport(entry, "Misleading") },
+      { text: "Other", onPress: () => submitGratitudeReport(entry, "Other") },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
@@ -264,6 +327,7 @@ export default function GratitudeScreen() {
                 entry={item}
                 onAddToMine={addCommunityToMine}
                 isOwn={item.isOwn ?? item.author === "You"}
+                onReport={handleReport}
                 resetKey={communityResetKey}
               />
             ))
@@ -440,6 +504,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
+  communityActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 10,
+  },
   authorAvatar: {
     width: 34,
     height: 34,
@@ -455,6 +526,8 @@ const styles = StyleSheet.create({
   },
   communityContent: {
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   authorName: {
     fontSize: 13,
@@ -488,6 +561,23 @@ const styles = StyleSheet.create({
   addToMineBtnDone: {
     backgroundColor: `${Colors.light.accent}12`,
     borderColor: Colors.light.accent,
+  },
+  reportBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "rgba(139, 58, 58, 0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(139, 58, 58, 0.25)",
+  },
+  reportText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#8B3A3A",
   },
   addToMineText: {
     fontSize: 12,

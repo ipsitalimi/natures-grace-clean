@@ -114,6 +114,27 @@ async function handleCreateOrder(req: Request, res: Response) {
       return res.status(400).json({ error: validated.error });
     }
 
+    if (body.booking) {
+      const supabase = requireSupabaseAdmin();
+      const { data: existingSlot } = await supabase
+        .from("practitioner_bookings")
+        .select("id, booking_number")
+        .eq("user_id", user.id)
+        .eq("practitioner_id", body.practitionerId)
+        .eq("session_date", body.booking.sessionDate)
+        .eq("session_time", body.booking.sessionTime)
+        .in("booking_status", ["Pending", "Confirmed"])
+        .maybeSingle();
+
+      if (existingSlot) {
+        return res.status(409).json({
+          error: "You already have a booking for this session time.",
+          bookingId: existingSlot.id,
+          bookingNumber: existingSlot.booking_number,
+        });
+      }
+    }
+
     const result = await createBookingOrder({
       amountInr: validated.amountInr,
       receipt: body.receipt ?? `bk_${user.id.slice(0, 8)}_${Date.now()}`,

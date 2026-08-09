@@ -50,7 +50,7 @@ export const DEFAULT_HOME_CONTENT: HomeContent = {
     store: true,
     resources: true,
     journal: true,
-    buddy: true,
+    buddy: false,
     knowAdmin: true,
   },
   featuredPractitionerIds: [],

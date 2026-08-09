@@ -1,18 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, TextInput, ActivityIndicator, Alert } from "react-native";
+import { View, StyleSheet, Pressable, Image, TextInput, ActivityIndicator, Alert } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { ScreenHeader } from "@/components/layout";
+import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import ProductImageView from "@/components/ProductImageView";
 import { useDataContext } from "@/context/DataContext";
 import { useCart } from "@/context/CartContext";
 import { useOrdersContext } from "@/context/OrdersContext";
 import { useAuth } from "@/context/AuthContext";
-import { usePaymentMethods } from "@/context/PaymentMethodsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { runStoreCheckoutPayment } from "@/services/storeCheckoutService";
 import * as ordersService from "@/services/content/ordersService";
@@ -54,8 +54,6 @@ export default function CartScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { storeCategories } = useDataContext();
   const { profile, session } = useAuth();
-  const { cardViews } = usePaymentMethods();
-  const defaultPaymentMethod = cardViews.find((m) => m.isDefault) ?? cardViews[0];
   const { createOrderFromCheckout, refreshOrders } = useOrdersContext();
   const {
     items,
@@ -249,15 +247,14 @@ export default function CartScreen() {
     setPlacingSellerId(null);
 
     if (payment.error) {
-      if (payment.error === "Payment cancelled") {
-        await ordersService.cancelPendingOrder(pendingOrder.id);
-        await refreshOrders();
-      }
+      // Always cancel unpaid Pending orders so retries don't leave orphans / duplicates.
+      await ordersService.cancelPendingOrder(pendingOrder.id);
+      await refreshOrders();
       Alert.alert(
         "Payment",
         payment.error === "Payment cancelled"
           ? "Payment was cancelled. Your pending order has been cancelled."
-          : payment.error
+          : `${payment.error}\n\nNo charge was completed. You can try again.`
       );
       return;
     }
@@ -290,7 +287,7 @@ export default function CartScreen() {
           variant="back"
           showNotifications={false}
           center={
-            <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            <ThemedText style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>
               Cart
             </ThemedText>
           }
@@ -310,7 +307,7 @@ export default function CartScreen() {
           variant="back"
           showNotifications={false}
           center={
-            <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            <ThemedText style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>
               Cart
             </ThemedText>
           }
@@ -329,7 +326,7 @@ export default function CartScreen() {
           variant="back"
           showNotifications={false}
           center={
-            <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+            <ThemedText style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>
               Cart
             </ThemedText>
           }
@@ -358,16 +355,17 @@ export default function CartScreen() {
         variant="back"
         showNotifications={false}
         center={
-          <ThemedText style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>
+          <ThemedText style={styles.headerTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>
             Cart ({cartProducts.length})
           </ThemedText>
         }
       />
 
-      <ScrollView
+      <KeyboardAwareScrollViewCompat
         style={styles.scrollView}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {sellerGroups.map((group) => (
           <View key={group.sellerId} style={styles.sellerGroup}>
@@ -663,27 +661,16 @@ export default function CartScreen() {
         </View>
 
         {isSupabaseConfigured() && session?.user ? (
-          <Pressable
-            style={styles.paymentMethodCard}
-            onPress={() => navigation.navigate("PaymentMethods" as never)}
-            testID="cart-payment-method"
-          >
+          <View style={styles.paymentMethodCard} testID="cart-payment-method">
             <View style={styles.paymentMethodHeader}>
-              <Feather name="credit-card" size={18} color={Colors.light.accent} />
-              <ThemedText style={styles.paymentMethodTitle}>Payment reference</ThemedText>
+              <Feather name="shield" size={18} color={Colors.light.accent} />
+              <ThemedText style={styles.paymentMethodTitle}>Secure payment</ThemedText>
             </View>
-            {defaultPaymentMethod ? (
-              <ThemedText style={styles.paymentMethodText}>
-                {defaultPaymentMethod.type} •••• {defaultPaymentMethod.lastFour}
-                {defaultPaymentMethod.isDefault ? " (default)" : ""}
-              </ThemedText>
-            ) : (
-              <ThemedText style={styles.paymentMethodMuted}>
-              Saved cards are for reference only — Razorpay checkout opens when you place the order
+            <ThemedText style={styles.paymentMethodMuted}>
+              You&apos;ll complete payment securely with Razorpay when you place the order. We never
+              store full card details in the app.
             </ThemedText>
-            )}
-            <ThemedText style={styles.paymentMethodLink}>Manage payment references</ThemedText>
-          </Pressable>
+          </View>
         ) : null}
 
         {singleSellerGroup ? (
@@ -704,7 +691,7 @@ export default function CartScreen() {
             )}
           </Pressable>
         ) : null}
-      </ScrollView>
+      </KeyboardAwareScrollViewCompat>
     </View>
   );
 }
@@ -716,8 +703,12 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
+    lineHeight: 24,
     fontWeight: "600",
     color: Colors.light.accent,
+    flexShrink: 1,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   scrollView: {
     flex: 1,

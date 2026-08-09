@@ -199,18 +199,23 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 30,
+    lineHeight: 38,
     fontFamily: "ui-serif",
     fontWeight: "700",
     color: Colors.light.accent,
     letterSpacing: 0.5,
     marginBottom: 4,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   subtitle: {
     fontSize: 14,
+    lineHeight: 20,
     color: Colors.light.textMuted,
     fontFamily: "Nunito_400Regular",
     textAlign: "center",
     marginBottom: Spacing.md,
+    includeFontPadding: false,
   },
   divider: {
     width: 40,

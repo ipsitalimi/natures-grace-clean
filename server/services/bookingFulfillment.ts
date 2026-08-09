@@ -85,6 +85,26 @@ export async function fulfillBookingPayment(params: {
     return { ok: false, error: "Checkout does not belong to this account" };
   }
 
+  // Prevent duplicate bookings for the same paid slot (retry / double-tap).
+  const { data: slotDup } = await supabase
+    .from("practitioner_bookings")
+    .select("id, booking_number")
+    .eq("user_id", userId)
+    .eq("practitioner_id", draft.practitionerId)
+    .eq("session_date", draft.sessionDate)
+    .eq("session_time", draft.sessionTime)
+    .in("booking_status", ["Pending", "Confirmed"])
+    .maybeSingle();
+
+  if (slotDup) {
+    return {
+      ok: true,
+      bookingId: slotDup.id as string,
+      bookingNumber: slotDup.booking_number as string,
+      alreadyPaid: true,
+    };
+  }
+
   const { data: dup } = await supabase
     .from("practitioner_bookings")
     .select("id, booking_number")

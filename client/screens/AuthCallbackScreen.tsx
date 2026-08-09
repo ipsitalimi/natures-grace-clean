@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, StyleSheet, ActivityIndicator, Pressable } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -13,6 +14,7 @@ type NavProp = NativeStackNavigationProp<RootStackParamList, "AuthCallback">;
 /** Shown while Supabase email / recovery deep links establish a session. */
 export default function AuthCallbackScreen() {
   const navigation = useNavigation<NavProp>();
+  const insets = useSafeAreaInsets();
   const { session, loading, authCallbackError } = useAuth();
   const [timedOut, setTimedOut] = useState(false);
 
@@ -24,7 +26,16 @@ export default function AuthCallbackScreen() {
   const showError = (timedOut && !session && !loading) || Boolean(authCallbackError);
 
   return (
-    <View style={styles.container} testID="screen-auth-callback">
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top, Spacing.xl),
+          paddingBottom: Math.max(insets.bottom, Spacing.xl),
+        },
+      ]}
+      testID="screen-auth-callback"
+    >
       {showError ? (
         <>
           <ThemedText style={styles.title}>Could not complete sign-in</ThemedText>
@@ -36,6 +47,8 @@ export default function AuthCallbackScreen() {
             style={styles.button}
             onPress={() => navigation.reset({ index: 0, routes: [{ name: "Login" }] })}
             testID="button-auth-callback-login"
+            accessibilityRole="button"
+            accessibilityLabel="Back to sign in"
           >
             <ThemedText style={styles.buttonText}>Back to sign in</ThemedText>
           </Pressable>
@@ -55,21 +68,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: Spacing.xl,
+    paddingHorizontal: Spacing.xl,
     backgroundColor: Colors.light.backgroundRoot,
     gap: Spacing.lg,
   },
   title: {
     fontSize: 18,
+    lineHeight: 24,
     fontWeight: "700",
     color: Colors.light.text,
     textAlign: "center",
+    includeFontPadding: false,
   },
   message: {
     fontSize: 15,
     color: Colors.light.textMuted,
     textAlign: "center",
     lineHeight: 22,
+    includeFontPadding: false,
   },
   button: {
     marginTop: Spacing.md,
@@ -77,6 +93,8 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     paddingVertical: 14,
     paddingHorizontal: Spacing.xl,
+    minHeight: 48,
+    justifyContent: "center",
   },
   buttonText: {
     fontSize: 15,

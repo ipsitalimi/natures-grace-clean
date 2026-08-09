@@ -269,7 +269,15 @@ export default function BookSessionScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.practitionerCard}>
-          <Image source={{ uri: practitioner.photo }} style={styles.practitionerPhoto} />
+          {practitioner.photo ? (
+            <Image source={{ uri: practitioner.photo }} style={styles.practitionerPhoto} />
+          ) : (
+            <View style={[styles.practitionerPhoto, styles.practitionerPhotoPlaceholder]}>
+              <ThemedText style={styles.practitionerPhotoInitial}>
+                {(practitioner.name || "?").charAt(0).toUpperCase()}
+              </ThemedText>
+            </View>
+          )}
           <View style={styles.practitionerInfo}>
             <ThemedText style={styles.practitionerName}>{practitioner.name}</ThemedText>
             <ThemedText style={styles.practitionerCategory}>
@@ -488,15 +496,28 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     backgroundColor: Colors.light.backgroundRoot,
   },
+  practitionerPhotoPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: `${Colors.light.accent}15`,
+  },
+  practitionerPhotoInitial: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: Colors.light.accent,
+  },
   practitionerInfo: {
     marginLeft: Spacing.md,
     flex: 1,
+    minWidth: 0,
+    flexShrink: 1,
   },
   practitionerName: {
     fontSize: 16,
     fontWeight: "600",
     color: Colors.light.text,
     marginBottom: 2,
+    flexShrink: 1,
   },
   practitionerCategory: {
     fontSize: 13,

@@ -169,12 +169,22 @@ const styles = StyleSheet.create({
   logoImage: { width: 90, height: 90, borderRadius: 45 },
   appTitle: {
     fontSize: 26,
+    lineHeight: 34,
     fontWeight: "700",
     color: Colors.light.accent,
     marginTop: Spacing.md,
     letterSpacing: 0.3,
+    textAlign: "center",
+    includeFontPadding: false,
   },
-  tagline: { fontSize: 15, color: Colors.light.textMuted, marginTop: 6 },
+  tagline: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: Colors.light.textMuted,
+    marginTop: 6,
+    textAlign: "center",
+    includeFontPadding: false,
+  },
   formArea: { gap: 16 },
   inputWrapper: { gap: 6 },
   inputLabel: {

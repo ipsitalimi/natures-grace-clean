@@ -32,17 +32,21 @@ interface SettingsRowProps {
   label: string;
   onPress: () => void;
   labelMuted?: boolean;
+  disabled?: boolean;
   testID?: string;
 }
 
-function SettingsRow({ label, onPress, labelMuted, testID }: SettingsRowProps) {
+function SettingsRow({ label, onPress, labelMuted, disabled, testID }: SettingsRowProps) {
   return (
     <Pressable
-      style={styles.row}
+      style={[styles.row, disabled ? styles.rowDisabled : undefined]}
       onPress={onPress}
+      disabled={disabled}
       testID={testID ?? `settings-row-${label.toLowerCase().replace(/\s/g, "-")}`}
     >
-      <ThemedText style={[styles.rowLabel, labelMuted ? styles.rowLabelMuted : undefined]}>{label}</ThemedText>
+      <ThemedText style={[styles.rowLabel, labelMuted || disabled ? styles.rowLabelMuted : undefined]}>
+        {label}
+      </ThemedText>
       <Feather name="chevron-right" size={18} color={Colors.light.textSecondary} />
     </Pressable>
   );
@@ -142,6 +146,7 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
+    if (deletionSubmitting) return;
     if (!session?.user) {
       Alert.alert("Sign in required", "Please sign in to delete your account.");
       return;
@@ -165,16 +170,20 @@ export default function SettingsScreen() {
                   style: "destructive",
                   onPress: () => {
                     void (async () => {
+                      if (deletionSubmitting) return;
                       setDeletionSubmitting(true);
-                      const result = await deleteMyAccount(session.access_token);
-                      setDeletionSubmitting(false);
-                      if (result.error) {
-                        Alert.alert("Could not delete account", result.error);
-                        return;
+                      try {
+                        const result = await deleteMyAccount(session.access_token);
+                        if (result.error) {
+                          Alert.alert("Could not delete account", result.error);
+                          return;
+                        }
+                        await refreshProfile();
+                        await signOut();
+                        Alert.alert("Account deleted", "Your account has been permanently deleted.");
+                      } finally {
+                        setDeletionSubmitting(false);
                       }
-                      await refreshProfile();
-                      await signOut();
-                      Alert.alert("Account deleted", "Your account has been permanently deleted.");
                     })();
                   },
                 },
@@ -212,6 +221,7 @@ export default function SettingsScreen() {
             label={deletionSubmitting ? "Deleting account…" : "Delete account"}
             labelMuted={deletionSubmitting}
             onPress={handleDeleteAccount}
+            disabled={deletionSubmitting}
             testID="settings-row-account-deletion"
           />
         </View>
@@ -328,6 +338,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 14,
     paddingHorizontal: LayoutSpacing.md,
+  },
+  rowDisabled: {
+    opacity: 0.55,
   },
   rowLabel: {
     fontSize: 15,

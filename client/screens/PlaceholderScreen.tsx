@@ -94,11 +94,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
+    lineHeight: 34,
     fontWeight: "600",
     color: Colors.light.accent,
     fontFamily: "ui-serif",
     textAlign: "center",
     marginBottom: Spacing.md,
+    includeFontPadding: false,
   },
   subtitle: {
     fontSize: 15,

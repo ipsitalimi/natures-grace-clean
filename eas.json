@@ -12,7 +12,10 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "natures-grace://auth/callback"
+      }
     }
   },
   "submit": {

@@ -53,26 +53,35 @@ export const BorderRadius = {
   full: 9999,
 };
 
+const androidHeadingFix =
+  Platform.OS === "android"
+    ? ({ includeFontPadding: false, textAlignVertical: "center" as const } as const)
+    : ({} as const);
+
 export const Typography = {
   h1: {
     fontSize: 32,
-    lineHeight: 40,
+    lineHeight: 42,
     fontWeight: "700" as const,
+    ...androidHeadingFix,
   },
   h2: {
     fontSize: 28,
-    lineHeight: 36,
+    lineHeight: 38,
     fontWeight: "700" as const,
+    ...androidHeadingFix,
   },
   h3: {
     fontSize: 24,
-    lineHeight: 32,
+    lineHeight: 34,
     fontWeight: "600" as const,
+    ...androidHeadingFix,
   },
   h4: {
     fontSize: 20,
-    lineHeight: 28,
+    lineHeight: 30,
     fontWeight: "600" as const,
+    ...androidHeadingFix,
   },
   body: {
     fontSize: 16,

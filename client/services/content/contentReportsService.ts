@@ -9,6 +9,7 @@ import type {
 import { getSupabase } from "@/lib/supabase";
 import * as discussionsService from "@/services/content/discussionsService";
 import * as reviewsService from "@/services/content/reviewsService";
+import * as gratitudeService from "@/services/wellness/gratitudeService";
 import { updateProfile } from "@/services/profileService";
 
 export type DbContentReportRow = {
@@ -146,6 +147,15 @@ async function resolveContentAuthorId(
     return (data as { user_id?: string | null } | null)?.user_id ?? null;
   }
 
+  if (targetType === "gratitude") {
+    const { data } = await supabase
+      .from("gratitude_entries")
+      .select("user_id")
+      .eq("id", targetId)
+      .maybeSingle();
+    return (data as { user_id?: string | null } | null)?.user_id ?? null;
+  }
+
   return null;
 }
 
@@ -162,8 +172,8 @@ async function applyTargetModeration(
   targetType: ContentReportTargetType,
   targetId: string,
   action: ModerationQueueAction
-): Promise<void> {
-  if (action === "dismiss") return;
+): Promise<boolean> {
+  if (action === "dismiss") return true;
 
   if (targetType === "discussion_thread") {
     if (action === "remove_content" || action === "ban_reporter") {
@@ -172,21 +182,35 @@ async function applyTargetModeration(
         visibility: "Hidden",
       });
     }
-    return;
+    return true;
   }
 
   if (targetType === "discussion_reply") {
     if (action === "remove_content" || action === "ban_reporter") {
       await discussionsService.updateReplyModeration(targetId, "Removed");
     }
-    return;
+    return true;
   }
 
   if (targetType === "review") {
     if (action === "remove_content" || action === "ban_reporter") {
       await reviewsService.updateReviewStatus(targetId, "Flagged");
     }
+    return true;
   }
+
+  if (targetType === "gratitude") {
+    if (action === "remove_content") {
+      return gratitudeService.deleteGratitudeEntry(targetId);
+    }
+
+    // For ban_reporter we hide instead of deleting so we can still resolve author_id.
+    if (action === "ban_reporter") {
+      return gratitudeService.hideGratitudeEntry(targetId);
+    }
+  }
+
+  return true;
 }
 
 export async function applyModerationAction(
@@ -211,7 +235,15 @@ export async function applyModerationAction(
   const report = row as DbContentReportRow;
 
   if (action === "remove_content" || action === "ban_reporter") {
-    await applyTargetModeration(report.target_type, report.target_id, action);
+    const moderated = await applyTargetModeration(
+      report.target_type,
+      report.target_id,
+      action
+    );
+    if (!moderated) {
+      console.error("[contentReportsService] target moderation failed");
+      return false;
+    }
     if (action === "ban_reporter") {
       await suspendContentAuthor(report.target_type, report.target_id);
     }
