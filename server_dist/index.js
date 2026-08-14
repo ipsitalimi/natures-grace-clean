@@ -8,6 +8,59 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// server/lib/supabaseAdmin.ts
+import { createClient } from "@supabase/supabase-js";
+function readTrimmedEnv(name) {
+  const value = process.env[name];
+  if (typeof value !== "string") return void 0;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : void 0;
+}
+function resolveSupabaseProjectUrl() {
+  const candidates = [
+    readTrimmedEnv("SUPABASE_URL"),
+    readTrimmedEnv("EXPO_PUBLIC_SUPABASE_URL")
+  ].filter(Boolean);
+  for (const raw of candidates) {
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      return raw.replace(/\/$/, "");
+    }
+    if (/^[a-z0-9-]+$/i.test(raw)) {
+      return `https://${raw}.supabase.co`;
+    }
+  }
+  return null;
+}
+function getSupabaseAdmin() {
+  const url = resolveSupabaseProjectUrl();
+  const serviceKey = readTrimmedEnv("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !serviceKey) {
+    return null;
+  }
+  if (!adminClient) {
+    adminClient = createClient(url, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    });
+  }
+  return adminClient;
+}
+function requireSupabaseAdmin() {
+  const client = getSupabaseAdmin();
+  if (!client) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY and SUPABASE_URL are required for payout webhooks"
+    );
+  }
+  return client;
+}
+var adminClient;
+var init_supabaseAdmin = __esm({
+  "server/lib/supabaseAdmin.ts"() {
+    "use strict";
+    adminClient = null;
+  }
+});
+
 // server/lib/productionEnv.ts
 var productionEnv_exports = {};
 __export(productionEnv_exports, {
@@ -16,8 +69,7 @@ __export(productionEnv_exports, {
 function assertServerProductionEnv() {
   if (process.env.NODE_ENV !== "production") return;
   const missing = [];
-  const supabaseUrl = process.env.SUPABASE_URL?.trim() ?? process.env.EXPO_PUBLIC_SUPABASE_URL?.trim();
-  if (!supabaseUrl) missing.push("SUPABASE_URL");
+  if (!resolveSupabaseProjectUrl()) missing.push("SUPABASE_URL");
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
     missing.push("SUPABASE_SERVICE_ROLE_KEY");
   }
@@ -39,6 +91,7 @@ function assertServerProductionEnv() {
 var init_productionEnv = __esm({
   "server/lib/productionEnv.ts"() {
     "use strict";
+    init_supabaseAdmin();
   }
 });
 
@@ -49,31 +102,8 @@ import express from "express";
 // server/routes.ts
 import { createServer } from "node:http";
 
-// server/lib/supabaseAdmin.ts
-import { createClient } from "@supabase/supabase-js";
-var adminClient = null;
-function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url?.trim() || !serviceKey?.trim()) {
-    return null;
-  }
-  if (!adminClient) {
-    adminClient = createClient(url.trim(), serviceKey.trim(), {
-      auth: { autoRefreshToken: false, persistSession: false }
-    });
-  }
-  return adminClient;
-}
-function requireSupabaseAdmin() {
-  const client = getSupabaseAdmin();
-  if (!client) {
-    throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY and SUPABASE_URL are required for payout webhooks"
-    );
-  }
-  return client;
-}
+// server/routes/payouts.ts
+init_supabaseAdmin();
 
 // server/services/payoutLifecycle.ts
 async function getPayoutById(supabase, payoutId) {
@@ -131,15 +161,42 @@ async function completePayout(supabase, payoutId, opts = {}) {
 }
 
 // server/middleware/auth.ts
+init_supabaseAdmin();
 async function getBearerUser(req) {
   const authHeader = req.header("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
+  console.log("[auth][booking] authorization header present:", Boolean(authHeader));
+  if (!authHeader?.startsWith("Bearer ")) {
+    console.warn("[auth][booking] 401 reason: missing or malformed Bearer header");
+    return null;
+  }
   const token = authHeader.slice(7).trim();
-  if (!token) return null;
+  if (!token) {
+    console.warn("[auth][booking] 401 reason: empty Bearer token");
+    return null;
+  }
   const supabase = requireSupabaseAdmin();
-  const { data, error } = await supabase.auth.getUser(token);
-  if (error || !data.user) return null;
-  return { id: data.user.id, email: data.user.email };
+  try {
+    console.log("[auth][booking] verifying JWT with Supabase");
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) {
+      console.warn("[auth][booking] JWT verification failed:", {
+        reason: error?.message ?? "no user",
+        status: error?.status
+      });
+      return null;
+    }
+    console.log("[auth][booking] JWT verification succeeded:", {
+      userId: data.user.id,
+      emailPresent: Boolean(data.user.email)
+    });
+    return { id: data.user.id, email: data.user.email };
+  } catch (err) {
+    console.error("[auth][booking] JWT verification threw:", err);
+    if (err instanceof Error) {
+      console.error("[auth][booking] JWT verification stack:", err.stack);
+    }
+    throw err;
+  }
 }
 async function getBearerProfile(req) {
   const user = await getBearerUser(req);
@@ -152,6 +209,7 @@ async function getBearerProfile(req) {
 async function requireBearerUser(req, res) {
   const user = await getBearerUser(req);
   if (!user) {
+    console.warn("[auth][booking] sending 401 Unauthorized");
     res.status(401).json({ error: "Unauthorized" });
     return null;
   }
@@ -487,6 +545,9 @@ function registerPayoutRoutes(app2) {
   app2.post("/api/payouts/:payoutId/dispatch", handleDispatch);
   app2.post("/api/payouts/:payoutId/dev-complete", handleDevComplete);
 }
+
+// server/routes/practitionerPayouts.ts
+init_supabaseAdmin();
 
 // server/services/practitionerPayoutLifecycle.ts
 async function getPayoutById2(supabase, payoutId) {
@@ -825,6 +886,9 @@ function getAuthHeader() {
   const token = Buffer.from(`${keyId.trim()}:${keySecret.trim()}`).toString("base64");
   return `Basic ${token}`;
 }
+function isCheckoutConfigured() {
+  return Boolean(getAuthHeader());
+}
 function isProduction() {
   return process.env.NODE_ENV === "production";
 }
@@ -908,6 +972,9 @@ async function confirmBookingPayment(params) {
   }
   return { ok: true, paymentId: params.paymentId, orderId: params.orderId };
 }
+
+// server/routes/bookingCheckout.ts
+init_supabaseAdmin();
 
 // server/services/userNotifications.ts
 async function insertUserNotification(supabase, params) {
@@ -1238,6 +1305,15 @@ async function fulfillBookingPayment(params) {
   if (pending?.user_id && pending.user_id !== userId) {
     return { ok: false, error: "Checkout does not belong to this account" };
   }
+  const { data: slotDup } = await supabase.from("practitioner_bookings").select("id, booking_number").eq("user_id", userId).eq("practitioner_id", draft.practitionerId).eq("session_date", draft.sessionDate).eq("session_time", draft.sessionTime).in("booking_status", ["Pending", "Confirmed"]).maybeSingle();
+  if (slotDup) {
+    return {
+      ok: true,
+      bookingId: slotDup.id,
+      bookingNumber: slotDup.booking_number,
+      alreadyPaid: true
+    };
+  }
   const { data: dup } = await supabase.from("practitioner_bookings").select("id, booking_number").eq("razorpay_payment_id", paymentId).maybeSingle();
   if (dup) {
     return {
@@ -1338,8 +1414,20 @@ async function validateBookingAmount(practitionerId, durationMinutes, amountInr,
 }
 async function handleCreateOrder(req, res) {
   try {
+    console.log("[bookingCheckout][server] create-order reached backend", {
+      method: req.method,
+      path: req.path,
+      authorizationHeaderPresent: Boolean(req.header("authorization"))
+    });
     const user = await requireBearerUser(req, res);
-    if (!user) return;
+    if (!user) {
+      console.warn("[bookingCheckout][server] create-order stopped at auth middleware");
+      return;
+    }
+    console.log("[bookingCheckout][server] create-order auth passed", {
+      userId: user.id,
+      emailPresent: Boolean(user.email)
+    });
     const body = req.body;
     if (!body.practitionerId || !body.durationMinutes || !body.amountInr) {
       return res.status(400).json({
@@ -1354,6 +1442,17 @@ async function handleCreateOrder(req, res) {
     );
     if (!validated.ok) {
       return res.status(400).json({ error: validated.error });
+    }
+    if (body.booking) {
+      const supabase = requireSupabaseAdmin();
+      const { data: existingSlot } = await supabase.from("practitioner_bookings").select("id, booking_number").eq("user_id", user.id).eq("practitioner_id", body.practitionerId).eq("session_date", body.booking.sessionDate).eq("session_time", body.booking.sessionTime).in("booking_status", ["Pending", "Confirmed"]).maybeSingle();
+      if (existingSlot) {
+        return res.status(409).json({
+          error: "You already have a booking for this session time.",
+          bookingId: existingSlot.id,
+          bookingNumber: existingSlot.booking_number
+        });
+      }
     }
     const result = await createBookingOrder({
       amountInr: validated.amountInr,
@@ -1385,14 +1484,30 @@ async function handleCreateOrder(req, res) {
       keyId
     });
   } catch (err) {
+    console.error("[bookingCheckout][server] create-order threw:", err);
+    if (err instanceof Error) {
+      console.error("[bookingCheckout][server] create-order stack:", err.stack);
+    }
     const message = err instanceof Error ? err.message : "Create order failed";
     return res.status(500).json({ error: message });
   }
 }
 async function handleConfirmPayment(req, res) {
   try {
+    console.log("[bookingCheckout][server] confirm reached backend", {
+      method: req.method,
+      path: req.path,
+      authorizationHeaderPresent: Boolean(req.header("authorization"))
+    });
     const user = await requireBearerUser(req, res);
-    if (!user) return;
+    if (!user) {
+      console.warn("[bookingCheckout][server] confirm stopped at auth middleware");
+      return;
+    }
+    console.log("[bookingCheckout][server] confirm auth passed", {
+      userId: user.id,
+      emailPresent: Boolean(user.email)
+    });
     const { orderId, paymentId, signature, devMode, booking } = req.body;
     if (!orderId || !booking) {
       return res.status(400).json({ error: "orderId and booking are required" });
@@ -1435,6 +1550,10 @@ async function handleConfirmPayment(req, res) {
       bookingNumber: created.bookingNumber
     });
   } catch (err) {
+    console.error("[bookingCheckout][server] confirm threw:", err);
+    if (err instanceof Error) {
+      console.error("[bookingCheckout][server] confirm stack:", err.stack);
+    }
     const message = err instanceof Error ? err.message : "Confirm failed";
     return res.status(500).json({ error: message });
   }
@@ -1443,6 +1562,9 @@ function registerBookingCheckoutRoutes(app2) {
   app2.post("/api/bookings/checkout/create-order", handleCreateOrder);
   app2.post("/api/bookings/checkout/confirm", handleConfirmPayment);
 }
+
+// server/services/storeOrderPayment.ts
+init_supabaseAdmin();
 
 // server/services/orderFulfillment.ts
 async function decrementOrderStock(supabase, orderId) {
@@ -1590,6 +1712,7 @@ async function fulfillStoreOrderPayment(params) {
 }
 
 // server/services/storeOrderCreation.ts
+init_supabaseAdmin();
 var DEFAULT_DELIVERY = {
   standard: { enabled: true, price: 0 },
   express: { enabled: false, price: 99 },
@@ -1855,7 +1978,7 @@ async function validatePendingStoreOrderTotal(supabase, storeOrderId) {
 // server/services/storeOrderPayment.ts
 async function createStoreRazorpayOrder(params) {
   const supabase = requireSupabaseAdmin();
-  const { data: order, error: fetchError } = await supabase.from("orders").select("id, user_id, payment_status, total").eq("id", params.storeOrderId).maybeSingle();
+  const { data: order, error: fetchError } = await supabase.from("orders").select("id, user_id, payment_status, total, razorpay_order_id").eq("id", params.storeOrderId).maybeSingle();
   if (fetchError || !order) {
     return { ok: false, error: "Store order not found" };
   }
@@ -1870,6 +1993,19 @@ async function createStoreRazorpayOrder(params) {
     return { ok: false, error: validated.error };
   }
   const amountInr = validated.amountInr;
+  const existingRazorpayOrderId = order.razorpay_order_id;
+  if (existingRazorpayOrderId) {
+    const keyId2 = process.env.RAZORPAY_KEY_ID?.trim() ?? null;
+    return {
+      ok: true,
+      razorpayOrderId: existingRazorpayOrderId,
+      amountPaise: Math.round(amountInr * 100),
+      amountInr,
+      currency: "INR",
+      keyId: keyId2,
+      devMode: !isCheckoutConfigured()
+    };
+  }
   const result = await createBookingOrder({
     amountInr,
     receipt: params.storeOrderId.replace(/-/g, "").slice(0, 40),
@@ -2031,6 +2167,7 @@ function registerStoreCheckoutRoutes(app2) {
 }
 
 // server/routes/walletLedger.ts
+init_supabaseAdmin();
 async function handleSellerSync(req, res) {
   try {
     const profile = await requireRole(req, res, "Seller");
@@ -2204,6 +2341,9 @@ function registerWalletLedgerRoutes(app2) {
   app2.post("/api/wallet/practitioner/bank-details", handlePractitionerBankDetails);
   app2.post("/api/wallet/practitioner/request-payout", handlePractitionerRequestPayout);
 }
+
+// server/routes/adminOperations.ts
+init_supabaseAdmin();
 
 // server/services/activityLogAdmin.ts
 async function insertActivityLog(supabase, params) {
@@ -2553,6 +2693,9 @@ function registerAdminOperationsRoutes(app2) {
   });
 }
 
+// server/routes/transactionalHooks.ts
+init_supabaseAdmin();
+
 // server/lib/rateLimit.ts
 var buckets = /* @__PURE__ */ new Map();
 function checkRateLimit(key, maxRequests, windowMs) {
@@ -2647,6 +2790,7 @@ function registerTransactionalHooksRoutes(app2) {
 }
 
 // server/services/paymentWebhooks.ts
+init_supabaseAdmin();
 import crypto2 from "node:crypto";
 function verifyPaymentWebhookSignature(rawBody, signature) {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
@@ -2734,6 +2878,7 @@ function registerPaymentWebhookRoutes(app2) {
 }
 
 // server/routes/account.ts
+init_supabaseAdmin();
 function registerAccountRoutes(app2) {
   const performAccountDeletion = async (supabase, userId) => {
     await supabase.from("profiles").update({
