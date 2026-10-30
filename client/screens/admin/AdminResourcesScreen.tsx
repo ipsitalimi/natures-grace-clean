@@ -107,6 +107,9 @@ function CourseResourceRow({
   onTogglePublish: () => void;
   onDelete: () => void;
   onSave: (patch: {
+    title: string;
+    body: string;
+    description: string;
     instructorName: string;
     locations: string;
     certificateNote: string;
@@ -114,10 +117,22 @@ function CourseResourceRow({
   }) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(resource.title);
+  const [body, setBody] = useState(resource.body ?? "");
   const [instructorName, setInstructorName] = useState(resource.instructorName ?? "");
   const [locations, setLocations] = useState(resource.locations ?? "");
   const [certificateNote, setCertificateNote] = useState(resource.certificateNote ?? "");
   const [price, setPrice] = useState(resource.price ?? "");
+
+  const openEdit = () => {
+    setTitle(resource.title);
+    setBody(resource.body ?? "");
+    setInstructorName(resource.instructorName ?? "");
+    setLocations(resource.locations ?? "");
+    setCertificateNote(resource.certificateNote ?? "");
+    setPrice(resource.price ?? "");
+    setEditing(true);
+  };
 
   return (
     <View style={styles.resourceCard}>
@@ -137,6 +152,23 @@ function CourseResourceRow({
         </View>
         {editing ? (
           <View style={styles.courseEditFields}>
+            <ThemedText style={styles.inputLabel}>Title</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={title}
+              onChangeText={setTitle}
+              placeholder="Course title"
+              placeholderTextColor={Colors.light.textSecondary}
+            />
+            <ThemedText style={styles.inputLabel}>Content / Description</ThemedText>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={body}
+              onChangeText={setBody}
+              placeholder="Course content or description"
+              placeholderTextColor={Colors.light.textSecondary}
+              multiline
+            />
             <ThemedText style={styles.inputLabel}>Instructor</ThemedText>
             <TextInput
               style={styles.input}
@@ -173,7 +205,16 @@ function CourseResourceRow({
             <Pressable
               style={styles.saveButton}
               onPress={() => {
-                onSave({ instructorName, locations, certificateNote, price });
+                const trimmedBody = body.trim();
+                onSave({
+                  title: title.trim(),
+                  body: trimmedBody,
+                  description: trimmedBody.substring(0, 100) || resource.description,
+                  instructorName,
+                  locations,
+                  certificateNote,
+                  price,
+                });
                 setEditing(false);
               }}
               testID={`button-save-course-${resource.id}`}
@@ -182,8 +223,8 @@ function CourseResourceRow({
             </Pressable>
           </View>
         ) : (
-          <Pressable onPress={() => setEditing(true)} testID={`button-edit-course-${resource.id}`}>
-            <ThemedText style={styles.courseEditLink}>Edit instructor, locations & pricing</ThemedText>
+          <Pressable onPress={openEdit} testID={`button-edit-course-${resource.id}`}>
+            <ThemedText style={styles.courseEditLink}>Edit course</ThemedText>
           </Pressable>
         )}
       </View>
@@ -461,6 +502,9 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
           onTogglePublish={() => togglePublish(resource.id)}
           onSave={(patch) =>
             void updateResource(resource.id, {
+              title: patch.title,
+              body: patch.body,
+              description: patch.description,
               instructorName: patch.instructorName,
               locations: patch.locations,
               certificateNote: patch.certificateNote,

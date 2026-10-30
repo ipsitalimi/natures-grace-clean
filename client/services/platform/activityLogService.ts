@@ -19,7 +19,7 @@ export type DbActivityLogRow = {
   created_at: string;
 };
 
-function formatRelativeTime(iso: string): string {
+export function formatRelativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
   const diffMs = Math.max(0, now - then);

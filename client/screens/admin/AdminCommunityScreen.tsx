@@ -55,15 +55,24 @@ function getStatusBadgeStyle(status: CommunityEvent["status"]) {
   }
 }
 
+function extractPriceInput(event: CommunityEvent): string {
+  if (!event.price || event.price === "Free") return "";
+  const numeric = event.price.replace(/[^\d.]/g, "");
+  if (numeric) return numeric;
+  return event.pricing?.[0]?.amount ?? "";
+}
+
 function EventCard({
   event,
   attendeeCount,
   attendees,
+  onEdit,
   onDelete,
 }: {
   event: CommunityEvent;
   attendeeCount: number | null;
   attendees: EventRegistration[];
+  onEdit: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -80,6 +89,9 @@ function EventCard({
           <ThemedText style={styles.badgeText}>{event.mode}</ThemedText>
         </View>
         <ThemedText style={styles.cardPrice}>{event.price}</ThemedText>
+        <Pressable style={styles.deleteIconBtn} onPress={onEdit} testID={`button-edit-event-${event.id}`}>
+          <Feather name="edit-2" size={14} color={Colors.light.accent} />
+        </Pressable>
         <Pressable style={styles.deleteIconBtn} onPress={onDelete} testID={`button-delete-event-${event.id}`}>
           <Feather name="trash-2" size={14} color="#8B3A3A" />
         </Pressable>
@@ -126,6 +138,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const {
     events,
     addEvent,
+    updateEvent,
     deleteEvent,
     setEventVisibility,
     moderationDiscussions,
@@ -152,6 +165,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   } = useModeration();
   const { refreshGratitude } = useGratitude();
   const [showForm, setShowForm] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
@@ -206,28 +220,57 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     setMode("Online");
     setPrice("");
     setDescription("");
+    setEditingEventId(null);
   };
 
-  const handleCreateEvent = () => {
+  const openCreateForm = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const openEditForm = (event: CommunityEvent) => {
+    setEditingEventId(event.id);
+    setTitle(event.title);
+    setDate(event.date);
+    setTime(event.time);
+    setMode(event.mode);
+    setPrice(extractPriceInput(event));
+    setDescription(event.description);
+    setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    resetForm();
+  };
+
+  const handleSaveEvent = () => {
     if (!title.trim()) return;
-    addEvent({
+    const mapped = {
       title: title.trim(),
       description: description.trim() || `${title.trim()} - a community wellness event.`,
       date: date.trim() || "TBD",
       time: time.trim() || "TBD",
       mode,
       pricing: price.trim() ? [{ label: "Per Session", amount: price.trim() }] : [],
-      whatToExpect: ["A nurturing and supportive environment", "Expert guidance and facilitation"],
-      ctaText: "Join Event",
-      bottomNote: "",
-      status: "Active",
       price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
-    });
+    };
+
+    if (editingEventId) {
+      void updateEvent(editingEventId, mapped);
+    } else {
+      addEvent({
+        ...mapped,
+        whatToExpect: ["A nurturing and supportive environment", "Expert guidance and facilitation"],
+        ctaText: "Join Event",
+        bottomNote: "",
+        status: "Active",
+      });
+    }
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
-      setShowForm(false);
-      resetForm();
+      closeForm();
     }, 1500);
   };
 
@@ -317,7 +360,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
 
       <View style={styles.subHeaderRow}>
         <ThemedText style={styles.subSectionTitle}>Events ({events.length})</ThemedText>
-        <Pressable style={styles.addButton} onPress={() => setShowForm(true)} testID="button-create-event">
+        <Pressable style={styles.addButton} onPress={openCreateForm} testID="button-create-event">
           <Feather name="plus" size={16} color="#FFFFFF" />
           <ThemedText style={styles.addButtonText}>Create Event</ThemedText>
         </Pressable>
@@ -342,6 +385,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
                 )
               : []
           }
+          onEdit={() => openEditForm(event)}
           onDelete={() => {
             handleHideEvent(event.id);
             deleteEvent(event.id);
@@ -497,8 +541,10 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <ThemedText style={styles.modalTitle}>Create Event</ThemedText>
-              <Pressable onPress={() => { setShowForm(false); resetForm(); }} testID="button-close-event-form">
+              <ThemedText style={styles.modalTitle}>
+                {editingEventId ? "Edit Event" : "Create Event"}
+              </ThemedText>
+              <Pressable onPress={closeForm} testID="button-close-event-form">
                 <Feather name="x" size={22} color={Colors.light.text} />
               </Pressable>
             </View>
@@ -575,14 +621,18 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
                 testID="input-event-price"
               />
 
-              <Pressable style={styles.saveButton} onPress={handleCreateEvent} testID="button-save-event">
-                <ThemedText style={styles.saveButtonText}>Create Event</ThemedText>
+              <Pressable style={styles.saveButton} onPress={handleSaveEvent} testID="button-save-event">
+                <ThemedText style={styles.saveButtonText}>
+                  {editingEventId ? "Save Changes" : "Create Event"}
+                </ThemedText>
               </Pressable>
 
               {saved ? (
                 <View style={styles.confirmationBanner}>
                   <Feather name="check-circle" size={16} color="#013220" />
-                  <ThemedText style={styles.confirmationText}>Event created successfully</ThemedText>
+                  <ThemedText style={styles.confirmationText}>
+                    {editingEventId ? "Event updated successfully" : "Event created successfully"}
+                  </ThemedText>
                 </View>
               ) : null}
             </ScrollView>

@@ -32,7 +32,11 @@ function getCategoryColor(category: string): string {
     case "Spiritual Manifestation & Protection": return "#7B68EE";
     case "Mindful Radiance": return "#E8A0B5";
     case "Conscious Nutrition": return "#4A9A5B";
-    case "Spirit & Space": return "#6CB4D9";
+    case "Festive Gifting":
+    case "Spirit & Space":
+      return "#6CB4D9";
+    case "Pets Products":
+      return "#8B7355";
     case "Sacred Rituals": return "#D4943A";
     case "Daily Vitality": return "#7BC47F";
     default: return Colors.light.accent;

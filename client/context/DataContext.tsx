@@ -42,6 +42,7 @@ interface DataContextType {
 
   events: CommunityEvent[];
   addEvent: (event: Omit<CommunityEvent, "id" | "dbId">) => void;
+  updateEvent: (id: string, patch: eventsService.EventUpdatePatch) => Promise<void>;
   deleteEvent: (id: string) => void;
   setEventVisibility: (id: string, visible: boolean) => void;
 
@@ -330,6 +331,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const updateEvent = useCallback(async (id: string, patch: eventsService.EventUpdatePatch) => {
+    if (!isSupabaseConfigured()) return;
+    const target = events.find((e) => e.id === id);
+    if (!target?.dbId) return;
+    const updated = await eventsService.updateEvent(target.dbId, patch);
+    if (updated) {
+      setEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    }
+  }, [events]);
+
   const deleteEvent = useCallback(async (id: string) => {
     if (!isSupabaseConfigured()) return;
     const target = events.find((e) => e.id === id);
@@ -503,6 +514,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     refreshContent,
     events,
     addEvent,
+    updateEvent,
     deleteEvent,
     setEventVisibility,
     discussions,

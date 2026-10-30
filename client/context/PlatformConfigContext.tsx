@@ -389,20 +389,33 @@ export function PlatformConfigProvider({ children }: { children: React.ReactNode
       setConfigLoading(false);
       return;
     }
+  
     if (authConfigured && authLoading) return;
-
+  
     let cancelled = false;
-
+  
     (async () => {
-      await hydrateFromRemote({ includeProfiles: authProfile?.role === "Admin" });
-      if (!cancelled) setConfigLoading(false);
+      try {
+        await hydrateFromRemote({
+          includeProfiles: authProfile?.role === "Admin",
+        });
+      } catch (error) {
+        console.error("[PlatformConfig] Remote hydration failed:", error);
+      } finally {
+        if (!cancelled) setConfigLoading(false);
+      }
     })();
-
+  
     return () => {
       cancelled = true;
     };
-  }, [hydrateFromRemote, authConfigured, authLoading, authSession?.user?.id, authProfile?.role]);
-
+  }, [
+    hydrateFromRemote,
+    authConfigured,
+    authLoading,
+    authSession?.user?.id,
+    authProfile?.role,
+  ]);
   const syncSessionFromProfile = useCallback((profile: ProfileRow) => {
     setSession({
       email: profile.email.toLowerCase(),

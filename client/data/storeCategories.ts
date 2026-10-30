@@ -27,11 +27,11 @@ export const storeCategoryTemplates: StoreCategory[] = [
     products: [],
   },
   {
-    id: "spirit-space",
-    name: "Spirit & Space",
+    id: "festive-gifting",
+    name: "Festive Gifting",
     description:
-      "Home, altar, and space-clearing products to create calm, intentional environments.",
-    icon: "home",
+      "Thoughtful gifts and festive collections for celebrations and meaningful occasions.",
+    icon: "gift",
     products: [],
   },
   {
@@ -50,21 +50,36 @@ export const storeCategoryTemplates: StoreCategory[] = [
     icon: "activity",
     products: [],
   },
+  {
+    id: "pets-products",
+    name: "Pets Products",
+    description:
+      "Mindful products for pets — wellness, care, and everyday companion essentials.",
+    icon: "heart",
+    products: [],
+  },
 ];
 
 export function normalizeStoreCategoryKey(value: string): string {
   return value.toLowerCase().trim().replace(/_/g, "-").replace(/\s+/g, "-").replace(/&/g, "and");
 }
 
+/** Legacy seller category names/ids mapped to current templates. */
+const STORE_CATEGORY_ALIASES: Record<string, string> = {
+  "spirit-space": "festive-gifting",
+  "spirit-and-space": "festive-gifting",
+};
+
 export function findStoreCategoryTemplate(
   templates: StoreCategory[],
   productCategory: string
 ): StoreCategory | undefined {
   const key = normalizeStoreCategoryKey(productCategory);
+  const aliased = STORE_CATEGORY_ALIASES[key] ?? key;
   return templates.find((c) => {
     const idKey = normalizeStoreCategoryKey(c.id);
     const nameKey = normalizeStoreCategoryKey(c.name);
-    return idKey === key || nameKey === key;
+    return idKey === aliased || nameKey === aliased || idKey === key || nameKey === key;
   });
 }
 

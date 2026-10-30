@@ -48,15 +48,28 @@ export function getApprovedSubcategoryNames(
   return [...new Set(names)];
 }
 
+/** Legacy subcategory display names mapped to current canonical names. */
+const SUBCATEGORY_ALIASES: Record<string, string> = {
+  "signature analysis": "Signatures / Handwriting Analysis",
+};
+
+function normalizeSubcategoryName(name: string): string {
+  const trimmed = name.trim();
+  const aliased = SUBCATEGORY_ALIASES[trimmed.toLowerCase()];
+  return aliased ?? trimmed;
+}
+
 export function practitionerMatchesSubcategory(
   practitioner: Pick<Practitioner, "category" | "subcategory" | "specialties">,
   categoryName: string,
   subcategoryName: string
 ): boolean {
   const catKey = normalizeCategoryKey(categoryName);
-  const sub = subcategoryName.trim();
+  const sub = normalizeSubcategoryName(subcategoryName);
   return parseSpecialtiesFromPractitioner(practitioner).some(
-    (s) => normalizeCategoryKey(s.category) === catKey && s.subcategory === sub
+    (s) =>
+      normalizeCategoryKey(s.category) === catKey &&
+      normalizeSubcategoryName(s.subcategory) === sub
   );
 }
 
@@ -64,8 +77,10 @@ export function practitionerMatchesSubcategoryOnly(
   practitioner: Pick<Practitioner, "category" | "subcategory" | "specialties">,
   subcategoryName: string
 ): boolean {
-  const sub = subcategoryName.trim();
-  return parseSpecialtiesFromPractitioner(practitioner).some((s) => s.subcategory === sub);
+  const sub = normalizeSubcategoryName(subcategoryName);
+  return parseSpecialtiesFromPractitioner(practitioner).some(
+    (s) => normalizeSubcategoryName(s.subcategory) === sub
+  );
 }
 
 export function countPractitionersInSubcategory(

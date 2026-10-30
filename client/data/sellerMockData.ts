@@ -72,8 +72,11 @@ export function getCategoryShortName(category: string): string {
       return "Beauty";
     case "Conscious Nutrition":
       return "Nutrition";
+    case "Festive Gifting":
     case "Spirit & Space":
-      return "Space";
+      return "Gifting";
+    case "Pets Products":
+      return "Pets";
     case "Sacred Rituals":
       return "Rituals";
     case "Daily Vitality":
