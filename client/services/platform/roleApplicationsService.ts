@@ -344,7 +344,18 @@ export async function rejectRoleApplication(
   return { ok: true };
 }
 
-export async function updateRoleApplicationBio(applicationId: string, bio: string): Promise<boolean> {\n  const supabase = getSupabase();\n  if (!supabase) return false;\n  const { data: row, error: fetchError } = await supabase.from("role_applications").select("form_data,target_role").eq("id", applicationId).maybeSingle();\n  if (fetchError || !row || row.target_role !== "Practitioner") return false;\n  const formData = (row.form_data ?? {}) as Record<string, string>;\n  const { error } = await supabase.from("role_applications").update({ form_data: { ...formData, bio: bio.trim() } }).eq("id", applicationId);\n  if (error) { console.error("[roleApplicationsService] update application bio:", error.message); return false; }\n  return true;\n}\n\nexport async function updateApplicationProgressStage(
+export async function updateRoleApplicationBio(applicationId: string, bio: string): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const { data: row, error: fetchError } = await supabase.from("role_applications").select("form_data,target_role").eq("id", applicationId).maybeSingle();
+  if (fetchError || !row || row.target_role !== "Practitioner") return false;
+  const formData = (row.form_data ?? {}) as Record<string, string>;
+  const { error } = await supabase.from("role_applications").update({ form_data: { ...formData, bio: bio.trim() } }).eq("id", applicationId);
+  if (error) { console.error("[roleApplicationsService] update application bio:", error.message); return false; }
+  return true;
+}
+
+export async function updateApplicationProgressStage(
   applicationId: string,
   progressStage: ApplicationProgressStage
 ): Promise<boolean> {
