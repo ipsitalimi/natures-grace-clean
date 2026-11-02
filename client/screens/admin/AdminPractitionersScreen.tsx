@@ -69,6 +69,10 @@ function PractitionerCard({
             <ThemedText style={styles.editBioText}>Edit / publish bio</ThemedText>
           </Pressable>
           <ThemedText style={styles.practitionerPrice}>{formatInr(practitioner.pricePerSession)}/-</ThemedText>
+          <Pressable style={styles.editBioButton} onPress={() => { setPriceTarget(practitioner); setPriceDraft(String(practitioner.pricePerSession ?? 0)); setPriceError(""); }} testID={`button-edit-price-${practitioner.id}`}>
+            <Feather name="edit-2" size={13} color={Colors.light.accent} />
+            <ThemedText style={styles.editBioText}>Set session price</ThemedText>
+          </Pressable>
           
           <View style={styles.credentialSection}>
             <View style={styles.credentialHeader}>
@@ -137,12 +141,27 @@ export default function AdminPractitionersScreen({
   onAddPractitioner: () => void;
   onBackToDashboard: () => void;
 }) {
-  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio } = useDataContext();
+  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio, updatePractitionerPrice } = useDataContext();
   const { logActivity } = usePlatformConfig();
   const [bioTarget, setBioTarget] = useState<Practitioner | null>(null);
   const [bioDraft, setBioDraft] = useState("");
   const [bioBusy, setBioBusy] = useState(false);
   const [bioError, setBioError] = useState("");
+  const [priceTarget, setPriceTarget] = useState<Practitioner | null>(null);
+  const [priceDraft, setPriceDraft] = useState("");
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceError, setPriceError] = useState("");
+  const savePrice = async () => {
+    if (!priceTarget) return;
+    const value = Number(priceDraft);
+    if (!Number.isInteger(value) || value < 0) { setPriceError("Enter a non-negative whole-number price in INR."); return; }
+    setPriceBusy(true); setPriceError("");
+    const ok = await updatePractitionerPrice(priceTarget.id, value);
+    setPriceBusy(false);
+    if (!ok) { setPriceError("Could not save price. Check admin permissions and ensure the pricing migration is applied."); return; }
+    logActivity(`Practitioner price updated for ${priceTarget.name}`, "user");
+    setPriceTarget(null);
+  };
   const saveBio = async () => {
     if (!bioTarget) return;
     if (bioDraft.trim().length > 600) { setBioError("Keep the public bio under 600 characters (about 4–5 lines)."); return; }
