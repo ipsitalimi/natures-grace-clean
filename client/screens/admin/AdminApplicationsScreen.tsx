@@ -22,6 +22,7 @@ import {
   approveRoleApplication,
   fetchAllRoleApplications,
   rejectRoleApplication,
+  updateRoleApplicationBio,
 } from "@/services/platform/roleApplicationsService";
 
 function formatDate(iso: string): string {
