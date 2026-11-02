@@ -336,7 +336,6 @@ export type PractitionerProfileDetails = {
   bio: string;
   experience: string;
   certifications: string[];
-  pricePerSession: number;
   isActive: boolean;
   meetingLink: string;
   photoUrl: string;
@@ -463,7 +462,6 @@ export async function updatePractitionerProfileDetails(
   if (patch.bio !== undefined) dbPatch.bio = patch.bio;
   if (patch.experience !== undefined) dbPatch.experience = patch.experience;
   if (patch.certifications !== undefined) dbPatch.certifications = patch.certifications;
-  if (patch.pricePerSession !== undefined) dbPatch.price_per_session = patch.pricePerSession;
   if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
   if (patch.meetingLink !== undefined) dbPatch.meeting_link = patch.meetingLink.trim() || null;
   if (patch.photoUrl !== undefined) dbPatch.photo_url = patch.photoUrl.trim() || null;
