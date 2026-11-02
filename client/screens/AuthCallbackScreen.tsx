@@ -23,7 +23,9 @@ export default function AuthCallbackScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  const showError = (timedOut && !session && !loading) || Boolean(authCallbackError);
+  // Do not wait for AuthContext.loading to finish after the timeout: callback
+  // parsing/session exchange can fail without clearing the global loading flag.
+  const showError = Boolean(authCallbackError) || (timedOut && !session);
 
   return (
     <View
@@ -41,16 +43,24 @@ export default function AuthCallbackScreen() {
           <ThemedText style={styles.title}>Could not complete sign-in</ThemedText>
           <ThemedText style={styles.message}>
             {authCallbackError ??
-              "The link may have expired. Request a new verification email and try again."}
+              "The link may have expired or already been used. Request a new password reset link or verification email and try again."}
           </ThemedText>
           <Pressable
             style={styles.button}
+            onPress={() => navigation.reset({ index: 0, routes: [{ name: "ForgotPassword" }] })}
+            testID="button-auth-callback-retry"
+            accessibilityRole="button"
+            accessibilityLabel="Request a new reset link"
+          >
+            <ThemedText style={styles.buttonText}>Request a new link</ThemedText>
+          </Pressable>
+          <Pressable
             onPress={() => navigation.reset({ index: 0, routes: [{ name: "Login" }] })}
             testID="button-auth-callback-login"
             accessibilityRole="button"
             accessibilityLabel="Back to sign in"
           >
-            <ThemedText style={styles.buttonText}>Back to sign in</ThemedText>
+            <ThemedText style={styles.loginLink}>Back to sign in</ThemedText>
           </Pressable>
         </>
       ) : (
@@ -100,5 +110,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  loginLink: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Colors.light.accent,
+    padding: Spacing.sm,
   },
 });
