@@ -41,8 +41,6 @@ export default function PractitionerApplicationScreen() {
   const [subcategories, setSubcategories] = useState<string[]>([]);
   const [experience, setExperience] = useState("");
   const [certifications, setCertifications] = useState("");
-  const [sessionTypes, setSessionTypes] = useState("");
-  const [priceRange, setPriceRange] = useState("");
   const [bio, setBio] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
   const [pendingDocs, setPendingDocs] = useState<LocalFile[]>([]);
@@ -99,8 +97,6 @@ export default function PractitionerApplicationScreen() {
         subcategory: subcategories[0] ?? "",
         experience: experience.trim(),
         certifications: certifications.trim(),
-        sessionTypes: sessionTypes.trim(),
-        priceRange: priceRange.trim(),
         bio: bio.trim(),
         whyJoin: whyJoin.trim(),
         availability: availability.trim(),
@@ -256,26 +252,6 @@ export default function PractitionerApplicationScreen() {
           placeholder="e.g., Reiki Level 3, CBT Certified"
           placeholderTextColor={Colors.light.textMuted}
           testID="input-certifications"
-        />
-
-        <ThemedText style={styles.label}>Session Types Offered</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={sessionTypes}
-          onChangeText={setSessionTypes}
-          placeholder="e.g., In-person, Virtual"
-          placeholderTextColor={Colors.light.textMuted}
-          testID="input-session-types"
-        />
-
-        <ThemedText style={styles.label}>Session Price Range</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={priceRange}
-          onChangeText={setPriceRange}
-          placeholder="e.g., $50 - $120"
-          placeholderTextColor={Colors.light.textMuted}
-          testID="input-price-range"
         />
 
         <ThemedText style={styles.label}>Short Bio</ThemedText>
