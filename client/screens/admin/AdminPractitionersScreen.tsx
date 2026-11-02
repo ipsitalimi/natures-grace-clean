@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, Modal, TextInput, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
@@ -62,7 +62,7 @@ function PractitionerCard({
             </View>
           </View>
           <ThemedText style={styles.practitionerCategory}>{practitioner.category}</ThemedText>
-          <ThemedText style={styles.practitionerExperience}>{practitioner.experience}</ThemedText>
+          <ThemedText style={styles.practitionerExperience}>{practitioner.experience}</ThemedText>\n          <ThemedText style={styles.bioPreview} numberOfLines={3}>{practitioner.bio || "No public bio yet."}</ThemedText>\n          <Pressable style={styles.editBioButton} onPress={onEditBio} testID={`button-edit-bio-${practitioner.id}`}>\n            <Feather name="edit-2" size={13} color={Colors.light.accent} />\n            <ThemedText style={styles.editBioText}>Edit / publish bio</ThemedText>\n          </Pressable>
           <ThemedText style={styles.practitionerPrice}>{formatInr(practitioner.pricePerSession)}/-</ThemedText>
           
           <View style={styles.credentialSection}>
@@ -132,8 +132,8 @@ export default function AdminPractitionersScreen({
   onAddPractitioner: () => void;
   onBackToDashboard: () => void;
 }) {
-  const { practitionerCategories, deletePractitioner, updatePractitionerMeta } = useDataContext();
-  const { logActivity } = usePlatformConfig();
+  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio } = useDataContext();
+  const { logActivity } = usePlatformConfig();\n  const [bioTarget, setBioTarget] = useState<Practitioner | null>(null);\n  const [bioDraft, setBioDraft] = useState("");\n  const [bioBusy, setBioBusy] = useState(false);\n  const [bioError, setBioError] = useState("");\n  const saveBio = async () => {\n    if (!bioTarget) return;\n    if (bioDraft.trim().length > 600) { setBioError("Keep the public bio under 600 characters (about 4–5 lines)."); return; }\n    setBioBusy(true); setBioError("");\n    const ok = await updatePractitionerBio(bioTarget.id, bioDraft);\n    setBioBusy(false);\n    if (!ok) { setBioError("Could not save bio. Check admin permissions and try again."); return; }\n    logActivity(`Practitioner bio updated for ${bioTarget.name}`, "user");\n    setBioTarget(null);\n  };
   const allPractitioners = practitionerCategories.flatMap((c) => c.practitioners);
 
   const getPractitionerState = (practitioner: (typeof allPractitioners)[0]): PractitionerState => ({
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   deleteButton: {
     padding: Spacing.xs,
   },
-  emptyCard: {
+  bioPreview: { fontSize: 12, color: Colors.light.textSecondary, lineHeight: 17, marginVertical: Spacing.xs },\n  editBioButton: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", paddingVertical: 5, marginBottom: Spacing.sm },\n  editBioText: { color: Colors.light.accent, fontSize: 12, fontFamily: "Nunito_700Bold" },\n  bioModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: Spacing.lg },\n  bioModalCard: { backgroundColor: Colors.light.cardBackground, borderRadius: BorderRadius.md, padding: Spacing.lg },\n  bioModalTitle: { fontSize: 18, fontFamily: "Nunito_700Bold", marginBottom: 6 },\n  bioModalHint: { fontSize: 13, color: Colors.light.textSecondary, lineHeight: 18, marginBottom: Spacing.md },\n  bioInput: { borderWidth: 1, borderColor: Colors.light.divider, borderRadius: BorderRadius.sm, minHeight: 140, padding: Spacing.md, color: Colors.light.text, fontSize: 14 },\n  bioCount: { fontSize: 11, color: Colors.light.textMuted, textAlign: "right", marginTop: 4 },\n  bioError: { color: "#8B3A3A", fontSize: 12, marginTop: Spacing.sm },\n  bioActions: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: Spacing.md, marginTop: Spacing.lg },\n  bioCancel: { color: Colors.light.textSecondary, fontSize: 14 },\n  bioSave: { backgroundColor: Colors.light.accent, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, minWidth: 110, alignItems: "center" },\n  bioSaveText: { color: "#FFFFFF", fontSize: 13, fontFamily: "Nunito_700Bold" },\n  emptyCard: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
     padding: Spacing.lg,
