@@ -22,8 +22,6 @@ export type PractitionerApplicationForm = {
   subcategory: string;
   experience: string;
   certifications: string;
-  sessionTypes: string;
-  priceRange: string;
   bio: string;
   whyJoin: string;
   availability: string;
