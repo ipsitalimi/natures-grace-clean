@@ -3,7 +3,9 @@
 CREATE OR REPLACE FUNCTION public.cancel_user_practitioner_booking(
   p_booking_id UUID,
   p_user_id UUID,
-  p_description TEXT DEFAULT NULL
+  p_description TEXT DEFAULT NULL,
+  p_cancellation_policy_snapshot JSONB DEFAULT NULL,
+  p_refund_amount NUMERIC DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -41,12 +43,14 @@ BEGIN
 
     IF v_refund_id IS NULL THEN
       INSERT INTO public.refund_requests (
-        user_id, booking_id, reason, description
+        user_id, booking_id, reason, description,
+        cancellation_policy_snapshot, refund_amount
       ) VALUES (
         p_user_id,
         p_booking_id,
         'Session cancelled',
-        COALESCE(NULLIF(BTRIM(p_description), ''), 'Session cancelled by user. Refund eligibility per cancellation policy.')
+        COALESCE(NULLIF(BTRIM(p_description), ''), 'Session cancelled by user. Refund eligibility per cancellation policy.'),
+        p_cancellation_policy_snapshot, p_refund_amount
       )
       RETURNING id INTO v_refund_id;
     END IF;
@@ -64,7 +68,7 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.cancel_user_practitioner_booking(UUID, UUID, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.cancel_user_practitioner_booking(UUID, UUID, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION public.cancel_user_practitioner_booking(UUID, UUID, TEXT, JSONB, NUMERIC) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cancel_user_practitioner_booking(UUID, UUID, TEXT, JSONB, NUMERIC) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
