@@ -25,6 +25,7 @@ import AdminLegalScreen from "./AdminLegalScreen";
 import AdminPayoutQueueScreen from "./AdminPayoutQueueScreen";
 import AdminRefundQueueScreen from "./AdminRefundQueueScreen";
 import AdminAuditLogScreen from "./AdminAuditLogScreen";
+import AdminBookingScheduleScreen from "./AdminBookingScheduleScreen";
 
 const ADMIN_NAV_KEY = "admin_nav_state_v1";
 
