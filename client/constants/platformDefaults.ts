@@ -17,6 +17,10 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   acceptWallet: false,
   payoutCycle: "Weekly",
   commissionRate: 12,
+  platformFeeEnabled: false,
+  platformFeePercent: 0,
+  platformGstEnabled: false,
+  platformGstPercent: 18,
   minimumPrice: 99,
   autoApproveProducts: __DEV__,
   featureFlags: {
