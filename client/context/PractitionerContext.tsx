@@ -323,8 +323,10 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
   const cancelUserSession = useCallback(
     async (bookingId: string) => {
       if (!isSupabaseConfigured()) return null;
+      if (!session?.access_token) return null;
       const updated = await bookingsService.cancelBooking(bookingId, commissionRate, {
         requestRefund: true,
+        accessToken: session.access_token,
       });
       if (!updated) return null;
       let cancelledSession: UserSessionHistory | null = null;
@@ -337,7 +339,7 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
       );
       return cancelledSession;
     },
-    [commissionRate]
+    [commissionRate, session?.access_token]
   );
 
   const requestPayout = useCallback(
