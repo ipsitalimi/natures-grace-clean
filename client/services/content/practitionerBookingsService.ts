@@ -7,6 +7,7 @@ import type {
 } from "@/data/practitionerBookings";
 import { getSupabase } from "@/lib/supabase";
 import { resolvePractitionerId } from "@/services/content/practitionerId";
+import { cancelUserBooking } from "@/services/bookingCancellationApi";
 
 function uiStatus(row: DbBookingRow): PractitionerSessionStatus {
   if (row.booking_status === "Cancelled") return "Cancelled";
@@ -315,7 +316,7 @@ export async function completeBooking(
 export async function cancelBooking(
   bookingId: string,
   commissionRate: number,
-  options?: { notes?: string; requestRefund?: boolean }
+  options?: { notes?: string; requestRefund?: boolean; accessToken?: string }
 ): Promise<PractitionerSession | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -323,6 +324,22 @@ export async function cancelBooking(
   const existing = await getBookingById(bookingId);
   if (!existing) return null;
 
+  // User cancellations go through the authenticated API and atomic server RPC.
+  if (options?.requestRefund) {
+    if (!options.accessToken) {
+      console.error("[practitionerBookings] user cancellation requires auth token");
+      return null;
+    }
+    const result = await cancelUserBooking(bookingId, options.accessToken, options.notes);
+    if (!result.ok) {
+      console.error("[practitionerBookings] user cancellation:", result.error);
+      return null;
+    }
+    const updated = await getBookingById(bookingId);
+    return updated ? toPractitionerSession(updated) : null;
+  }
+
+  // Practitioner cancellation path (no customer refund request).
   const { data, error } = await supabase
     .from("practitioner_bookings")
     .update({
@@ -338,36 +355,7 @@ export async function cancelBooking(
     return null;
   }
 
-  const row = data as DbBookingRow;
-
-  if (
-    options?.requestRefund &&
-    existing.payment_status === "Paid" &&
-    existing.user_id
-  ) {
-    const { data: openRefund } = await supabase
-      .from("refund_requests")
-      .select("id")
-      .eq("booking_id", bookingId)
-      .in("status", ["pending", "in_review", "approved"])
-      .maybeSingle();
-
-    if (!openRefund) {
-      const { error: refundError } = await supabase.from("refund_requests").insert({
-        user_id: existing.user_id,
-        booking_id: bookingId,
-        reason: "Session cancelled",
-        description:
-          options.notes?.trim() ||
-          "Session cancelled by user. Refund eligibility per cancellation policy.",
-      });
-      if (refundError) {
-        console.error("[practitionerBookings] refund request:", refundError.message);
-      }
-    }
-  }
-
-  return toPractitionerSession(row);
+  return toPractitionerSession(data as DbBookingRow);
 }
 
 async function recordSessionHistory(row: DbBookingRow): Promise<void> {
