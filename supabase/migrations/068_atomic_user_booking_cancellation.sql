@@ -55,6 +55,12 @@ BEGIN
         p_cancellation_policy_snapshot, p_refund_amount
       )
       RETURNING id INTO v_refund_id;
+    ELSE
+      UPDATE public.refund_requests
+         SET cancellation_policy_snapshot = COALESCE(p_cancellation_policy_snapshot, cancellation_policy_snapshot),
+             refund_amount = COALESCE(p_refund_amount, refund_amount)
+       WHERE id = v_refund_id
+         AND status IN ('pending', 'in_review');
     END IF;
   END IF;
 
