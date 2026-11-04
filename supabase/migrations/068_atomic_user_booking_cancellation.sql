@@ -1,5 +1,7 @@
 -- Server-authoritative cancellation and refund request creation.
 -- Both writes execute in one PostgreSQL transaction through this RPC.
+DROP FUNCTION IF EXISTS public.cancel_user_practitioner_booking(UUID, UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION public.cancel_user_practitioner_booking(
   p_booking_id UUID,
   p_user_id UUID,
