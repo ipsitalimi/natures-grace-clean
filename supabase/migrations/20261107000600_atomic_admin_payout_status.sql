@@ -74,6 +74,9 @@ BEGIN
       IF NOT FOUND THEN
         RETURN jsonb_build_object('ok', false, 'error', 'Seller wallet not found');
       END IF;
+      INSERT INTO wallet_transactions(wallet_id, payout_id, type, category, amount, description, is_released)
+        VALUES (v_wallet_id, p_payout_id, 'credit', 'payout_reversal', v_amount,
+          COALESCE(p_rejection_reason, 'Payout rejected — funds returned'), true);
       UPDATE seller_payouts
         SET status = p_status, processed_by = p_admin_id,
             rejection_reason = COALESCE(p_rejection_reason, 'Rejected by admin'),
@@ -87,6 +90,9 @@ BEGIN
       IF NOT FOUND THEN
         RETURN jsonb_build_object('ok', false, 'error', 'Practitioner wallet not found');
       END IF;
+      INSERT INTO practitioner_wallet_transactions(wallet_id, payout_id, type, category, amount, description, is_released)
+        VALUES (v_wallet_id, p_payout_id, 'credit', 'payout_reversal', v_amount,
+          COALESCE(p_rejection_reason, 'Payout rejected — funds returned'), true);
       UPDATE practitioner_payouts
         SET status = p_status, processed_by = p_admin_id,
             rejection_reason = COALESCE(p_rejection_reason, 'Rejected by admin'),
