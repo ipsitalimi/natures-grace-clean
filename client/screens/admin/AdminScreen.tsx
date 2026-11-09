@@ -158,6 +158,8 @@ export default function AdminScreen() {
         return <AdminReviewsScreen onBackToDashboard={handleBackToDashboard} />;
       case "Support":
         return <AdminSupportScreen onBackToDashboard={handleBackToDashboard} />;
+      case "Scheduling":
+        return <AdminBookingScheduleScreen onBackToDashboard={handleBackToDashboard} />;
       case "Payouts":
         return <AdminPayoutQueueScreen onBackToDashboard={handleBackToDashboard} />;
       case "Refunds":
