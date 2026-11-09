@@ -10,7 +10,7 @@ export async function fetchResources(): Promise<ResourceItem[]> {
 
   if (error) {
     console.error("[resourcesService] fetch:", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return ((data ?? []) as DbResourceRow[]).map(resourceRowToItem);
 }
