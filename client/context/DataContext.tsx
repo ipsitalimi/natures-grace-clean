@@ -71,10 +71,10 @@ interface DataContextType {
   ) => Promise<boolean>;
 
   resources: ResourceItem[];
-  addResource: (resource: Omit<ResourceItem, "id">) => void;
-  deleteResource: (id: string) => void;
-  setResourcePublished: (id: string, published: boolean) => void;
-  updateResource: (id: string, patch: resourcesService.ResourceUpdatePatch) => Promise<void>;
+  addResource: (resource: Omit<ResourceItem, "id">) => Promise<boolean>;
+  deleteResource: (id: string) => Promise<boolean>;
+  setResourcePublished: (id: string, published: boolean) => Promise<boolean>;
+  updateResource: (id: string, patch: resourcesService.ResourceUpdatePatch) => Promise<boolean>;
 
   allProducts: StoreProduct[];
   storeCategories: StoreCategory[];
@@ -367,34 +367,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [events]
   );
 
-  const addResource = useCallback(async (resource: Omit<ResourceItem, "id">) => {
-    if (!isSupabaseConfigured()) return;
+  const addResource = useCallback(async (resource: Omit<ResourceItem, "id">): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const created = await resourcesService.insertResource(resource);
-    if (created) {
-      setResources((prev) => [...prev, created]);
-    }
+    if (!created) return false;
+    setResources((prev) => [...prev, created]);
+    return true;
   }, []);
 
-  const deleteResource = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured()) await resourcesService.deleteResource(id);
+  const deleteResource = useCallback(async (id: string): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
+    const deleted = await resourcesService.deleteResource(id);
+    if (!deleted) return false;
     setResources((prev) => prev.filter((r) => r.id !== id));
+    return true;
   }, []);
 
-  const setResourcePublished = useCallback(async (id: string, published: boolean) => {
-    if (!isSupabaseConfigured()) return;
-    await resourcesService.setResourcePublished(id, published);
-    setResources((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, published } : r))
-    );
+  const setResourcePublished = useCallback(async (id: string, published: boolean): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
+    const updated = await resourcesService.setResourcePublished(id, published);
+    if (!updated) return false;
+    setResources((prev) => prev.map((r) => (r.id === id ? { ...r, published } : r)));
+    return true;
   }, []);
 
   const updateResource = useCallback(
-    async (id: string, patch: resourcesService.ResourceUpdatePatch) => {
-      if (!isSupabaseConfigured()) return;
+    async (id: string, patch: resourcesService.ResourceUpdatePatch): Promise<boolean> => {
+      if (!isSupabaseConfigured()) return false;
       const updated = await resourcesService.updateResource(id, patch);
-      if (updated) {
-        setResources((prev) => prev.map((r) => (r.id === id ? updated : r)));
-      }
+      if (!updated) return false;
+      setResources((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      return true;
     },
     []
   );
