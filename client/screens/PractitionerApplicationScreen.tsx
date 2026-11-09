@@ -263,6 +263,7 @@ export default function PractitionerApplicationScreen() {
           placeholderTextColor={Colors.light.textMuted}
           multiline
           numberOfLines={4}
+          maxLength={600}
           testID="input-bio"
         />
 
