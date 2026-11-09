@@ -113,9 +113,17 @@ export async function updateProduct(
 export async function deleteProduct(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-  const { error } = await supabase.from("products").delete().eq("id", id);
-  if (error) console.error("[productsService] delete:", error.message);
-  return !error;
+  const { data, error } = await supabase
+    .from("products")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("[productsService] delete:", error.message);
+    return false;
+  }
+  return Boolean(data);
 }
 
 export async function countProducts(): Promise<number> {
