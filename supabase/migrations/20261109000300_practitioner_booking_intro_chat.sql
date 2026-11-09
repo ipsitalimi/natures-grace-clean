@@ -62,8 +62,9 @@ BEGIN
    FOR UPDATE OF b;
 
   IF NOT FOUND
-     OR (v_booking.user_id <> auth.uid()
-         AND v_booking.practitioner_profile_id <> auth.uid()) THEN
+     OR auth.uid() IS NULL
+     OR (v_booking.user_id IS DISTINCT FROM auth.uid()
+         AND v_booking.practitioner_profile_id IS DISTINCT FROM auth.uid()) THEN
     RETURN jsonb_build_object('ok', false, 'error', 'Booking not found');
   END IF;
 
