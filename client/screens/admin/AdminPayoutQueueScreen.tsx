@@ -110,6 +110,17 @@ export default function AdminPayoutQueueScreen({
       setRejectModal({ type, id });
       return;
     }
+    if (status === "Completed") {
+      Alert.alert(
+        "Confirm payout completion",
+        "Confirm that the withdrawal has been manually transferred to the recipient. This marks the payout as completed.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Mark completed", onPress: () => void applyStatus(type, id, status) },
+        ]
+      );
+      return;
+    }
     setBusyId(id);
     const result = await updatePayoutStatus(session.access_token, type, id, status);
     setBusyId(null);
