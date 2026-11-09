@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -142,6 +143,17 @@ export default function AdminApplicationsScreen({
     setApplications((prev) => prev.map((a) => a.id === selected.id ? { ...a, formData: { ...a.formData, bio: bioDraft.trim() } } : a));
   };
 
+  const confirmApprove = (application: RoleApplication) => {
+    Alert.alert(
+      "Approve application",
+      `Approve ${application.targetRole.toLowerCase()} access for ${applicationDisplayName(application.formData)}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Approve", onPress: () => void handleApprove(application) },
+      ]
+    );
+  };
+
   const handleApprove = async (application: RoleApplication) => {
     setActionBusy(true);
     setActionError(null);
@@ -245,7 +257,7 @@ export default function AdminApplicationsScreen({
           <View style={styles.actionRow}>
             <Pressable
               style={[styles.actionButton, styles.approveButton]}
-              onPress={() => void handleApprove(selected)}
+              onPress={() => confirmApprove(selected)}
               disabled={actionBusy}
               testID="button-approve-application"
             >
