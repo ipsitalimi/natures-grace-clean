@@ -177,7 +177,7 @@ function ShipOrderModal({
 
           <ThemedText style={styles.fieldLabel}>Dispatch video (required)</ThemedText>
           <Pressable
-            style={styles.modalInput}
+            style={styles.dispatchVideoButton}
             onPress={onPickDispatchVideo}
             disabled={submitting}
             testID="button-pick-dispatch-video"
@@ -646,6 +646,15 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
     marginTop: Spacing.xs,
+  },
+  dispatchVideoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
   },
   modalInput: {
     backgroundColor: Colors.light.cardBackground,
