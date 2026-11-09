@@ -1,6 +1,19 @@
 -- Keep event and course signup flows consistent with the existing schema.
 -- Admin archive/unpublish actions retain the event/course and registration history.
 
+-- Prevent accidental hard deletion from cascading away attendee/interest history.
+ALTER TABLE public.event_registrations
+  DROP CONSTRAINT IF EXISTS event_registrations_event_id_fkey;
+ALTER TABLE public.event_registrations
+  ADD CONSTRAINT event_registrations_event_id_fkey
+  FOREIGN KEY (event_id) REFERENCES public.events(id) ON DELETE RESTRICT;
+
+ALTER TABLE public.resource_enrollments
+  DROP CONSTRAINT IF EXISTS resource_enrollments_resource_id_fkey;
+ALTER TABLE public.resource_enrollments
+  ADD CONSTRAINT resource_enrollments_resource_id_fkey
+  FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE RESTRICT;
+
 CREATE OR REPLACE FUNCTION public.validate_event_registration_insert()
 RETURNS TRIGGER
 LANGUAGE plpgsql
