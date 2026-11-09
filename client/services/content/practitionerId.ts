@@ -437,7 +437,6 @@ export async function updatePractitionerProfileDetails(
     bio: string;
     experience: string;
     certifications: string[];
-    pricePerSession: number;
     isActive: boolean;
     photoUrl: string;
   }>
