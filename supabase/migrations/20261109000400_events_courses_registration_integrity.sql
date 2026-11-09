@@ -11,7 +11,7 @@ DECLARE
   event_is_visible BOOLEAN;
   event_status TEXT;
 BEGIN
-  IF auth.role() <> 'service_role' AND NOT public.is_admin() AND NEW.user_id <> auth.uid() THEN
+  IF COALESCE(auth.role(), '') <> 'service_role' AND NOT public.is_admin() AND NEW.user_id IS DISTINCT FROM auth.uid() THEN
     RAISE EXCEPTION 'You can only register yourself for an event';
   END IF;
 
