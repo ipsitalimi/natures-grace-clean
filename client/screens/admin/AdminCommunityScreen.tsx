@@ -244,12 +244,15 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   };
 
   const handleSaveEvent = async () => {
-    if (!title.trim()) return;
+    if (!title.trim() || !date.trim() || !time.trim()) {
+      Alert.alert("Missing event details", "Enter the event title, date, and time before saving.");
+      return;
+    }
     const mapped = {
       title: title.trim(),
       description: description.trim() || `${title.trim()} - a community wellness event.`,
-      date: date.trim() || "TBD",
-      time: time.trim() || "TBD",
+      date: date.trim(),
+      time: time.trim(),
       mode,
       pricing: price.trim() ? [{ label: "Per Session", amount: price.trim() }] : [],
       price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
@@ -306,9 +309,9 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   };
 
   const handleDeleteEvent = (eventId: string) => {
-    Alert.alert("Delete event", "Delete this event and its associated registration record references? This cannot be undone.", [
+    Alert.alert("Archive event", "Hide this event from customers and mark it ended? The event and its registration history will be retained.", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: () => {
+      { text: "Archive", style: "destructive", onPress: () => {
         void (async () => {
           const deleted = await deleteEvent(eventId);
           if (!deleted) {
