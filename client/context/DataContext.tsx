@@ -80,7 +80,7 @@ interface DataContextType {
   storeCategories: StoreCategory[];
   sellerCatalog: SellerProduct[];
   addProduct: (product: Omit<StoreProduct, "id"> & { id?: string }) => Promise<StoreProduct | null>;
-  updateProduct: (id: string, updates: Partial<StoreProduct>) => void;
+  updateProduct: (id: string, updates: Partial<StoreProduct>) => Promise<boolean>;
   deleteProduct: (id: string) => void;
 
   practitionerCategories: Category[];
@@ -425,20 +425,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [profile?.id, profile?.role, platformSettings.autoApproveProducts]
   );
 
-  const updateProduct = useCallback(async (id: string, updates: Partial<StoreProduct>) => {
-    if (!isSupabaseConfigured()) return;
+  const updateProduct = useCallback(async (id: string, updates: Partial<StoreProduct>): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const updated = await productsService.updateProduct(id, updates);
-    if (updated) {
-      setAllProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
-      setSellerCatalogProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
-    }
+    if (!updated) return false;
+    setAllProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    setSellerCatalogProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    return true;
   }, []);
 
   const deleteProduct = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured()) return;
-    await productsService.deleteProduct(id);
+    if (!isSupabaseConfigured()) return false;
+    const deleted = await productsService.deleteProduct(id);
+    if (!deleted) return false;
     setAllProducts((prev) => prev.filter((p) => p.id !== id));
     setSellerCatalogProducts((prev) => prev.filter((p) => p.id !== id));
+    return true;
   }, []);
 
   const addPractitioner = useCallback(
