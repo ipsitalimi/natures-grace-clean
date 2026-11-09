@@ -111,7 +111,6 @@ export function toUserSessionHistory(
     duration: `${row.duration_minutes} min`,
     price: Number(row.amount).toLocaleString("en-IN"),
     time: row.session_time,
-    meetingLink: row.meeting_link ?? undefined,
     paymentStatus: row.payment_status,
   };
 }
