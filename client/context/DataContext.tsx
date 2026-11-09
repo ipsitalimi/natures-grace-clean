@@ -41,10 +41,10 @@ interface DataContextType {
   refreshContent: (options?: { silent?: boolean }) => Promise<void>;
 
   events: CommunityEvent[];
-  addEvent: (event: Omit<CommunityEvent, "id" | "dbId">) => void;
-  updateEvent: (id: string, patch: eventsService.EventUpdatePatch) => Promise<void>;
-  deleteEvent: (id: string) => void;
-  setEventVisibility: (id: string, visible: boolean) => void;
+  addEvent: (event: Omit<CommunityEvent, "id" | "dbId">) => Promise<boolean>;
+  updateEvent: (id: string, patch: eventsService.EventUpdatePatch) => Promise<boolean>;
+  deleteEvent: (id: string) => Promise<boolean>;
+  setEventVisibility: (id: string, visible: boolean) => Promise<boolean>;
 
   discussions: Discussion[];
   moderationDiscussions: Discussion[];
@@ -321,48 +321,48 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addEvent = useCallback(
-    async (event: Omit<CommunityEvent, "id" | "dbId">) => {
-      if (!isSupabaseConfigured()) return;
+    async (event: Omit<CommunityEvent, "id" | "dbId">): Promise<boolean> => {
+      if (!isSupabaseConfigured()) return false;
       const created = await eventsService.insertEvent({
         ...event,
         id: generateId("evt"),
       } as CommunityEvent);
-      if (created) {
-        setEvents((prev) => [...prev, created]);
-      }
+      if (!created) return false;
+      setEvents((prev) => [...prev, created]);
+      return true;
     },
     []
   );
 
-  const updateEvent = useCallback(async (id: string, patch: eventsService.EventUpdatePatch) => {
-    if (!isSupabaseConfigured()) return;
+  const updateEvent = useCallback(async (id: string, patch: eventsService.EventUpdatePatch): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const target = events.find((e) => e.id === id);
-    if (!target?.dbId) return;
+    if (!target?.dbId) return false;
     const updated = await eventsService.updateEvent(target.dbId, patch);
-    if (updated) {
-      setEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
-    }
+    if (!updated) return false;
+    setEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    return true;
   }, [events]);
 
-  const deleteEvent = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured()) return;
+  const deleteEvent = useCallback(async (id: string): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const target = events.find((e) => e.id === id);
-    if (target?.dbId) {
-      await eventsService.deleteEventByDbId(target.dbId);
-    }
+    if (!target?.dbId) return false;
+    const deleted = await eventsService.deleteEventByDbId(target.dbId);
+    if (!deleted) return false;
     setEvents((prev) => prev.filter((e) => e.id !== id));
+    return true;
   }, [events]);
 
   const setEventVisibility = useCallback(
-    async (id: string, visible: boolean) => {
-      if (!isSupabaseConfigured()) return;
+    async (id: string, visible: boolean): Promise<boolean> => {
+      if (!isSupabaseConfigured()) return false;
       const target = events.find((e) => e.id === id);
-      if (target?.dbId) {
-        await eventsService.updateEventVisibility(target.dbId, visible);
-      }
-      setEvents((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, isVisible: visible } : e))
-      );
+      if (!target?.dbId) return false;
+      const updated = await eventsService.updateEventVisibility(target.dbId, visible);
+      if (!updated) return false;
+      setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, isVisible: visible } : e)));
+      return true;
     },
     [events]
   );
