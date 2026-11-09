@@ -369,12 +369,17 @@ export async function updateOrderShipping(
     patch.dispatch_video_url = shipping.dispatchVideoPath || null;
   }
 
-  const { error } = await supabase.from("orders").update(patch).eq("id", orderId);
+  const { data, error } = await supabase
+    .from("orders")
+    .update(patch)
+    .eq("id", orderId)
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("[ordersService] update shipping:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data);
 }
 
 export type CreateOrderItemInput = {
