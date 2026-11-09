@@ -27,6 +27,10 @@ export default function PractitionerSessionsScreen() {
   const navigation = useNavigation<any>();
   const { openDrawer } = useDrawer();
   const { sessions, loading, loadError, refresh } = usePractitionerContext();
+  const sessionsByDate = sessions.reduce<Record<string, PractitionerSession[]>>((groups, session) => {
+    (groups[session.date] ??= []).push(session);
+    return groups;
+  }, {});
 
   return (
     <View style={styles.container}>
@@ -71,7 +75,10 @@ export default function PractitionerSessionsScreen() {
             </ThemedText>
           </View>
         ) : (
-        sessions.map((session) => {
+        Object.entries(sessionsByDate).map(([date, dateSessions]) => (
+          <View key={date}>
+            <ThemedText style={styles.dateHeading}>{date}</ThemedText>
+            {dateSessions.map((session) => {
           const sc = getStatusColor(session.status);
           return (
             <Pressable
@@ -116,7 +123,9 @@ export default function PractitionerSessionsScreen() {
               </View>
             </Pressable>
           );
-        })
+        })}
+          </View>
+        ))
         )}
       </ScrollView>
     </View>
@@ -135,6 +144,13 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
+  },
+  dateHeading: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.light.text,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   sessionCard: {
     backgroundColor: Colors.light.cardBackground,
