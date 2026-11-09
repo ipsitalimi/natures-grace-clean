@@ -240,22 +240,6 @@ export default function PractitionerProfileScreen() {
           {available ? "You are currently accepting new clients" : "You are not accepting new clients"}
         </ThemedText>
 
-        <ThemedText style={styles.fieldLabel}>Session meeting link</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={meetingLink}
-          onChangeText={setMeetingLink}
-          placeholder="https://zoom.us/j/... or Google Meet link"
-          placeholderTextColor={Colors.light.textMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          testID="input-meeting-link"
-        />
-        <ThemedText style={styles.availabilityHint}>
-          Clients can join upcoming sessions from this link. Update it before each session if needed.
-        </ThemedText>
-
         <View style={styles.sessionSetupSection}>
           <ThemedText style={styles.sessionSetupTitle}>Session Setup</ThemedText>
           <ThemedText style={styles.sessionSetupHint}>
