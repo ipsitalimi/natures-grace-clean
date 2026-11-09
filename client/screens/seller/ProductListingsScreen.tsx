@@ -37,7 +37,7 @@ export default function ProductListingsScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(30);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
-  const { sellerCatalog, deleteProduct } = useDataContext();
+  const { sellerCatalog, deleteProduct, refreshSellerCatalog } = useDataContext();
 
   const listings: SellerProduct[] = sellerCatalog;
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -45,8 +45,9 @@ export default function ProductListingsScreen() {
   useEffect(() => {
     if (isFocused) {
       setDeleteConfirm(null);
+      void refreshSellerCatalog();
     }
-  }, [isFocused]);
+  }, [isFocused, refreshSellerCatalog]);
 
   const handleDelete = (id: string, productName: string) => {
     Alert.alert("Remove product", `Remove "${productName}" from your store?`, [
