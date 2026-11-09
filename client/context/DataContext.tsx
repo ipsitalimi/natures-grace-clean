@@ -81,7 +81,7 @@ interface DataContextType {
   sellerCatalog: SellerProduct[];
   addProduct: (product: Omit<StoreProduct, "id"> & { id?: string }) => Promise<StoreProduct | null>;
   updateProduct: (id: string, updates: Partial<StoreProduct>) => Promise<boolean>;
-  deleteProduct: (id: string) => void;
+  deleteProduct: (id: string) => Promise<boolean>;
 
   practitionerCategories: Category[];
   practitionersLoading: boolean;
