@@ -9,6 +9,25 @@ import { getSupabase } from "@/lib/supabase";
 import { resolvePractitionerId } from "@/services/content/practitionerId";
 import { cancelUserBooking } from "@/services/bookingCancellationApi";
 
+function sessionTimeMinutes(value: string): number {
+  const match = value.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (match) {
+    let hour = Number(match[1]) % 12;
+    if (match[3].toUpperCase() === "PM") hour += 12;
+    return hour * 60 + Number(match[2] ?? "0");
+  }
+  const twentyFourHour = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourHour) return Number(twentyFourHour[1]) * 60 + Number(twentyFourHour[2]);
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function sortBookingsBySessionStart(rows: DbBookingRow[]): DbBookingRow[] {
+  return [...rows].sort((a, b) =>
+    a.session_date.localeCompare(b.session_date) ||
+    sessionTimeMinutes(a.session_time) - sessionTimeMinutes(b.session_time)
+  );
+}
+
 function uiStatus(row: DbBookingRow): PractitionerSessionStatus {
   if (row.booking_status === "Cancelled") return "Cancelled";
   if (row.booking_status === "Completed") return "Completed";
@@ -141,7 +160,7 @@ export async function fetchPractitionerBookings(
     console.error("[practitionerBookings] fetch:", error.message);
     return [];
   }
-  return ((data ?? []) as DbBookingRow[]).map(toPractitionerSession);
+  return sortBookingsBySessionStart((data ?? []) as DbBookingRow[]).map(toPractitionerSession);
 }
 
 export async function fetchUserBookings(
@@ -178,7 +197,7 @@ export async function fetchUserBookings(
     }
   }
 
-  return rows.map((row) =>
+  return sortBookingsBySessionStart(rows).map((row) =>
     toUserSessionHistory(row, nameById.get(row.practitioner_id ?? "") ?? "Practitioner")
   );
 }
