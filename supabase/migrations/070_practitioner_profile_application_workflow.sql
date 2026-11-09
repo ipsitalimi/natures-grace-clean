@@ -202,3 +202,40 @@ REVOKE ALL ON FUNCTION public.ensure_practitioner_profile() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.ensure_practitioner_profile() TO authenticated;
 
 NOTIFY pgrst, 'reload schema';
+
+-- Only admins may change approved category/specialty, moderation, verification,
+-- featured status, pricing, or meeting-link fields. Practitioners may still
+-- edit their own public profile details and availability.
+CREATE OR REPLACE FUNCTION public.practitioners_profile_field_guard()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_admin() THEN
+    NEW.profile_id := OLD.profile_id;
+    NEW.category := OLD.category;
+    NEW.subcategory := OLD.subcategory;
+    NEW.specialties := OLD.specialties;
+    NEW.approval_status := OLD.approval_status;
+    NEW.is_verified := OLD.is_verified;
+    NEW.featured := OLD.featured;
+    NEW.price_per_session := OLD.price_per_session;
+    NEW.meeting_link := OLD.meeting_link;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS practitioners_profile_field_guard ON public.practitioners;
+CREATE TRIGGER practitioners_profile_field_guard
+  BEFORE UPDATE ON public.practitioners
+  FOR EACH ROW
+  EXECUTE FUNCTION public.practitioners_profile_field_guard();
+
+-- This helper is intentionally only called from trusted SECURITY DEFINER RPCs.
+REVOKE ALL ON FUNCTION public.apply_practitioner_application(UUID, JSONB) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.apply_practitioner_application(UUID, JSONB) FROM authenticated;
+
+NOTIFY pgrst, 'reload schema';
