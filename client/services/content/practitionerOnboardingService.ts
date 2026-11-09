@@ -31,7 +31,7 @@ export async function fetchPractitionerOnboardingState(
 
   const { data, error } = await supabase
     .from("practitioners")
-    .select("id, name, bio, price_per_session, meeting_link, metadata")
+    .select("id, name, bio, metadata")
     .eq("id", practitionerId)
     .maybeSingle();
 
