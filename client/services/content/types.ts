@@ -188,6 +188,7 @@ export function resourceRowToItem(row: DbResourceRow): ResourceItem {
     published: row.is_published,
     instructorName:
       typeof meta.instructorName === "string" ? meta.instructorName : undefined,
+    schedule: typeof meta.schedule === "string" ? meta.schedule : undefined,
     locations: typeof meta.locations === "string" ? meta.locations : undefined,
     certificateNote:
       typeof meta.certificateNote === "string" ? meta.certificateNote : undefined,
