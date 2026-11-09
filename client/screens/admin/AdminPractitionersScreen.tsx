@@ -22,6 +22,8 @@ function PractitionerCard({
   onApprove,
   onReject,
   onToggleVerification,
+  onEditBio,
+  onEditPrice,
 }: {
   practitioner: Practitioner;
   state: PractitionerState;
@@ -29,6 +31,8 @@ function PractitionerCard({
   onApprove: () => void;
   onReject: () => void;
   onToggleVerification: () => void;
+  onEditBio: () => void;
+  onEditPrice: () => void;
 }) {
   const getApprovalBadgeColor = (status: ApprovalStatus) => {
     switch (status) {
@@ -69,7 +73,7 @@ function PractitionerCard({
             <ThemedText style={styles.editBioText}>Edit / publish bio</ThemedText>
           </Pressable>
           <ThemedText style={styles.practitionerPrice}>{formatInr(practitioner.pricePerSession)}/-</ThemedText>
-          <Pressable style={styles.editBioButton} onPress={() => { setPriceTarget(practitioner); setPriceDraft(String(practitioner.pricePerSession ?? 0)); setPriceError(""); }} testID={`button-edit-price-${practitioner.id}`}>
+          <Pressable style={styles.editBioButton} onPress={onEditPrice} testID={`button-edit-price-${practitioner.id}`}>
             <Feather name="edit-2" size={13} color={Colors.light.accent} />
             <ThemedText style={styles.editBioText}>Set session price</ThemedText>
           </Pressable>
@@ -194,6 +198,7 @@ export default function AdminPractitionersScreen({
   };
 
   return (
+    <>
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
@@ -258,10 +263,82 @@ export default function AdminPractitionersScreen({
             const current = getPractitionerState(practitioner);
             updatePractitionerState(practitioner.id, { isVerified: !current.isVerified });
           }}
+          onEditBio={() => {
+            setBioTarget(practitioner);
+            setBioDraft(practitioner.bio ?? "");
+            setBioError("");
+          }}
+          onEditPrice={() => {
+            setPriceTarget(practitioner);
+            setPriceDraft(String(practitioner.pricePerSession ?? 0));
+            setPriceError("");
+          }}
         />
       ))
       )}
     </ScrollView>
+
+      <Modal visible={bioTarget !== null} transparent animationType="fade" onRequestClose={() => setBioTarget(null)}>
+        <View style={styles.bioModalOverlay}>
+          <View style={styles.bioModalCard}>
+            <ThemedText style={styles.bioModalTitle}>Edit practitioner bio</ThemedText>
+            <ThemedText style={styles.bioModalHint}>
+              Admin-managed public bio. Keep it concise (about 4–5 lines; max 600 characters).
+            </ThemedText>
+            <TextInput
+              style={styles.bioInput}
+              value={bioDraft}
+              onChangeText={setBioDraft}
+              multiline
+              maxLength={600}
+              textAlignVertical="top"
+              placeholder="Write the practitioner's public bio…"
+              placeholderTextColor={Colors.light.textMuted}
+              testID="input-admin-practitioner-bio"
+            />
+            <ThemedText style={styles.bioCount}>{bioDraft.length}/600</ThemedText>
+            {bioError ? <ThemedText style={styles.bioError}>{bioError}</ThemedText> : null}
+            <View style={styles.bioActions}>
+              <Pressable onPress={() => setBioTarget(null)} disabled={bioBusy}>
+                <ThemedText style={styles.bioCancel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable style={styles.bioSave} onPress={() => void saveBio()} disabled={bioBusy}>
+                {bioBusy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <ThemedText style={styles.bioSaveText}>Save bio</ThemedText>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={priceTarget !== null} transparent animationType="fade" onRequestClose={() => setPriceTarget(null)}>
+        <View style={styles.bioModalOverlay}>
+          <View style={styles.bioModalCard}>
+            <ThemedText style={styles.bioModalTitle}>Set practitioner session price</ThemedText>
+            <ThemedText style={styles.bioModalHint}>
+              Pricing is managed by Admin and remains independent of service booking prices.
+            </ThemedText>
+            <TextInput
+              style={styles.bioInput}
+              value={priceDraft}
+              onChangeText={setPriceDraft}
+              keyboardType="numeric"
+              placeholder="Session price in INR"
+              placeholderTextColor={Colors.light.textMuted}
+              testID="input-admin-practitioner-price"
+            />
+            {priceError ? <ThemedText style={styles.bioError}>{priceError}</ThemedText> : null}
+            <View style={styles.bioActions}>
+              <Pressable onPress={() => setPriceTarget(null)} disabled={priceBusy}>
+                <ThemedText style={styles.bioCancel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable style={styles.bioSave} onPress={() => void savePrice()} disabled={priceBusy}>
+                {priceBusy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <ThemedText style={styles.bioSaveText}>Save price</ThemedText>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
