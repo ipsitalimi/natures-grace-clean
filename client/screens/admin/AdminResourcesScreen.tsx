@@ -6,6 +6,7 @@ import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { ResourceItem } from "@/data/mockResources";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import * as resourceEnrollmentsService from "@/services/content/resourceEnrollmentsService";
 
 type ResourceType = "Article" | "Practice" | "Audio Session" | "Course";
