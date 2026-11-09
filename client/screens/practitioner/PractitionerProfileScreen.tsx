@@ -43,7 +43,6 @@ export default function PractitionerProfileScreen() {
   const [experience, setExperience] = useState("");
   const [certifications, setCertifications] = useState("");
   const [available, setAvailable] = useState(true);
-  const [meetingLink, setMeetingLink] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -65,7 +64,6 @@ export default function PractitionerProfileScreen() {
       setExperience(details.experience);
       setCertifications(details.certifications.join(", "));
       setAvailable(details.isActive);
-      setMeetingLink(details.meetingLink);
       setPhotoUrl(details.photoUrl);
       setPhotoPreviewUri(details.photoUrl || null);
       setLoading(false);
@@ -136,7 +134,6 @@ export default function PractitionerProfileScreen() {
         .map((c) => c.trim())
         .filter(Boolean),
       isActive: available,
-      meetingLink: meetingLink.trim(),
     });
     setSaving(false);
     if (result.error) {
@@ -204,6 +201,7 @@ export default function PractitionerProfileScreen() {
           onChangeText={setBio}
           multiline
           numberOfLines={4}
+          maxLength={600}
           placeholderTextColor={Colors.light.textMuted}
           testID="input-bio"
         />
