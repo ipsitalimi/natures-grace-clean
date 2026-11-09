@@ -104,7 +104,9 @@ export function registerAdminOperationsRoutes(app: Express) {
       return res.status(400).json({ error: rpcResult?.error ?? "Could not update payout status" });
     }
 
-    await notifyPayoutStatus(typeParam, payoutId, status, rejectionReason);
+    if (!rpcResult.already_applied) {
+      await notifyPayoutStatus(typeParam, payoutId, status, rejectionReason);
+    }
 
     await insertActivityLog(supabase, {
       actorId: admin.id,
@@ -140,6 +142,9 @@ export function registerAdminOperationsRoutes(app: Express) {
       status: "in_review" | "approved" | "rejected";
       adminNotes?: string;
     };
+    if (!["in_review", "approved", "rejected"].includes(status)) {
+      return res.status(400).json({ error: "Invalid refund status" });
+    }
     const refundId = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const supabase = requireSupabaseAdmin();
 
@@ -161,6 +166,10 @@ export function registerAdminOperationsRoutes(app: Express) {
     const userId = (existing as { user_id: string }).user_id;
     const orderId = (existing as { order_id?: string | null }).order_id;
     const bookingId = (existing as { booking_id?: string | null }).booking_id;
+
+    if (status === "approved" && Boolean(orderId) === Boolean(bookingId)) {
+      return res.status(400).json({ error: "Refund request must reference exactly one order or booking" });
+    }
 
     if (status === "approved") {
       const commissionRate = await fetchCommissionRate(supabase);
@@ -288,7 +297,7 @@ export function registerAdminOperationsRoutes(app: Express) {
     } else if (status === "rejected") {
       await dispatchUserNotification(supabase, {
         userId,
-        event: "refund_approved",
+        event: "refund_rejected",
         message: "Your refund request was reviewed and could not be approved.",
         linkRoute: "OrderHistory",
         emailVars: { reference: refundId },
