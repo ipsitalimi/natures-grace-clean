@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput, Modal, Switch } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, TextInput, Modal, Switch, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
@@ -135,7 +135,7 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
     setShowAddForm(true);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!editName.trim()) return;
 
     const price = parseFloat(editPrice) || 0;
@@ -143,30 +143,42 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
     const description = editDescription.trim();
     const category = editCategory.trim() || editingProduct?.category || "General";
 
-    if (editingProduct) {
-      updateProduct(editingProduct.id, {
-        name,
-        description,
-        price,
-        category,
-      });
-      logActivity(`Product "${name}" updated`, "store");
-    } else {
-      addProduct({
-        name,
-        description: description || "A wellness product from Nature's Grace.",
-        price,
-        category,
-      });
-      logActivity(`Product "${name}" added`, "store");
+    const savedProduct = editingProduct
+      ? await updateProduct(editingProduct.id, { name, description, price, category })
+      : await addProduct({
+          name,
+          description: description || "A wellness product from Nature's Grace.",
+          price,
+          category,
+        });
+    if (!savedProduct) {
+      Alert.alert("Could not save product", "Check your connection and admin permissions, then try again.");
+      return;
     }
 
+    logActivity(`Product "${name}" ${editingProduct ? "updated" : "added"}`, "store");
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
       setShowAddForm(false);
       resetForm();
     }, 1500);
+  };
+
+  const handleDeleteProduct = (productId: string, productName: string) => {
+    Alert.alert("Delete product", `Delete "${productName}"? This cannot be undone.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => {
+        void (async () => {
+          const deleted = await deleteProduct(productId);
+          if (!deleted) {
+            Alert.alert("Could not delete product", "Check your connection and admin permissions, then try again.");
+            return;
+          }
+          logActivity(`Product "${productName}" deleted`, "store");
+        })();
+      }},
+    ]);
   };
 
   const handleSaveCommissionSettings = () => {
@@ -181,14 +193,29 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
     }, 2000);
   };
 
-  const handleApproveProduct = (productId: string) => {
-    updateProduct(productId, { approvalStatus: "Approved" });
-    logActivity(`Product approved`, "store");
+  const handleApproveProduct = async (productId: string) => {
+    const updated = await updateProduct(productId, { approvalStatus: "Approved" });
+    if (!updated) {
+      Alert.alert("Could not approve product", "Check your connection and admin permissions, then try again.");
+      return;
+    }
+    logActivity("Product approved", "store");
   };
 
   const handleRejectProduct = (productId: string) => {
-    updateProduct(productId, { approvalStatus: "Rejected" });
-    logActivity(`Product rejected`, "store");
+    Alert.alert("Reject product", "Reject this product listing?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Reject", style: "destructive", onPress: () => {
+        void (async () => {
+          const updated = await updateProduct(productId, { approvalStatus: "Rejected" });
+          if (!updated) {
+            Alert.alert("Could not reject product", "Check your connection and admin permissions, then try again.");
+            return;
+          }
+          logActivity("Product rejected", "store");
+        })();
+      }},
+    ]);
   };
 
   const totalProducts = allProducts.length;
@@ -303,7 +330,7 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
             product={product}
             status={getApprovalStatus(product)}
             onEdit={() => handleEditProduct(product)}
-            onDelete={() => deleteProduct(product.id)}
+            onDelete={() => handleDeleteProduct(product.id, product.name)}
             onApprove={() => handleApproveProduct(product.id)}
             onReject={() => handleRejectProduct(product.id)}
           />
