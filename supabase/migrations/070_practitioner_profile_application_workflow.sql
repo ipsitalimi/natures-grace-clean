@@ -14,6 +14,7 @@ AS $$
 DECLARE
   v_app RECORD;
   v_form JSONB;
+  v_seller_id UUID;
 BEGIN
   IF NOT public.is_admin() OR p_admin_id IS DISTINCT FROM auth.uid() THEN
     RETURN jsonb_build_object('ok', false, 'error', 'forbidden');
@@ -39,18 +40,37 @@ BEGIN
     -- categories, experience and bio; it deliberately ignores priceRange.
     PERFORM public.apply_practitioner_application(v_app.user_id, v_form);
   ELSIF v_app.target_role = 'Seller' THEN
-    -- Preserve the existing seller provisioning path unchanged.
-    IF NOT EXISTS (
-      SELECT 1 FROM public.sellers WHERE profile_id = v_app.user_id
-    ) THEN
+    -- Keep the original seller onboarding fields and wallet bootstrap.
+    SELECT id INTO v_seller_id
+    FROM public.sellers
+    WHERE profile_id = v_app.user_id
+    LIMIT 1;
+
+    IF v_seller_id IS NULL THEN
       INSERT INTO public.sellers (
-        profile_id, store_name, description, is_active
+        profile_id, store_name, description, philosophy, storefront_settings,
+        is_active, is_verified
       ) VALUES (
         v_app.user_id,
-        COALESCE(v_form->>'brandName', v_form->>'fullName', 'Store'),
+        COALESCE(NULLIF(v_form->>'brandName', ''), NULLIF(v_form->>'fullName', ''), 'Store'),
         COALESCE(v_form->>'description', ''),
-        true
-      );
+        COALESCE(v_form->>'philosophy', ''),
+        jsonb_build_object(
+          'accent_color', '#013220',
+          'banner_theme_index', 0,
+          'featured_product_ids', '[]'::jsonb,
+          'onboarding_complete', false
+        ),
+        true,
+        false
+      )
+      RETURNING id INTO v_seller_id;
+    END IF;
+
+    IF v_seller_id IS NOT NULL AND to_regclass('public.seller_wallets') IS NOT NULL THEN
+      INSERT INTO public.seller_wallets (seller_id)
+      VALUES (v_seller_id)
+      ON CONFLICT (seller_id) WHERE seller_id IS NOT NULL DO NOTHING;
     END IF;
   ELSE
     RETURN jsonb_build_object('ok', false, 'error', 'Unsupported application role');
