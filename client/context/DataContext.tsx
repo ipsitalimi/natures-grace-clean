@@ -98,7 +98,8 @@ interface DataContextType {
     id: string,
     patch: Partial<Pick<Practitioner, "approvalStatus" | "isVerified" | "featured">>
   ) => void;
-  updatePractitionerBio: (id: string, bio: string) => Promise<boolean>;\n  updatePractitionerPrice: (id: string, price: number) => Promise<boolean>;
+  updatePractitionerBio: (id: string, bio: string) => Promise<boolean>;
+  updatePractitionerPrice: (id: string, price: number) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -519,7 +520,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, []);
 
-  const updatePractitionerPrice = useCallback(async (id: string, price: number): Promise<boolean> => {\n    if (!isSupabaseConfigured() || !Number.isFinite(price) || price < 0) return false;\n    const ok = await practitionersService.updatePractitioner(id, { price_per_session: price });\n    if (!ok) return false;\n    setPractitionerCats((prev) => prev.map((cat) => ({\n      ...cat,\n      practitioners: cat.practitioners.map((p) => p.id === id ? { ...p, pricePerSession: price } : p),\n    })));\n    return true;\n  }, []);\n\n  const value: DataContextType = {
+  const updatePractitionerPrice = useCallback(async (id: string, price: number): Promise<boolean> => {
+    if (!isSupabaseConfigured() || !Number.isFinite(price) || price < 0) return false;
+    const ok = await practitionersService.updatePractitioner(id, { price_per_session: price });
+    if (!ok) return false;
+    setPractitionerCats((prev) => prev.map((cat) => ({
+      ...cat,
+      practitioners: cat.practitioners.map((p) => p.id === id ? { ...p, pricePerSession: price } : p),
+    })));
+    return true;
+  }, []);
+
+  const value: DataContextType = {
     dataLoading,
     dataError,
     isRemoteData,
