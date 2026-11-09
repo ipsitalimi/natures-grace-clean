@@ -13,6 +13,7 @@ import SessionHistoryScreen from "@/screens/SessionHistoryScreen";
 import OrderHistoryScreen from "@/screens/OrderHistoryScreen";
 import OrderDetailScreen from "@/screens/OrderDetailScreen";
 import SessionDetailScreen from "@/screens/SessionDetailScreen";
+import PractitionerBookingIntroChatScreen from "@/screens/PractitionerBookingIntroChatScreen";
 import ResourcesScreen from "@/screens/ResourcesScreen";
 import ResourceDetailScreen from "@/screens/ResourceDetailScreen";
 import NGStoreScreen from "@/screens/NGStoreScreen";
@@ -104,6 +105,7 @@ export type RootStackParamList = {
   OrderHistory: undefined;
   OrderDetail: { orderId: string };
   SessionDetail: { sessionId: string };
+  BookingIntroChat: { bookingId: string };
   Resources: undefined;
   ResourceDetail: { resourceId: string };
   NGStore: undefined;
@@ -240,6 +242,11 @@ export default function RootStackNavigator() {
       <Stack.Screen
         name="SessionDetail"
         component={SessionDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="BookingIntroChat"
+        component={PractitionerBookingIntroChatScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
