@@ -38,6 +38,7 @@ export type AdminScreenName =
   | "Payouts"
   | "Refunds"
   | "AuditLog"
+  | "Scheduling"
   | "Settings";
 
 interface DrawerItem {
