@@ -111,6 +111,7 @@ export default function EventDetailScreen() {
 
   const registrationFree = isEventRegistrationFree(event.pricing);
   const registrationNote = eventRegistrationNote(event.pricing);
+  const eventAcceptingRegistrations = event.status === "Active" && event.isVisible !== false;
 
   return (
     <View style={styles.container}>
@@ -220,11 +221,22 @@ export default function EventDetailScreen() {
               You&apos;re registered for this event
             </ThemedText>
           ) : null}
-          <Pressable style={styles.ctaButton} onPress={handleJoin}>
-            <ThemedText style={styles.ctaButtonText}>
-              {registered ? "View registration" : event.ctaText}
+          {registered || eventAcceptingRegistrations ? (
+            <Pressable
+              style={[styles.ctaButton, !eventAcceptingRegistrations && !registered ? { opacity: 0.5 } : null]}
+              onPress={handleJoin}
+              disabled={!eventAcceptingRegistrations && !registered}
+              testID="button-event-register"
+            >
+              <ThemedText style={styles.ctaButtonText}>
+                {registered ? "View registration" : event.ctaText}
+              </ThemedText>
+            </Pressable>
+          ) : (
+            <ThemedText style={styles.registeredLabel} testID="text-event-registration-closed">
+              Registration is closed for this event.
             </ThemedText>
-          </Pressable>
+          )}
           {registrationsLoading && !registered ? (
             <ThemedText style={styles.bottomNote}>Checking registration…</ThemedText>
           ) : null}
