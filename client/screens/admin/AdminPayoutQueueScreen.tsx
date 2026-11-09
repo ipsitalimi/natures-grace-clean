@@ -100,6 +100,22 @@ export default function AdminPayoutQueueScreen({
     }, [load])
   );
 
+  const applyStatus = async (
+    type: "seller" | "practitioner",
+    id: string,
+    status: string
+  ) => {
+    if (!session?.access_token) return;
+    setBusyId(id);
+    const result = await updatePayoutStatus(session.access_token, type, id, status);
+    setBusyId(null);
+    if (!result.ok) {
+      Alert.alert("Error", result.error ?? "Could not update payout");
+      return;
+    }
+    await load();
+  };
+
   const handleStatus = async (
     type: "seller" | "practitioner",
     id: string,
@@ -121,14 +137,7 @@ export default function AdminPayoutQueueScreen({
       );
       return;
     }
-    setBusyId(id);
-    const result = await updatePayoutStatus(session.access_token, type, id, status);
-    setBusyId(null);
-    if (!result.ok) {
-      Alert.alert("Error", result.error ?? "Could not update payout");
-      return;
-    }
-    await load();
+    await applyStatus(type, id, status);
   };
 
   const confirmReject = async () => {
