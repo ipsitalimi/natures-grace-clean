@@ -23,6 +23,7 @@ export async function insertResource(
 
   const metadata: Record<string, unknown> = {};
   if (resource.instructorName) metadata.instructorName = resource.instructorName;
+  if (resource.schedule) metadata.schedule = resource.schedule;
   if (resource.locations) metadata.locations = resource.locations;
   if (resource.certificateNote) metadata.certificateNote = resource.certificateNote;
 
@@ -50,7 +51,7 @@ export async function insertResource(
 }
 
 export type ResourceUpdatePatch = Partial<
-  Pick<ResourceItem, "title" | "description" | "body" | "price" | "instructorName" | "locations" | "certificateNote">
+  Pick<ResourceItem, "title" | "description" | "body" | "price" | "instructorName" | "schedule" | "locations" | "certificateNote">
 >;
 
 export async function updateResource(
@@ -77,7 +78,7 @@ export async function updateResource(
   if (patch.body !== undefined) dbPatch.body = patch.body;
   if (patch.price !== undefined) dbPatch.price_label = patch.price || null;
 
-  const metaKeys = ["instructorName", "locations", "certificateNote"] as const;
+  const metaKeys = ["instructorName", "schedule", "locations", "certificateNote"] as const;
   const hasMetaChange = metaKeys.some((k) => patch[k] !== undefined);
   if (hasMetaChange) {
     const currentMeta = ((existing as { metadata?: Record<string, unknown> }).metadata ??
@@ -85,6 +86,9 @@ export async function updateResource(
     const nextMeta = { ...currentMeta };
     if (patch.instructorName !== undefined) {
       nextMeta.instructorName = patch.instructorName.trim() || null;
+    }
+    if (patch.schedule !== undefined) {
+      nextMeta.schedule = patch.schedule.trim() || null;
     }
     if (patch.locations !== undefined) {
       nextMeta.locations = patch.locations.trim() || null;
