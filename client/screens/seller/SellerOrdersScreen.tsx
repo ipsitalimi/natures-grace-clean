@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -231,6 +232,11 @@ export default function SellerOrdersScreen() {
   const [activeTab, setActiveTab] = useState<OrderStatus>("Pending");
   const { orders, advanceOrderStatus, ordersLoading, ordersError, refreshOrders } =
     useOrdersContext();
+  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (isFocused) void refreshOrders({ silent: true });
+  }, [isFocused, refreshOrders]);
   const [shipOrder, setShipOrder] = useState<SellerOrder | null>(null);
   const [courier, setCourier] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
