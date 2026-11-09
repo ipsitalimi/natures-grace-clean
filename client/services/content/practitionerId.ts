@@ -439,7 +439,6 @@ export async function updatePractitionerProfileDetails(
     certifications: string[];
     pricePerSession: number;
     isActive: boolean;
-    meetingLink: string;
     photoUrl: string;
   }>
 ): Promise<{ error?: string; code?: PractitionerProvisionErrorCode }> {
@@ -463,7 +462,6 @@ export async function updatePractitionerProfileDetails(
   if (patch.experience !== undefined) dbPatch.experience = patch.experience;
   if (patch.certifications !== undefined) dbPatch.certifications = patch.certifications;
   if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
-  if (patch.meetingLink !== undefined) dbPatch.meeting_link = patch.meetingLink.trim() || null;
   if (patch.photoUrl !== undefined) dbPatch.photo_url = patch.photoUrl.trim() || null;
 
   const { error } = await supabase
