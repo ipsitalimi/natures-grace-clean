@@ -14,6 +14,28 @@ ALTER TABLE public.resource_enrollments
   ADD CONSTRAINT resource_enrollments_resource_id_fkey
   FOREIGN KEY (resource_id) REFERENCES public.resources(id) ON DELETE RESTRICT;
 
+-- Keep a registrant's event/course details accessible after archive/unpublish,
+-- while catalog screens continue to show only active/published items.
+DROP POLICY IF EXISTS "events_select_registered_user" ON public.events;
+CREATE POLICY "events_select_registered_user"
+  ON public.events FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.event_registrations r
+      WHERE r.event_id = events.id AND r.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "resources_select_enrolled_user" ON public.resources;
+CREATE POLICY "resources_select_enrolled_user"
+  ON public.resources FOR SELECT TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.resource_enrollments e
+      WHERE e.resource_id = resources.id AND e.user_id = auth.uid()
+    )
+  );
+
 CREATE OR REPLACE FUNCTION public.validate_event_registration_insert()
 RETURNS TRIGGER
 LANGUAGE plpgsql
