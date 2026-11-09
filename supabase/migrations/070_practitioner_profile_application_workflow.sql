@@ -103,3 +103,102 @@ CREATE TRIGGER practitioners_bio_length_guard
   EXECUTE FUNCTION public.practitioners_bio_length_guard();
 
 NOTIFY pgrst, 'reload schema';
+
+-- Safe self-provisioning fallback for legacy approved accounts. Never parse
+-- priceRange from role_applications into practitioner pricing.
+CREATE OR REPLACE FUNCTION public.ensure_practitioner_profile()
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_profile RECORD;
+  v_practitioner_id UUID;
+  v_app RECORD;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'not_authenticated' USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT id, role, full_name INTO v_profile
+  FROM public.profiles
+  WHERE id = auth.uid();
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'profile_not_found' USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT id INTO v_practitioner_id
+  FROM public.practitioners
+  WHERE profile_id = auth.uid()
+  LIMIT 1;
+
+  IF v_practitioner_id IS NOT NULL THEN
+    INSERT INTO public.practitioner_wallets (practitioner_id)
+    SELECT v_practitioner_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.practitioner_wallets pw
+      WHERE pw.practitioner_id = v_practitioner_id
+    );
+    RETURN v_practitioner_id;
+  END IF;
+
+  IF v_profile.role <> 'Practitioner' THEN
+    SELECT ra.* INTO v_app
+    FROM public.role_applications ra
+    WHERE ra.user_id = auth.uid()
+      AND ra.target_role = 'Practitioner'
+      AND ra.status = 'Approved'
+    ORDER BY ra.reviewed_at DESC NULLS LAST, ra.created_at DESC
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'not_practitioner' USING ERRCODE = 'P0001';
+    END IF;
+
+    UPDATE public.profiles
+    SET role = 'Practitioner', updated_at = NOW()
+    WHERE id = auth.uid();
+  ELSE
+    SELECT ra.* INTO v_app
+    FROM public.role_applications ra
+    WHERE ra.user_id = auth.uid()
+      AND ra.target_role = 'Practitioner'
+      AND ra.status = 'Approved'
+    ORDER BY ra.reviewed_at DESC NULLS LAST, ra.created_at DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_app.id IS NOT NULL THEN
+    v_practitioner_id := public.apply_practitioner_application(
+      auth.uid(), COALESCE(v_app.form_data, '{}'::jsonb)
+    );
+  ELSE
+    -- Preserve the existing admin-assigned-role fallback without accepting
+    -- applicant priceRange data.
+    INSERT INTO public.practitioners (
+      profile_id, name, category, subcategory, bio, experience, certifications,
+      rating, review_count, price_per_session, approval_status, is_verified,
+      featured, is_active
+    ) VALUES (
+      auth.uid(),
+      COALESCE(NULLIF(trim(v_profile.full_name), ''), 'Practitioner'),
+      'Healings', '', '', '1+ years', '{}'::text[],
+      5, 0, 0, 'Approved', false, false, true
+    )
+    RETURNING id INTO v_practitioner_id;
+
+    INSERT INTO public.practitioner_wallets (practitioner_id)
+    VALUES (v_practitioner_id)
+    ON CONFLICT (practitioner_id) DO NOTHING;
+  END IF;
+
+  RETURN v_practitioner_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.ensure_practitioner_profile() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.ensure_practitioner_profile() TO authenticated;
+
+NOTIFY pgrst, 'reload schema';
