@@ -145,8 +145,10 @@ function ShipOrderModal({
   shipError: string;
   courier: string;
   trackingNumber: string;
+  dispatchVideo: LocalFile | null;
   onCourierChange: (v: string) => void;
   onTrackingChange: (v: string) => void;
+  onPickDispatchVideo: () => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
