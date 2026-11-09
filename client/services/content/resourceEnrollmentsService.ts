@@ -85,18 +85,20 @@ export async function cancelEnrollmentForResource(resourceId: string): Promise<b
   } = await supabase.auth.getUser();
   if (!user) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("resource_enrollments")
     .update({ status: "Cancelled" })
     .eq("resource_id", resourceId)
     .eq("user_id", user.id)
-    .eq("status", "Enrolled");
+    .eq("status", "Enrolled")
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[resourceEnrollmentsService] cancel:", error.message);
     throw new Error(error.message);
   }
-  return true;
+  return Boolean(data?.id);
 }
 
 export function activeEnrollmentResourceIds(enrollments: ResourceEnrollment[]): Set<string> {
