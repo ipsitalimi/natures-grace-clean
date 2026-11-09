@@ -140,7 +140,6 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     addEvent,
     updateEvent,
     deleteEvent,
-    setEventVisibility,
     moderationDiscussions,
     discussionsLoading,
     setDiscussionModeration,
@@ -304,15 +303,6 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     } else {
       Alert.alert("Moderation", "Could not ban this user. Please try again.");
     }
-  };
-
-  const handleHideEvent = async (eventId: string) => {
-    const hidden = await setEventVisibility(eventId, false);
-    if (!hidden) {
-      Alert.alert("Could not hide event", "Check your connection and admin permissions, then try again.");
-      return;
-    }
-    logActivity(`Event ${eventId} hidden from community`, "event");
   };
 
   const handleDeleteEvent = (eventId: string) => {
