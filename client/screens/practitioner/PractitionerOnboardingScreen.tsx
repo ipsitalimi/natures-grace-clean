@@ -30,8 +30,6 @@ export default function PractitionerOnboardingScreen() {
   const { session, refreshProfile } = useAuth();
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
-  const [price, setPrice] = useState("");
-  const [meetingLink, setMeetingLink] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -52,8 +50,6 @@ export default function PractitionerOnboardingScreen() {
     }
     setName(res.state.name);
     setBio(res.state.bio);
-    setPrice(res.state.pricePerSession > 0 ? String(res.state.pricePerSession) : "");
-    setMeetingLink(res.state.meetingLink);
   }, [session?.user?.id]);
 
   useEffect(() => {
@@ -66,18 +62,11 @@ export default function PractitionerOnboardingScreen() {
       setSaveError("Please add your display name and a short bio.");
       return;
     }
-    const priceNum = Number(price.replace(/[^\d.]/g, ""));
-    if (!priceNum || priceNum <= 0) {
-      setSaveError("Enter a valid session price in INR.");
-      return;
-    }
     setSaving(true);
     setSaveError(null);
     const res = await completePractitionerOnboarding(session.user.id, {
       name: name.trim(),
       bio: bio.trim(),
-      pricePerSession: priceNum,
-      meetingLink: meetingLink.trim(),
     });
     setSaving(false);
     if (!res.ok) {
@@ -142,27 +131,9 @@ export default function PractitionerOnboardingScreen() {
             placeholder="Your approach, experience, and what clients can expect"
             placeholderTextColor={Colors.light.textMuted}
             multiline
+            maxLength={600}
           />
 
-          <ThemedText style={styles.label}>Session price (INR)</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={price}
-            onChangeText={setPrice}
-            placeholder="1500"
-            placeholderTextColor={Colors.light.textMuted}
-            keyboardType="numeric"
-          />
-
-          <ThemedText style={styles.label}>Meeting link (optional)</ThemedText>
-          <TextInput
-            style={styles.input}
-            value={meetingLink}
-            onChangeText={setMeetingLink}
-            placeholder="https://meet.google.com/..."
-            placeholderTextColor={Colors.light.textMuted}
-            autoCapitalize="none"
-          />
         </View>
 
         {saveError ? <ThemedText style={styles.errorText}>{saveError}</ThemedText> : null}
