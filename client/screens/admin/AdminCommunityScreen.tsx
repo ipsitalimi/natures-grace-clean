@@ -244,7 +244,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     resetForm();
   };
 
-  const handleSaveEvent = () => {
+  const handleSaveEvent = async () => {
     if (!title.trim()) return;
     const mapped = {
       title: title.trim(),
@@ -256,16 +256,18 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
       price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
     };
 
-    if (editingEventId) {
-      void updateEvent(editingEventId, mapped);
-    } else {
-      addEvent({
-        ...mapped,
-        whatToExpect: ["A nurturing and supportive environment", "Expert guidance and facilitation"],
-        ctaText: "Join Event",
-        bottomNote: "",
-        status: "Active",
-      });
+    const savedSuccessfully = editingEventId
+      ? await updateEvent(editingEventId, mapped)
+      : await addEvent({
+          ...mapped,
+          whatToExpect: ["A nurturing and supportive environment", "Expert guidance and facilitation"],
+          ctaText: "Join Event",
+          bottomNote: "",
+          status: "Active",
+        });
+    if (!savedSuccessfully) {
+      Alert.alert("Could not save event", "Check your connection and admin permissions, then try again.");
+      return;
     }
     setSaved(true);
     setTimeout(() => {
@@ -304,9 +306,29 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     }
   };
 
-  const handleHideEvent = (eventId: string) => {
-    setEventVisibility(eventId, false);
+  const handleHideEvent = async (eventId: string) => {
+    const hidden = await setEventVisibility(eventId, false);
+    if (!hidden) {
+      Alert.alert("Could not hide event", "Check your connection and admin permissions, then try again.");
+      return;
+    }
     logActivity(`Event ${eventId} hidden from community`, "event");
+  };
+
+  const handleDeleteEvent = (eventId: string) => {
+    Alert.alert("Delete event", "Delete this event and its associated registration record references? This cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: () => {
+        void (async () => {
+          const deleted = await deleteEvent(eventId);
+          if (!deleted) {
+            Alert.alert("Could not delete event", "Check your connection and admin permissions, then try again.");
+            return;
+          }
+          logActivity(`Event ${eventId} deleted`, "event");
+        })();
+      }},
+    ]);
   };
 
   return (
@@ -386,10 +408,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
               : []
           }
           onEdit={() => openEditForm(event)}
-          onDelete={() => {
-            handleHideEvent(event.id);
-            deleteEvent(event.id);
-          }}
+          onDelete={() => handleDeleteEvent(event.id)}
         />
       ))}
 
