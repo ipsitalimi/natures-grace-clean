@@ -363,7 +363,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (!target?.dbId) return false;
       const updated = await eventsService.updateEventVisibility(target.dbId, visible);
       if (!updated) return false;
-      setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, isVisible: visible } : e)));
+      setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, isVisible: visible, status: visible ? "Active" : "Ended" } : e)));
       return true;
     },
     [events]
