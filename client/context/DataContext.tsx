@@ -79,6 +79,7 @@ interface DataContextType {
   allProducts: StoreProduct[];
   storeCategories: StoreCategory[];
   sellerCatalog: SellerProduct[];
+  refreshSellerCatalog: () => Promise<void>;
   addProduct: (product: Omit<StoreProduct, "id"> & { id?: string }) => Promise<StoreProduct | null>;
   updateProduct: (id: string, updates: Partial<StoreProduct>) => Promise<boolean>;
   deleteProduct: (id: string) => Promise<boolean>;
@@ -558,6 +559,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     allProducts,
     storeCategories,
     sellerCatalog,
+    refreshSellerCatalog,
     addProduct,
     updateProduct,
     deleteProduct,
