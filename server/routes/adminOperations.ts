@@ -46,6 +46,90 @@ async function notifyPayoutStatus(
 }
 
 export function registerAdminOperationsRoutes(app: Express) {
+  app.get("/api/admin/bookings/schedule", async (req: Request, res: Response) => {
+    const admin = await requireRole(req, res, "Admin");
+    if (!admin) return;
+
+    const supabase = requireSupabaseAdmin();
+    let query = supabase
+      .from("practitioner_bookings")
+      .select("id, booking_number, user_id, practitioner_id, client_name, service_name, session_date, session_time, duration_minutes, booking_status, payment_status, meeting_link")
+      .in("booking_status", ["Pending", "Confirmed"])
+      .order("session_date", { ascending: true })
+      .order("session_time", { ascending: true });
+
+    const from = typeof req.query.from === "string" ? req.query.from : undefined;
+    const to = typeof req.query.to === "string" ? req.query.to : undefined;
+    if (from) query = query.gte("session_date", from);
+    if (to) query = query.lte("session_date", to);
+
+    const { data, error } = await query.limit(250);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ sessions: data ?? [] });
+  });
+
+  app.patch("/api/admin/bookings/:id/schedule", async (req: Request, res: Response) => {
+    const admin = await requireRole(req, res, "Admin");
+    if (!admin) return;
+
+    const bookingId = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    const { sessionDate, sessionTime, meetingLink } = req.body as {
+      sessionDate?: string;
+      sessionTime?: string;
+      meetingLink?: string | null;
+    };
+    if (!sessionDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(sessionDate)) {
+      return res.status(400).json({ error: "Session date must use YYYY-MM-DD." });
+    }
+    if (!sessionTime || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(sessionTime)) {
+      return res.status(400).json({ error: "Session time must use 24-hour HH:MM." });
+    }
+    if (meetingLink != null && meetingLink.trim()) {
+      try {
+        const parsed = new URL(meetingLink.trim());
+        if (parsed.protocol !== "https:") throw new Error("HTTPS required");
+      } catch {
+        return res.status(400).json({ error: "Meeting link must be a valid HTTPS URL." });
+      }
+    }
+
+    const supabase = requireSupabaseAdmin();
+    const { data: existing, error: fetchError } = await supabase
+      .from("practitioner_bookings")
+      .select("id, booking_status")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (fetchError || !existing) return res.status(404).json({ error: "Booking not found." });
+    if (!["Pending", "Confirmed"].includes(existing.booking_status)) {
+      return res.status(409).json({ error: "Only pending or confirmed sessions can be rescheduled." });
+    }
+
+    const { data: booking, error } = await supabase
+      .from("practitioner_bookings")
+      .update({
+        session_date: sessionDate,
+        session_time: sessionTime,
+        meeting_link: meetingLink?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", bookingId)
+      .in("booking_status", ["Pending", "Confirmed"])
+      .select("id, session_date, session_time, meeting_link")
+      .maybeSingle();
+    if (error) return res.status(400).json({ error: error.message });
+    if (!booking) return res.status(409).json({ error: "Booking changed before the schedule update was saved." });
+
+    await insertActivityLog(supabase, {
+      actorId: admin.id,
+      actorName: admin.email,
+      actionType: "booking",
+      description: `Booking ${bookingId} rescheduled by admin`,
+      targetType: "booking",
+      targetId: bookingId,
+    });
+    return res.json({ ok: true, booking });
+  });
+
   app.get("/api/admin/payouts", async (req: Request, res: Response) => {
     const admin = await requireRole(req, res, "Admin");
     if (!admin) return;
