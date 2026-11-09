@@ -41,6 +41,7 @@ export default function EventRegistrationScreen() {
   } = useEventRegistrations();
   const event = events.find((e) => e.id === eventId);
   const eventDbId = event?.dbId;
+  const eventAcceptingRegistrations = event?.status === "Active" && event.isVisible !== false;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -73,6 +74,10 @@ export default function EventRegistrationScreen() {
 
   const handleSubmit = async () => {
     if (!isValid || submitting) return;
+    if (!eventAcceptingRegistrations) {
+      setSubmitError("This event is no longer accepting registrations.");
+      return;
+    }
 
     if (!isSupabaseConfigured()) {
       setSubmitError("Sign in and connect Supabase to register for events.");
@@ -205,6 +210,12 @@ export default function EventRegistrationScreen() {
           </ThemedText>
         ) : null}
 
+        {event && !eventAcceptingRegistrations && !existingRegistration ? (
+          <ThemedText style={styles.errorText} testID="text-event-registration-closed">
+            This event is not accepting registrations.
+          </ThemedText>
+        ) : null}
+
         {event ? (
           <ThemedText style={styles.subtitle}>{event.title}</ThemedText>
         ) : null}
@@ -288,11 +299,11 @@ export default function EventRegistrationScreen() {
         <Pressable
           style={[
             styles.submitButton,
-            (!isValid || submitting || registrationsLoading || !eventDbId) &&
+            (!isValid || submitting || registrationsLoading || !eventDbId || !eventAcceptingRegistrations) &&
               styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={!isValid || submitting || registrationsLoading || !eventDbId}
+          disabled={!isValid || submitting || registrationsLoading || !eventDbId || !eventAcceptingRegistrations}
           testID="button-submit-registration"
         >
           {submitting ? (
