@@ -11,8 +11,17 @@ DECLARE
   event_is_visible BOOLEAN;
   event_status TEXT;
 BEGIN
-  IF COALESCE(auth.role(), '') <> 'service_role' AND NOT public.is_admin() AND NEW.user_id IS DISTINCT FROM auth.uid() THEN
-    RAISE EXCEPTION 'You can only register yourself for an event';
+  IF COALESCE(auth.role(), '') <> 'service_role' AND NOT public.is_admin() THEN
+    IF NEW.user_id IS DISTINCT FROM auth.uid() THEN
+      RAISE EXCEPTION 'You can only register yourself for an event';
+    END IF;
+    IF NEW.status <> 'Registered'
+      OR NEW.payment_status <> 'None'
+      OR NEW.razorpay_payment_id IS NOT NULL
+      OR NEW.amount_paid IS NOT NULL
+    THEN
+      RAISE EXCEPTION 'Event registration cannot set payment or administrative status';
+    END IF;
   END IF;
 
   SELECT is_visible, status
@@ -64,6 +73,7 @@ BEGIN
     OR NEW.razorpay_payment_id IS DISTINCT FROM OLD.razorpay_payment_id
     OR NEW.amount_paid IS DISTINCT FROM OLD.amount_paid
     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+    OR NEW.updated_at IS DISTINCT FROM OLD.updated_at
   THEN
     RAISE EXCEPTION 'Registration details and payment fields cannot be changed by attendees';
   END IF;
@@ -92,8 +102,13 @@ DECLARE
   resource_is_published BOOLEAN;
   resource_section TEXT;
 BEGIN
-  IF auth.role() <> 'service_role' AND NOT public.is_admin() AND NEW.user_id <> auth.uid() THEN
-    RAISE EXCEPTION 'You can only express interest for yourself';
+  IF COALESCE(auth.role(), '') <> 'service_role' AND NOT public.is_admin() THEN
+    IF NEW.user_id IS DISTINCT FROM auth.uid() THEN
+      RAISE EXCEPTION 'You can only express interest for yourself';
+    END IF;
+    IF NEW.status <> 'Enrolled' THEN
+      RAISE EXCEPTION 'Course interest must begin as Enrolled';
+    END IF;
   END IF;
 
   SELECT is_published, section
@@ -139,6 +154,7 @@ BEGIN
     OR NEW.user_id IS DISTINCT FROM OLD.user_id
     OR NEW.metadata IS DISTINCT FROM OLD.metadata
     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+    OR NEW.updated_at IS DISTINCT FROM OLD.updated_at
   THEN
     RAISE EXCEPTION 'Course enrollment details cannot be changed by attendees';
   END IF;
