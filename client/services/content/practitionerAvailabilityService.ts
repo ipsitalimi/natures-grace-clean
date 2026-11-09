@@ -56,7 +56,7 @@ export async function fetchAvailabilityForOffering(
     };
   }
 
-  const dated = rows.filter((r) => r.specific_date);
+  const dated = rows.filter((r) => r.specific_date && r.is_available);
   const timingMode = (dated[0]?.timing_mode as "same" | "custom") ?? "same";
   const selectedDates = dated.map((r) => r.specific_date as string);
   const dateTimings: Record<string, { start: string; end: string }> = {};
