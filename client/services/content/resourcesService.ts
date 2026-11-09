@@ -112,15 +112,25 @@ export async function updateResource(
 export async function deleteResource(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-  const { error } = await supabase.from("resources").delete().eq("id", id);
+  const { data, error } = await supabase.from("resources").delete().eq("id", id).select("id").maybeSingle();
   if (error) console.error("[resourcesService] delete:", error.message);
-  return !error;
+  return !error && Boolean(data?.id);
 }
 
-export async function setResourcePublished(id: string, published: boolean): Promise<void> {
+export async function setResourcePublished(id: string, published: boolean): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return;
-  await supabase.from("resources").update({ is_published: published }).eq("id", id);
+  if (!supabase) return false;
+  const { data, error } = await supabase
+    .from("resources")
+    .update({ is_published: published })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("[resourcesService] publish:", error.message);
+    return false;
+  }
+  return Boolean(data?.id);
 }
 
 export async function countResources(): Promise<number> {
