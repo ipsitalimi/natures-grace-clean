@@ -49,11 +49,17 @@ export async function insertEvent(event: Omit<CommunityEvent, "dbId">): Promise<
   return eventRowToCommunityEvent(data as DbEventRow);
 }
 
+/** Archive/hide an event while retaining the event and attendee records. */
 export async function deleteEventByDbId(dbId: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-  const { data, error } = await supabase.from("events").delete().eq("id", dbId).select("id").maybeSingle();
-  if (error) console.error("[eventsService] delete:", error.message);
+  const { data, error } = await supabase
+    .from("events")
+    .update({ is_visible: false, status: "Ended" })
+    .eq("id", dbId)
+    .select("id")
+    .maybeSingle();
+  if (error) console.error("[eventsService] archive:", error.message);
   return !error && Boolean(data?.id);
 }
 
