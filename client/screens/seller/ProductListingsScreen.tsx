@@ -19,8 +19,11 @@ function getCategoryColor(category: string): { bg: string; text: string } {
       return { bg: "#E8A0B522", text: "#9B5C73" };
     case "Conscious Nutrition":
       return { bg: "#4A9A5B22", text: "#4A7C59" };
+    case "Festive Gifting":
     case "Spirit & Space":
       return { bg: "#6CB4D922", text: "#3A7CA5" };
+    case "Pets Products":
+      return { bg: "#8B735522", text: "#8B7355" };
     case "Sacred Rituals":
       return { bg: "#D4943A22", text: "#8B6F47" };
     case "Daily Vitality":
