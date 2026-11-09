@@ -15,135 +15,34 @@ import {
 
 type PayoutStatus = "Pending" | "Under Review" | "Processing" | "Completed" | "Rejected";
 
-async function updateSellerPayoutStatus(
+async function notifyPayoutStatus(
+  payoutType: "seller" | "practitioner",
   payoutId: string,
   status: PayoutStatus,
-  adminId: string,
   rejectionReason?: string
 ) {
+  if (status !== "Completed" && status !== "Rejected") return;
   const supabase = requireSupabaseAdmin();
-
-  const { data: payout } = await supabase
-    .from("seller_payouts")
-    .select("*, seller_wallets(seller_id, sellers(profile_id))")
-    .eq("id", payoutId)
-    .maybeSingle();
-
-  if (!payout) return { error: "Payout not found" };
-
-  const patch: Record<string, unknown> = {
-    status,
-    processed_by: adminId,
-    updated_at: new Date().toISOString(),
-  };
-  if (status === "Completed") patch.completed_at = new Date().toISOString();
-  if (status === "Rejected") {
-    patch.rejection_reason = rejectionReason ?? "Rejected by admin";
-    const amount = Number((payout as { amount: number }).amount);
-    const walletId = (payout as { wallet_id: string }).wallet_id;
-    const { data: wallet } = await supabase
-      .from("seller_wallets")
-      .select("available_balance, pending_payout")
-      .eq("id", walletId)
-      .single();
-    if (wallet) {
-      await supabase
-        .from("seller_wallets")
-        .update({
-          available_balance: Number(wallet.available_balance) + amount,
-          pending_payout: Math.max(0, Number(wallet.pending_payout) - amount),
-        })
-        .eq("id", walletId);
-    }
-  }
-
-  await supabase.from("seller_payouts").update(patch).eq("id", payoutId);
-
-  const profileId =
-    (payout as { seller_wallets?: { sellers?: { profile_id?: string } } }).seller_wallets?.sellers
-      ?.profile_id ?? null;
-
-  if (profileId) {
-    const amountStr = `₹${Number((payout as { amount: number }).amount).toLocaleString("en-IN")}`;
-    if (status === "Completed") {
-      await dispatchUserNotification(supabase, {
-        userId: profileId,
-        event: "withdrawal_completed",
-        message: `Your withdrawal of ${amountStr} has been completed.`,
-        linkRoute: "Main",
-      });
-    } else if (status === "Rejected") {
-      await dispatchUserNotification(supabase, {
-        userId: profileId,
-        event: "withdrawal_received",
-        message: `Your withdrawal request was not approved. Funds returned to your wallet.`,
-        linkRoute: "Main",
-      });
-    }
-  }
-
-  return { ok: true };
-}
-
-async function updatePractitionerPayoutStatus(
-  payoutId: string,
-  status: PayoutStatus,
-  adminId: string,
-  rejectionReason?: string
-) {
-  const supabase = requireSupabaseAdmin();
-
-  const { data: payout } = await supabase
-    .from("practitioner_payouts")
-    .select("*, practitioner_wallets(practitioner_id, practitioners(profile_id))")
-    .eq("id", payoutId)
-    .maybeSingle();
-
-  if (!payout) return { error: "Payout not found" };
-
-  const patch: Record<string, unknown> = {
-    status,
-    processed_by: adminId,
-    updated_at: new Date().toISOString(),
-  };
-  if (status === "Completed") patch.completed_at = new Date().toISOString();
-  if (status === "Rejected") {
-    patch.rejection_reason = rejectionReason ?? "Rejected by admin";
-    const amount = Number((payout as { amount: number }).amount);
-    const walletId = (payout as { wallet_id: string }).wallet_id;
-    const { data: wallet } = await supabase
-      .from("practitioner_wallets")
-      .select("available_balance, pending_payout")
-      .eq("id", walletId)
-      .single();
-    if (wallet) {
-      await supabase
-        .from("practitioner_wallets")
-        .update({
-          available_balance: Number(wallet.available_balance) + amount,
-          pending_payout: Math.max(0, Number(wallet.pending_payout) - amount),
-        })
-        .eq("id", walletId);
-    }
-  }
-
-  await supabase.from("practitioner_payouts").update(patch).eq("id", payoutId);
-
-  const profileId =
-    (payout as { practitioner_wallets?: { practitioners?: { profile_id?: string } } })
-      .practitioner_wallets?.practitioners?.profile_id ?? null;
-
-  if (profileId && status === "Completed") {
-    const amountStr = `₹${Number((payout as { amount: number }).amount).toLocaleString("en-IN")}`;
-    await dispatchUserNotification(supabase, {
-      userId: profileId,
-      event: "withdrawal_completed",
-      message: `Your withdrawal of ${amountStr} has been completed.`,
-      linkRoute: "Main",
-    });
-  }
-
-  return { ok: true };
+  const table = payoutType === "seller" ? "seller_payouts" : "practitioner_payouts";
+  const relation = payoutType === "seller"
+    ? "seller_wallets(sellers(profile_id))"
+    : "practitioner_wallets(practitioners(profile_id))";
+  const { data } = await supabase.from(table).select(`amount, ${relation}`).eq("id", payoutId).maybeSingle();
+  const row = data as Record<string, unknown> | null;
+  const nested = payoutType === "seller"
+    ? (row?.seller_wallets as { sellers?: { profile_id?: string } } | null)?.sellers
+    : (row?.practitioner_wallets as { practitioners?: { profile_id?: string } } | null)?.practitioners;
+  const profileId = nested?.profile_id;
+  if (!profileId) return;
+  const amountStr = `₹${Number(row?.amount ?? 0).toLocaleString("en-IN")}`;
+  await dispatchUserNotification(supabase, {
+    userId: profileId,
+    event: status === "Completed" ? "withdrawal_completed" : "withdrawal_received",
+    message: status === "Completed"
+      ? `Your withdrawal of ${amountStr} has been completed.`
+      : `Your withdrawal request was not approved. Funds returned to your wallet. ${rejectionReason ?? ""}`.trim(),
+    linkRoute: "Main",
+  });
 }
 
 export function registerAdminOperationsRoutes(app: Express) {
@@ -187,18 +86,27 @@ export function registerAdminOperationsRoutes(app: Express) {
       return res.status(400).json({ error: "Invalid status" });
     }
 
-    const result =
-      typeParam === "seller"
-        ? await updateSellerPayoutStatus(payoutId, status, admin.id, rejectionReason)
-        : typeParam === "practitioner"
-          ? await updatePractitionerPayoutStatus(payoutId, status, admin.id, rejectionReason)
-          : { error: "Invalid type" };
-
-    if ("error" in result && result.error) {
-      return res.status(400).json(result);
+    if (typeParam !== "seller" && typeParam !== "practitioner") {
+      return res.status(400).json({ error: "Invalid type" });
     }
 
-    await insertActivityLog(requireSupabaseAdmin(), {
+    const supabase = requireSupabaseAdmin();
+    const { data: rpcData, error: rpcError } = await supabase.rpc("admin_update_payout_status", {
+      p_payout_type: typeParam,
+      p_payout_id: payoutId,
+      p_status: status,
+      p_admin_id: admin.id,
+      p_rejection_reason: rejectionReason ?? null,
+    });
+    if (rpcError) return res.status(400).json({ error: rpcError.message });
+    const rpcResult = rpcData as { ok?: boolean; error?: string; already_applied?: boolean } | null;
+    if (!rpcResult?.ok) {
+      return res.status(400).json({ error: rpcResult?.error ?? "Could not update payout status" });
+    }
+
+    await notifyPayoutStatus(typeParam, payoutId, status, rejectionReason);
+
+    await insertActivityLog(supabase, {
       actorId: admin.id,
       actorName: admin.email,
       actionType: "settings",
