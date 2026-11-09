@@ -100,6 +100,25 @@ BEGIN
         WHERE id = p_payout_id;
     END IF;
   ELSE
+    -- A completed payout has left the wallet; clear its reserved pending amount.
+    IF p_status = 'Completed' THEN
+      IF p_payout_type = 'seller' THEN
+        UPDATE seller_wallets
+          SET pending_payout = GREATEST(0, pending_payout - v_amount)
+          WHERE id = v_wallet_id;
+        IF NOT FOUND THEN
+          RETURN jsonb_build_object('ok', false, 'error', 'Seller wallet not found');
+        END IF;
+      ELSE
+        UPDATE practitioner_wallets
+          SET pending_payout = GREATEST(0, pending_payout - v_amount)
+          WHERE id = v_wallet_id;
+        IF NOT FOUND THEN
+          RETURN jsonb_build_object('ok', false, 'error', 'Practitioner wallet not found');
+        END IF;
+      END IF;
+    END IF;
+
     IF p_payout_type = 'seller' THEN
       UPDATE seller_payouts SET status = p_status, processed_by = p_admin_id,
         completed_at = CASE WHEN p_status = 'Completed' THEN v_now ELSE completed_at END,
