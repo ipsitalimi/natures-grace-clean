@@ -142,9 +142,9 @@ export async function fetchActiveCourseInterestsForAdmin(): Promise<AdminCourseI
     throw new Error(profilesError.message);
   }
 
-  const profileById = new Map(
+  const profileById = new Map<string, { id: string; full_name: string; email: string; phone: string | null }>(
     ((profiles ?? []) as Array<{ id: string; full_name: string; email: string; phone: string | null }>)
-      .map((profile) => [profile.id, profile])
+      .map((profile) => [profile.id, profile] as const)
   );
   return rows.map((row) => {
     const profile = profileById.get(row.user_id);
