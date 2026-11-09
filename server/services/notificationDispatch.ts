@@ -20,6 +20,7 @@ export type NotificationEvent =
   | "seller_approved"
   | "application_rejected"
   | "refund_approved"
+  | "refund_rejected"
   | "withdrawal_received"
   | "withdrawal_completed"
   | "application_submitted";
@@ -35,6 +36,7 @@ const EVENT_CATEGORY: Record<NotificationEvent, NotificationCategory> = {
   seller_approved: "platform_announcements",
   application_rejected: "platform_announcements",
   refund_approved: "order_updates",
+  refund_rejected: "order_updates",
   withdrawal_received: "order_updates",
   withdrawal_completed: "order_updates",
   application_submitted: "platform_announcements",
