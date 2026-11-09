@@ -21,7 +21,6 @@ export interface PractitionerSession {
   notes?: string;
   amount?: number;
   paymentStatus?: "Pending" | "Paid" | "Refunded";
-  meetingLink?: string;
 }
 
 export type BookingStatus = "Pending" | "Confirmed" | "Completed" | "Cancelled";
@@ -145,6 +144,5 @@ export type UserSessionHistory = {
   duration: string;
   price: string;
   time: string;
-  meetingLink?: string;
   paymentStatus?: BookingPaymentStatus;
 };
