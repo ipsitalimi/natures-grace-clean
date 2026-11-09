@@ -10,6 +10,7 @@ export interface ResourceItem {
   url?: string;
   published?: boolean;
   instructorName?: string;
+  schedule?: string;
   locations?: string;
   certificateNote?: string;
 }
