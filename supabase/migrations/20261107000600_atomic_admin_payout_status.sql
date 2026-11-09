@@ -69,10 +69,10 @@ BEGIN
     IF p_payout_type = 'seller' THEN
       UPDATE seller_wallets
         SET available_balance = available_balance + v_amount,
-            pending_payout = GREATEST(0, pending_payout - v_amount)
-        WHERE id = v_wallet_id;
+            pending_payout = pending_payout - v_amount
+        WHERE id = v_wallet_id AND pending_payout >= v_amount;
       IF NOT FOUND THEN
-        RETURN jsonb_build_object('ok', false, 'error', 'Seller wallet not found');
+        RETURN jsonb_build_object('ok', false, 'error', 'Seller wallet not found or reserved payout balance is insufficient');
       END IF;
       INSERT INTO wallet_transactions(wallet_id, payout_id, type, category, amount, description, is_released)
         VALUES (v_wallet_id, p_payout_id, 'credit', 'payout_reversal', v_amount,
@@ -85,10 +85,10 @@ BEGIN
     ELSE
       UPDATE practitioner_wallets
         SET available_balance = available_balance + v_amount,
-            pending_payout = GREATEST(0, pending_payout - v_amount)
-        WHERE id = v_wallet_id;
+            pending_payout = pending_payout - v_amount
+        WHERE id = v_wallet_id AND pending_payout >= v_amount;
       IF NOT FOUND THEN
-        RETURN jsonb_build_object('ok', false, 'error', 'Practitioner wallet not found');
+        RETURN jsonb_build_object('ok', false, 'error', 'Practitioner wallet not found or reserved payout balance is insufficient');
       END IF;
       INSERT INTO practitioner_wallet_transactions(wallet_id, payout_id, type, category, amount, description, is_released)
         VALUES (v_wallet_id, p_payout_id, 'credit', 'payout_reversal', v_amount,
