@@ -67,12 +67,14 @@ function EventCard({
   attendeeCount,
   attendees,
   onEdit,
+  onToggleVisibility,
   onDelete,
 }: {
   event: CommunityEvent;
   attendeeCount: number | null;
   attendees: EventRegistration[];
   onEdit: () => void;
+  onToggleVisibility: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -91,6 +93,9 @@ function EventCard({
         <ThemedText style={styles.cardPrice}>{event.price}</ThemedText>
         <Pressable style={styles.deleteIconBtn} onPress={onEdit} testID={`button-edit-event-${event.id}`}>
           <Feather name="edit-2" size={14} color={Colors.light.accent} />
+        </Pressable>
+        <Pressable style={styles.deleteIconBtn} onPress={onToggleVisibility} testID={`button-toggle-event-visibility-${event.id}`}>
+          <Feather name={event.isVisible === false ? "eye-off" : "eye"} size={14} color={Colors.light.accent} />
         </Pressable>
         <Pressable style={styles.deleteIconBtn} onPress={onDelete} testID={`button-delete-event-${event.id}`}>
           <Feather name="trash-2" size={14} color="#8B3A3A" />
@@ -401,6 +406,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
               : []
           }
           onEdit={() => openEditForm(event)}
+          onToggleVisibility={() => void handleHideEvent(event.id)}
           onDelete={() => handleDeleteEvent(event.id)}
         />
       ))}
