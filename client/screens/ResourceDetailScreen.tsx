@@ -57,7 +57,10 @@ export default function ResourceDetailScreen() {
     setEnrollBusy(true);
     setEnrollError(null);
     try {
-      await toggleEnrollment(resourceId);
+      const updated = await toggleEnrollment(resourceId);
+      if (!updated) {
+        setEnrollError("Could not update course interest. Please try again.");
+      }
     } catch (err) {
       setEnrollError(err instanceof Error ? err.message : "Could not update enrollment");
     } finally {
