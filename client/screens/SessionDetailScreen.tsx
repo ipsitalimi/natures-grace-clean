@@ -510,6 +510,16 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     gap: 10,
   },
+  introChatButton: {
+    backgroundColor: Colors.light.accent,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: Spacing.md,
+  },
   joinButton: {
     backgroundColor: Colors.light.button,
     borderRadius: BorderRadius.sm,
