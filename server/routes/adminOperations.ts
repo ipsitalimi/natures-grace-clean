@@ -78,10 +78,10 @@ export function registerAdminOperationsRoutes(app: Express) {
       sessionTime?: string;
       meetingLink?: string | null;
     };
-    if (!sessionDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(sessionDate)) {
+    if (!sessionDate || !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
       return res.status(400).json({ error: "Session date must use YYYY-MM-DD." });
     }
-    if (!sessionTime || !/^([01]\\d|2[0-3]):[0-5]\\d$/.test(sessionTime)) {
+    if (!sessionTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(sessionTime)) {
       return res.status(400).json({ error: "Session time must use 24-hour HH:MM." });
     }
     if (meetingLink != null && meetingLink.trim()) {
