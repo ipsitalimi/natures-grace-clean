@@ -23,7 +23,7 @@ CREATE POLICY booking_intro_messages_select_participants
     EXISTS (
       SELECT 1 FROM public.practitioner_bookings b
       LEFT JOIN public.practitioners p ON p.id = b.practitioner_id
-      WHERE b.id = booking_id
+      WHERE b.id = practitioner_booking_intro_messages.booking_id
         AND (b.user_id = auth.uid() OR p.profile_id = auth.uid())
     )
   );
