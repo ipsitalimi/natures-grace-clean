@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   dateDropdown: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: Colors.light.cardBackground, padding: 12, borderRadius: 10, marginBottom: Spacing.md },
   dateDropdownText: { color: Colors.light.text, fontSize: 13, fontWeight: "600" },
   dateDropdownOptions: { backgroundColor: Colors.light.cardBackground, borderRadius: 10, marginBottom: Spacing.md, overflow: "hidden" },
-  dateOption: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.border },
+  dateOption: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.divider },
   dateOptionText: { color: Colors.light.text, fontSize: 13 },
   infoText: {
     fontSize: 13,
