@@ -9,7 +9,6 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
-import { openMeetingLink } from "@/lib/meetingLink";
 
 export default function PractitionerSessionDetailScreen() {
   const navigation = useNavigation();
@@ -27,10 +26,6 @@ export default function PractitionerSessionDetailScreen() {
   const [actionError, setActionError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const handleJoinSession = () => {
-    if (!session) return;
-    openMeetingLink(session.meetingLink);
-  };
 
   const runAction = async (action: "complete" | "cancel") => {
     if (!sessionId || submitting) return;
