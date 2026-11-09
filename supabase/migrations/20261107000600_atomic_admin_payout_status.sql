@@ -104,17 +104,17 @@ BEGIN
     IF p_status = 'Completed' THEN
       IF p_payout_type = 'seller' THEN
         UPDATE seller_wallets
-          SET pending_payout = GREATEST(0, pending_payout - v_amount)
-          WHERE id = v_wallet_id;
+          SET pending_payout = pending_payout - v_amount
+          WHERE id = v_wallet_id AND pending_payout >= v_amount;
         IF NOT FOUND THEN
-          RETURN jsonb_build_object('ok', false, 'error', 'Seller wallet not found');
+          RETURN jsonb_build_object('ok', false, 'error', 'Seller wallet not found or reserved payout balance is insufficient');
         END IF;
       ELSE
         UPDATE practitioner_wallets
           SET pending_payout = GREATEST(0, pending_payout - v_amount)
           WHERE id = v_wallet_id;
         IF NOT FOUND THEN
-          RETURN jsonb_build_object('ok', false, 'error', 'Practitioner wallet not found');
+          RETURN jsonb_build_object('ok', false, 'error', 'Practitioner wallet not found or reserved payout balance is insufficient');
         END IF;
       END IF;
     END IF;
