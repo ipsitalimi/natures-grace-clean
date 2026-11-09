@@ -52,15 +52,20 @@ export async function insertEvent(event: Omit<CommunityEvent, "dbId">): Promise<
 export async function deleteEventByDbId(dbId: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-  const { error } = await supabase.from("events").delete().eq("id", dbId);
+  const { data, error } = await supabase.from("events").delete().eq("id", dbId).select("id").maybeSingle();
   if (error) console.error("[eventsService] delete:", error.message);
-  return !error;
+  return !error && Boolean(data?.id);
 }
 
-export async function updateEventVisibility(dbId: string, isVisible: boolean): Promise<void> {
+export async function updateEventVisibility(dbId: string, isVisible: boolean): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return;
-  await supabase.from("events").update({ is_visible: isVisible }).eq("id", dbId);
+  if (!supabase) return false;
+  const { data, error } = await supabase.from("events").update({ is_visible: isVisible }).eq("id", dbId).select("id").maybeSingle();
+  if (error) {
+    console.error("[eventsService] visibility:", error.message);
+    return false;
+  }
+  return Boolean(data?.id);
 }
 
 export type EventUpdatePatch = Partial<
