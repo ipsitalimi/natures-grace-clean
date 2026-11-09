@@ -115,6 +115,7 @@ function CourseResourceRow({
     body: string;
     description: string;
     instructorName: string;
+    schedule: string;
     locations: string;
     certificateNote: string;
     price: string;
@@ -124,6 +125,7 @@ function CourseResourceRow({
   const [title, setTitle] = useState(resource.title);
   const [body, setBody] = useState(resource.body ?? "");
   const [instructorName, setInstructorName] = useState(resource.instructorName ?? "");
+  const [schedule, setSchedule] = useState(resource.schedule ?? "");
   const [locations, setLocations] = useState(resource.locations ?? "");
   const [certificateNote, setCertificateNote] = useState(resource.certificateNote ?? "");
   const [price, setPrice] = useState(resource.price ?? "");
@@ -132,6 +134,7 @@ function CourseResourceRow({
     setTitle(resource.title);
     setBody(resource.body ?? "");
     setInstructorName(resource.instructorName ?? "");
+    setSchedule(resource.schedule ?? "");
     setLocations(resource.locations ?? "");
     setCertificateNote(resource.certificateNote ?? "");
     setPrice(resource.price ?? "");
@@ -195,6 +198,14 @@ function CourseResourceRow({
               placeholder="Instructor name"
               placeholderTextColor={Colors.light.textSecondary}
             />
+            <ThemedText style={styles.inputLabel}>Schedule / Dates (optional)</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={schedule}
+              onChangeText={setSchedule}
+              placeholder="e.g. 6–8 Dec 2026 · 10 AM–1 PM IST"
+              placeholderTextColor={Colors.light.textSecondary}
+            />
             <ThemedText style={styles.inputLabel}>Locations</ThemedText>
             <TextInput
               style={styles.input}
@@ -230,6 +241,7 @@ function CourseResourceRow({
                     body: trimmedBody,
                     description: trimmedBody.substring(0, 100) || resource.description,
                     instructorName,
+                    schedule,
                     locations,
                     certificateNote,
                     price,
@@ -269,6 +281,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
   const [formDuration, setFormDuration] = useState("");
   const [formContent, setFormContent] = useState("");
   const [formInstructor, setFormInstructor] = useState("");
+  const [formSchedule, setFormSchedule] = useState("");
   const [formLocations, setFormLocations] = useState("");
   const [formCertificate, setFormCertificate] = useState("");
   const [formPrice, setFormPrice] = useState("");
@@ -348,6 +361,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
     setFormDuration("");
     setFormContent("");
     setFormInstructor("");
+    setFormSchedule("");
     setFormLocations("");
     setFormCertificate("");
     setFormPrice("");
@@ -365,6 +379,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       body: formContent.trim() || `${formTitle.trim()} content will be available soon.`,
       price: selectedType === "Course" ? formPrice.trim() || undefined : undefined,
       instructorName: selectedType === "Course" ? formInstructor.trim() || undefined : undefined,
+      schedule: selectedType === "Course" ? formSchedule.trim() || undefined : undefined,
       locations: selectedType === "Course" ? formLocations.trim() || undefined : undefined,
       certificateNote: selectedType === "Course" ? formCertificate.trim() || undefined : undefined,
     });
@@ -380,6 +395,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       setFormDuration("");
       setFormContent("");
       setFormInstructor("");
+      setFormSchedule("");
       setFormLocations("");
       setFormCertificate("");
       setFormPrice("");
@@ -514,6 +530,15 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
                   placeholderTextColor={Colors.light.textSecondary}
                   testID="input-course-instructor"
                 />
+                <ThemedText style={styles.inputLabel}>Schedule / Dates (optional)</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={formSchedule}
+                  onChangeText={setFormSchedule}
+                  placeholder="e.g. 6–8 Dec 2026 · 10 AM–1 PM IST"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  testID="input-course-schedule"
+                />
                 <ThemedText style={styles.inputLabel}>Locations</ThemedText>
                 <TextInput
                   style={styles.input}
@@ -593,6 +618,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
               body: patch.body,
               description: patch.description,
               instructorName: patch.instructorName,
+              schedule: patch.schedule,
               locations: patch.locations,
               certificateNote: patch.certificateNote,
               price: patch.price,
