@@ -128,3 +128,28 @@ export async function signedApplicationDocumentUrl(
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
 }
+
+/** Upload seller dispatch evidence into the private order-scoped storage bucket. */
+export async function uploadOrderDispatchVideo(
+  orderId: string,
+  file: LocalFile
+): Promise<{ path?: string; error?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: "Supabase not configured" };
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "mp4";
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${orderId}/${Date.now()}-${safeName || `dispatch.${ext}`}`;
+  try {
+    const bytes = await readFileBytes(file.uri);
+    if (bytes.byteLength > 50 * 1024 * 1024) {
+      return { error: "Dispatch video must be 50 MB or smaller." };
+    }
+    const { error } = await supabase.storage
+      .from("order-dispatch-videos")
+      .upload(path, bytes, { contentType: file.mimeType || "video/mp4", upsert: false });
+    if (error) return { error: error.message };
+    return { path };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Dispatch video upload failed" };
+  }
+}
