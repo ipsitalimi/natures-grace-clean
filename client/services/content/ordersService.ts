@@ -31,6 +31,7 @@ export type DbOrderRow = {
   tracking_number?: string | null;
   tracking_status?: string | null;
   expected_delivery?: string | null;
+  dispatch_video_url?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -77,6 +78,7 @@ export function toSellerOrder(row: DbOrderRow, items: DbOrderItemRow[]): SellerO
     paymentStatus: row.payment_status,
     deliveryStatus: row.delivery_status,
     date: formatOrderDate(row.created_at),
+    dispatchVideoUrl: row.dispatch_video_url ?? null,
   };
 }
 
@@ -350,6 +352,7 @@ export async function updateOrderShipping(
     trackingNumber?: string;
     trackingStatus?: string;
     expectedDelivery?: string;
+    dispatchVideoPath?: string;
   }
 ): Promise<boolean> {
   const supabase = getSupabase();
@@ -361,6 +364,9 @@ export async function updateOrderShipping(
   if (shipping.trackingStatus !== undefined) patch.tracking_status = shipping.trackingStatus || null;
   if (shipping.expectedDelivery !== undefined) {
     patch.expected_delivery = shipping.expectedDelivery || null;
+  }
+  if (shipping.dispatchVideoPath !== undefined) {
+    patch.dispatch_video_url = shipping.dispatchVideoPath || null;
   }
 
   const { error } = await supabase.from("orders").update(patch).eq("id", orderId);
