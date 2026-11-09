@@ -16,7 +16,7 @@ export async function fetchEvents(): Promise<CommunityEvent[]> {
 
   if (error) {
     console.error("[eventsService] fetch:", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return ((data ?? []) as DbEventRow[]).map(eventRowToCommunityEvent);
 }
