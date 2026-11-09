@@ -152,6 +152,12 @@ export default function ResourceDetailScreen() {
                   <ThemedText style={styles.infoText}>Instructor: {resource.instructorName}</ThemedText>
                 </View>
               ) : null}
+              {resource.schedule ? (
+                <View style={styles.infoRow}>
+                  <Feather name="calendar" size={16} color={Colors.light.accent} />
+                  <ThemedText style={styles.infoText}>Schedule: {resource.schedule}</ThemedText>
+                </View>
+              ) : null}
               {resource.locations ? (
                 <View style={styles.infoRow}>
                   <Feather name="map-pin" size={16} color={Colors.light.accent} />
