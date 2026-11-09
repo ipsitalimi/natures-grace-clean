@@ -94,7 +94,6 @@ export function toPractitionerSession(row: DbBookingRow): PractitionerSession {
     notes: row.notes ?? undefined,
     amount: Number(row.amount),
     paymentStatus: row.payment_status,
-    meetingLink: row.meeting_link ?? undefined,
   };
 }
 
@@ -131,7 +130,8 @@ export async function fetchPractitionerBookings(
   let query = supabase
     .from("practitioner_bookings")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("session_date", { ascending: true })
+    .order("session_time", { ascending: true });
 
   if (practitionerId) {
     query = query.eq("practitioner_id", practitionerId);
@@ -155,7 +155,8 @@ export async function fetchUserBookings(
     .from("practitioner_bookings")
     .select("*")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    .order("session_date", { ascending: true })
+    .order("session_time", { ascending: true });
 
   if (error) {
     console.error("[practitionerBookings] user fetch:", error.message);
