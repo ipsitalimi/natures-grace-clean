@@ -350,7 +350,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!target?.dbId) return false;
     const deleted = await eventsService.deleteEventByDbId(target.dbId);
     if (!deleted) return false;
-    setEvents((prev) => prev.filter((e) => e.id !== id));
+    setEvents((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, status: "Ended", isVisible: false } : e))
+    );
     return true;
   }, [events]);
 
