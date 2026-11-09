@@ -66,7 +66,12 @@ export async function deleteEventByDbId(dbId: string): Promise<boolean> {
 export async function updateEventVisibility(dbId: string, isVisible: boolean): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-  const { data, error } = await supabase.from("events").update({ is_visible: isVisible }).eq("id", dbId).select("id").maybeSingle();
+  const { data, error } = await supabase
+    .from("events")
+    .update({ is_visible: isVisible, status: isVisible ? "Active" : "Ended" })
+    .eq("id", dbId)
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("[eventsService] visibility:", error.message);
     return false;
