@@ -51,8 +51,12 @@ export default function ProductListingsScreen() {
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => {
-          deleteProduct(id);
+        onPress: async () => {
+          const deleted = await deleteProduct(id);
+          if (!deleted) {
+            Alert.alert("Could not remove product", "Please try again.");
+            return;
+          }
           setDeleteConfirm(id);
           setTimeout(() => setDeleteConfirm(null), 2000);
         },
