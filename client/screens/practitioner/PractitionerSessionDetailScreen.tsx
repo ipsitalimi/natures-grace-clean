@@ -155,14 +155,12 @@ export default function PractitionerSessionDetailScreen() {
 
         {session.status === "Upcoming" ? (
           <View style={styles.actionButtons}>
-            <Pressable
-              style={styles.joinButton}
-              onPress={handleJoinSession}
-              testID="button-join-session"
-            >
-              <Feather name="video" size={16} color="#FFFFFF" />
-              <ThemedText style={styles.joinButtonText}>Join Session</ThemedText>
-            </Pressable>
+            {session.paymentStatus === "Paid" ? (
+              <Pressable style={styles.introChatButton} onPress={() => (navigation as any).navigate("BookingIntroChat", { bookingId: session.id })} testID="button-booking-intro-chat">
+                <Feather name="message-circle" size={16} color="#FFFFFF" />
+                <ThemedText style={styles.joinButtonText}>7-minute Intro Chat</ThemedText>
+              </Pressable>
+            ) : null}
             <View style={styles.secondaryButtonsRow}>
               <Pressable
                 style={[styles.completeButton, submitting && styles.buttonDisabled]}
