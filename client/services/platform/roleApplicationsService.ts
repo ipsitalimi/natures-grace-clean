@@ -345,6 +345,7 @@ export async function rejectRoleApplication(
 }
 
 export async function updateRoleApplicationBio(applicationId: string, bio: string): Promise<boolean> {
+  if (bio.trim().length > 600) return false;
   const supabase = getSupabase();
   if (!supabase) return false;
   const { data: row, error: fetchError } = await supabase.from("role_applications").select("form_data,target_role").eq("id", applicationId).maybeSingle();
