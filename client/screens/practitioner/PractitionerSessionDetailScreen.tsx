@@ -308,20 +308,6 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   actionButtons: { gap: Spacing.md },
-  joinButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.light.button,
-    borderRadius: BorderRadius.sm,
-    paddingVertical: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  joinButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
   secondaryButtonsRow: {
     flexDirection: "row",
     gap: Spacing.md,
