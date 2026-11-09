@@ -38,7 +38,7 @@ export default function ResourceDetailScreen() {
   const resource = resources.find((r) => r.id === resourceId);
   const favorited = resource ? isFavorite("resource", resourceId) : false;
   const enrolled = isEnrolledForResource(resourceId);
-  const canEnroll = isSupabaseConfigured() && Boolean(session?.user);
+  const canEnroll = isSupabaseConfigured() && Boolean(session?.user) && (resource?.published !== false || enrolled);
 
   const handleToggleFavorite = async () => {
     if (!resource || !isSupabaseConfigured() || !session?.user) return;
@@ -191,9 +191,11 @@ export default function ResourceDetailScreen() {
 
             {!canEnroll ? (
               <ThemedText style={styles.enrollHint} testID="text-enroll-sign-in">
-                {isSupabaseConfigured()
-                  ? "Sign in to express interest in this course."
-                  : "Course interest requests require a connected account."}
+                {!isSupabaseConfigured()
+                  ? "Course interest requests require a connected account."
+                  : !session?.user
+                    ? "Sign in to express interest in this course."
+                    : "This course is no longer accepting interest."}
               </ThemedText>
             ) : null}
 
