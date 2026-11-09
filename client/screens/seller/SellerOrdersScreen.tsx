@@ -406,8 +406,10 @@ export default function SellerOrdersScreen() {
         shipError={shipError}
         courier={courier}
         trackingNumber={trackingNumber}
+        dispatchVideo={dispatchVideo}
         onCourierChange={setCourier}
         onTrackingChange={setTrackingNumber}
+        onPickDispatchVideo={() => void handlePickDispatchVideo()}
         onCancel={closeShipModal}
         onConfirm={() => void handleConfirmShip()}
       />
