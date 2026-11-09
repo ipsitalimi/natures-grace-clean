@@ -553,6 +553,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     togglePractitioner,
     deletePractitioner,
     updatePractitionerMeta,
+    updatePractitionerBio,
+    updatePractitionerPrice,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
