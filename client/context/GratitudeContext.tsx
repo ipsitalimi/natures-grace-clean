@@ -33,9 +33,9 @@ interface GratitudeContextType {
   addGratitude: (text: string, isPublic: boolean) => Promise<boolean>;
   toggleVisibility: (id: string) => Promise<boolean>;
   addCommunityToMine: (entry: GratitudeEntry) => Promise<boolean>;
-  addPrompt: (text: string) => void;
-  removePrompt: (id: string) => void;
-  togglePromptActive: (id: string) => void;
+  addPrompt: (text: string) => Promise<boolean>;
+  removePrompt: (id: string) => Promise<boolean>;
+  togglePromptActive: (id: string) => Promise<boolean>;
   getActivePrompts: () => DailyPrompt[];
 }
 
@@ -191,43 +191,34 @@ export function GratitudeProvider({ children }: { children: React.ReactNode }) {
     [session?.user, authorDisplayName]
   );
 
-  const addPrompt = useCallback(async (text: string) => {
+  const addPrompt = useCallback(async (text: string): Promise<boolean> => {
     const now = new Date();
     const dateISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    if (isSupabaseConfigured()) {
-      const created = await promptsService.insertPrompt(text, dateISO);
-      if (created) {
-        setDailyPrompts((prev) => [created, ...prev]);
-        return;
-      }
-    }
-    const newPrompt: DailyPrompt = {
-      id: `p-${Date.now()}`,
-      text,
-      date: now.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }),
-      dateISO,
-      active: true,
-    };
-    setDailyPrompts((prev) => [newPrompt, ...prev]);
+    if (!isSupabaseConfigured()) return false;
+    const created = await promptsService.insertPrompt(text, dateISO);
+    if (!created) return false;
+    setDailyPrompts((prev) => [created, ...prev]);
+    return true;
   }, []);
 
-  const removePrompt = useCallback(async (id: string) => {
-    if (isSupabaseConfigured()) await promptsService.deletePrompt(id);
+  const removePrompt = useCallback(async (id: string): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
+    const deleted = await promptsService.deletePrompt(id);
+    if (!deleted) return false;
     setDailyPrompts((prev) => prev.filter((p) => p.id !== id));
+    return true;
   }, []);
 
   const togglePromptActive = useCallback(
-    async (id: string) => {
+    async (id: string): Promise<boolean> => {
+      if (!isSupabaseConfigured()) return false;
       const target = dailyPrompts.find((p) => p.id === id);
-      const nextActive = target ? !target.active : true;
-      if (isSupabaseConfigured()) await promptsService.setPromptActive(id, nextActive);
-      setDailyPrompts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, active: nextActive } : p))
-      );
+      if (!target) return false;
+      const nextActive = !target.active;
+      const updated = await promptsService.setPromptActive(id, nextActive);
+      if (!updated) return false;
+      setDailyPrompts((prev) => prev.map((p) => (p.id === id ? { ...p, active: nextActive } : p)));
+      return true;
     },
     [dailyPrompts]
   );
