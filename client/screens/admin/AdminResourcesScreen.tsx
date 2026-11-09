@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, TextInput, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
@@ -114,7 +114,7 @@ function CourseResourceRow({
     locations: string;
     certificateNote: string;
     price: string;
-  }) => void;
+  }) => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(resource.title);
@@ -205,17 +205,23 @@ function CourseResourceRow({
             <Pressable
               style={styles.saveButton}
               onPress={() => {
-                const trimmedBody = body.trim();
-                onSave({
-                  title: title.trim(),
-                  body: trimmedBody,
-                  description: trimmedBody.substring(0, 100) || resource.description,
-                  instructorName,
-                  locations,
-                  certificateNote,
-                  price,
-                });
-                setEditing(false);
+                void (async () => {
+                  const trimmedBody = body.trim();
+                  const saved = await onSave({
+                    title: title.trim(),
+                    body: trimmedBody,
+                    description: trimmedBody.substring(0, 100) || resource.description,
+                    instructorName,
+                    locations,
+                    certificateNote,
+                    price,
+                  });
+                  if (!saved) {
+                    Alert.alert("Could not save course", "Check your connection and admin permissions, then try again.");
+                    return;
+                  }
+                  setEditing(false);
+                })();
               }}
               testID={`button-save-course-${resource.id}`}
             >
@@ -251,10 +257,33 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
   const [saved, setSaved] = useState(false);
   const isPublished = (resource: (typeof resources)[0]) => resource.published !== false;
 
-  const togglePublish = (id: string) => {
+  const togglePublish = async (id: string) => {
     const resource = resources.find((r) => r.id === id);
     if (!resource) return;
-    setResourcePublished(id, !isPublished(resource));
+    const updated = await setResourcePublished(id, !isPublished(resource));
+    if (!updated) Alert.alert("Could not update publication", "Check your connection and admin permissions, then try again.");
+  };
+
+  const handleDeleteResource = (id: string, title: string, isCourse = false) => {
+    Alert.alert(
+      isCourse ? "Archive course" : "Delete resource",
+      isCourse
+        ? `Unpublish "${title}" from customer-facing courses? Existing interest records will be retained.`
+        : `Delete "${title}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isCourse ? "Unpublish" : "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              const ok = isCourse ? await setResourcePublished(id, false) : await deleteResource(id);
+              if (!ok) Alert.alert(isCourse ? "Could not unpublish course" : "Could not delete resource", "Check your connection and admin permissions, then try again.");
+            })();
+          },
+        },
+      ]
+    );
   };
 
   const articles = resources.filter((r) => r.section === "Articles");
@@ -277,9 +306,9 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
     setSaved(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formTitle.trim() || !selectedType) return;
-    addResource({
+    const created = await addResource({
       title: formTitle.trim(),
       description: formContent.trim().substring(0, 100) || `${formTitle.trim()} - a wellness resource.`,
       section: sectionFromType(selectedType),
@@ -291,6 +320,10 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       locations: selectedType === "Course" ? formLocations.trim() || undefined : undefined,
       certificateNote: selectedType === "Course" ? formCertificate.trim() || undefined : undefined,
     });
+    if (!created) {
+      Alert.alert("Could not save resource", "Check your connection and admin permissions, then try again.");
+      return;
+    }
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -497,11 +530,11 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
         <CourseResourceRow
           key={resource.id}
           resource={resource}
-          onDelete={() => deleteResource(resource.id)}
+          onDelete={() => handleDeleteResource(resource.id, resource.title, true)}
           isPublished={isPublished(resource)}
           onTogglePublish={() => togglePublish(resource.id)}
           onSave={(patch) =>
-            void updateResource(resource.id, {
+            updateResource(resource.id, {
               title: patch.title,
               body: patch.body,
               description: patch.description,
@@ -519,7 +552,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
         <ResourceRow
           key={resource.id}
           resource={resource}
-          onDelete={() => deleteResource(resource.id)}
+          onDelete={() => handleDeleteResource(resource.id, resource.title)}
           isPublished={isPublished(resource)}
           onTogglePublish={() => togglePublish(resource.id)}
         />
