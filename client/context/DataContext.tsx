@@ -509,7 +509,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updatePractitionerBio = useCallback(async (id: string, bio: string): Promise<boolean> => {
-    if (!isSupabaseConfigured()) return false;
+    if (!isSupabaseConfigured() || bio.trim().length > 600) return false;
     const ok = await practitionersService.updatePractitioner(id, { bio: bio.trim() });
     if (!ok) return false;
     setPractitionerCats((prev) => prev.map((cat) => ({
