@@ -32,8 +32,7 @@ BEGIN
   IF NOT FOUND OR v_booking.payment_status <> 'Paid'
      OR v_booking.practitioner_id IS NULL
      OR v_booking.razorpay_payment_id IS NULL
-     OR (current_setting('app.environment', true) = 'production'
-         AND v_booking.razorpay_payment_id LIKE 'pay_dev_%') THEN
+     THEN
     RETURN jsonb_build_object('ok', false, 'error', 'Verified paid booking not found');
   END IF;
 
