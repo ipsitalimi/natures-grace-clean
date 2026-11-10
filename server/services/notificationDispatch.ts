@@ -101,40 +101,72 @@ export async function dispatchUserNotification(
     emailTemplateOverride?: EmailTemplateId;
   }
 ): Promise<void> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("preferences, email, full_name")
-    .eq("id", params.userId)
-    .maybeSingle();
+  // Notifications are secondary effects: never let delivery failure roll back or
+  // turn an already-confirmed booking, payment, order, or payout into an API error.
+  let prefs: ProfilePrefs = {};
+  try {
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("preferences")
+      .eq("id", params.userId)
+      .maybeSingle();
+    if (error) {
+      console.warn("[notificationDispatch] preferences lookup failed:", error.message);
+    } else {
+      prefs = parsePrefs((profile as { preferences?: unknown } | null)?.preferences);
+    }
+  } catch (err) {
+    console.warn("[notificationDispatch] preferences lookup threw:", err);
+  }
 
-  const prefs = parsePrefs((profile as { preferences?: unknown } | null)?.preferences);
   const category = EVENT_CATEGORY[params.event];
+  const allowed = categoryAllowed(prefs, category);
 
-  if (categoryAllowed(prefs, category)) {
-    await insertUserNotification(supabase, {
-      userId: params.userId,
-      message: params.message,
-      linkRoute: params.linkRoute ?? null,
-      linkTargetId: params.linkTargetId ?? null,
-    });
+  if (allowed) {
+    try {
+      await insertUserNotification(supabase, {
+        userId: params.userId,
+        message: params.message,
+        linkRoute: params.linkRoute ?? null,
+        linkTargetId: params.linkTargetId ?? null,
+      });
+    } catch (err) {
+      console.warn("[notificationDispatch] in-app notification failed:", err);
+    }
   }
 
-  const emailTemplate =
-    params.emailTemplateOverride ?? EVENT_EMAIL[params.event];
-  if (emailTemplate && categoryAllowed(prefs, category)) {
-    await sendEmailToUserId(supabase, params.userId, emailTemplate, params.emailVars ?? {});
+  const emailTemplate = params.emailTemplateOverride ?? EVENT_EMAIL[params.event];
+  if (emailTemplate && allowed) {
+    try {
+      const result = await sendEmailToUserId(
+        supabase,
+        params.userId,
+        emailTemplate,
+        params.emailVars ?? {}
+      );
+      if (!result.ok) {
+        console.warn("[notificationDispatch] email delivery failed:", result.error);
+      }
+    } catch (err) {
+      console.warn("[notificationDispatch] email delivery threw:", err);
+    }
   }
 
-  // Push: stored for client poll or future Expo push server integration
-  const { data: tokens } = await supabase
-    .from("push_tokens")
-    .select("token, platform")
-    .eq("user_id", params.userId);
+  if (!allowed || !process.env.EXPO_ACCESS_TOKEN) return;
 
-  if (tokens?.length && process.env.EXPO_ACCESS_TOKEN && categoryAllowed(prefs, category)) {
-    for (const row of tokens as { token: string; platform: string }[]) {
+  try {
+    const { data: tokens, error } = await supabase
+      .from("push_tokens")
+      .select("token")
+      .eq("user_id", params.userId);
+    if (error) {
+      console.warn("[notificationDispatch] push token lookup failed:", error.message);
+      return;
+    }
+
+    for (const row of (tokens ?? []) as { token: string }[]) {
       try {
-        await fetch("https://exp.host/--/api/v2/push/send", {
+        const response = await fetch("https://exp.host/--/api/v2/push/send", {
           method: "POST",
           headers: {
             Accept: "application/json",
@@ -146,15 +178,27 @@ export async function dispatchUserNotification(
             title: "Nature's Grace",
             body: params.message,
             data: {
-              linkRoute: params.linkRoute,
-              linkTargetId: params.linkTargetId,
+              linkRoute: params.linkRoute ?? null,
+              linkTargetId: params.linkTargetId ?? null,
             },
           }),
         });
+        if (!response.ok) {
+          console.warn("[notificationDispatch] Expo push rejected:", response.status);
+          continue;
+        }
+        const payload = await response.json().catch(() => null) as
+          | { data?: { status?: string; message?: string } }
+          | null;
+        if (payload?.data?.status === "error") {
+          console.warn("[notificationDispatch] Expo push error:", payload.data.message ?? "Unknown error");
+        }
       } catch (err) {
-        console.warn("[push] send failed:", err);
+        console.warn("[notificationDispatch] push delivery threw:", err);
       }
     }
+  } catch (err) {
+    console.warn("[notificationDispatch] push delivery failed:", err);
   }
 }
 
