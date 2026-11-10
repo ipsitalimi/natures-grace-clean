@@ -88,7 +88,7 @@ export default function AddReplyScreen() {
       />
 
       <ThemedText style={styles.hint}>
-        Be kind and respectful. Your reply will be visible to everyone.
+        Be kind and respectful. Your reply will be reviewed before it appears to the community.
       </ThemedText>
       {submitError ? <ThemedText style={styles.errorText}>{submitError}</ThemedText> : null}
 
