@@ -10,6 +10,10 @@ export type AuthProfile = {
   status?: string | null;
 };
 
+export function isInactiveAccountStatus(status: string | null | undefined): boolean {
+  return ["Suspended", "Deletion Requested", "Deleted"].includes(status ?? "");
+}
+
 export async function getBearerUser(req: Request): Promise<AuthUser | null> {
   const authHeader = req.header("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
@@ -59,7 +63,7 @@ export async function requireBearerUser(
     res.status(401).json({ error: "Unauthorized" });
     return null;
   }
-  if (["Suspended", "Deletion Requested", "Deleted"].includes(profile.status ?? "")) {
+  if (isInactiveAccountStatus(profile.status)) {
     res.status(403).json({ error: "Account is not active" });
     return null;
   }
