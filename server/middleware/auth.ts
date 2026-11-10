@@ -7,6 +7,7 @@ export type AuthProfile = {
   id: string;
   email: string;
   role: string;
+  status?: string | null;
 };
 
 export async function getBearerUser(req: Request): Promise<AuthUser | null> {
@@ -56,7 +57,7 @@ export async function getBearerProfile(req: Request): Promise<AuthProfile | null
   const supabase = requireSupabaseAdmin();
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, email, role")
+    .select("id, email, role, status")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -85,6 +86,10 @@ export async function requireRole(
   const profile = await getBearerProfile(req);
   if (!profile) {
     res.status(401).json({ error: "Unauthorized" });
+    return null;
+  }
+  if (["Suspended", "Deletion Requested", "Deleted"].includes(profile.status ?? "")) {
+    res.status(403).json({ error: "Account is not active" });
     return null;
   }
   if (profile.role !== role) {
