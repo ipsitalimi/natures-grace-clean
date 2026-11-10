@@ -29,6 +29,8 @@ interface GratitudeContextType {
   gratitudeLoading: boolean;
   gratitudeError: string | null;
   promptsLoading: boolean;
+  promptsError: string | null;
+  refreshPrompts: () => Promise<void>;
   refreshGratitude: () => Promise<void>;
   addGratitude: (text: string, isPublic: boolean) => Promise<boolean>;
   toggleVisibility: (id: string) => Promise<boolean>;
@@ -51,6 +53,7 @@ export function GratitudeProvider({ children }: { children: React.ReactNode }) {
   const [gratitudeLoading, setGratitudeLoading] = useState(isSupabaseConfigured());
   const [gratitudeError, setGratitudeError] = useState<string | null>(null);
   const [promptsLoading, setPromptsLoading] = useState(isSupabaseConfigured());
+  const [promptsError, setPromptsError] = useState<string | null>(null);
 
   const authorDisplayName =
     profile?.full_name?.trim() ||
@@ -103,27 +106,33 @@ export function GratitudeProvider({ children }: { children: React.ReactNode }) {
     refreshGratitude();
   }, [refreshGratitude, authConfigured, authLoading, session?.user?.id]);
 
-  useEffect(() => {
+  const refreshPrompts = useCallback(async () => {
     if (!isSupabaseConfigured()) {
+      setDailyPrompts([]);
       setPromptsLoading(false);
+      setPromptsError(null);
       return;
     }
+
+    setPromptsLoading(true);
+    setPromptsError(null);
+    try {
+      const remote = await promptsService.fetchPrompts();
+      setDailyPrompts(remote);
+    } catch (err) {
+      setPromptsError(
+        err instanceof Error ? err.message : "Could not load daily prompts"
+      );
+      setDailyPrompts([]);
+    } finally {
+      setPromptsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
     if (dataLoading) return;
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const remote = await promptsService.fetchPrompts();
-        if (!cancelled && remote.length > 0) setDailyPrompts(remote);
-      } finally {
-        if (!cancelled) setPromptsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dataLoading]);
+    void refreshPrompts();
+  }, [dataLoading, refreshPrompts]);
 
   const addGratitude = useCallback(
     async (text: string, isPublic: boolean) => {
@@ -236,6 +245,8 @@ export function GratitudeProvider({ children }: { children: React.ReactNode }) {
         gratitudeLoading,
         gratitudeError,
         promptsLoading,
+        promptsError,
+        refreshPrompts,
         refreshGratitude,
         addGratitude,
         toggleVisibility,
