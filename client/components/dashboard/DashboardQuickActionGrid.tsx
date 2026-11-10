@@ -72,6 +72,7 @@ const styles = StyleSheet.create({
   },
   card: {
     flex: 1,
+    minWidth: 0,
     backgroundColor: Colors.light.cardBackground,
     borderRadius: CardTokens.radius,
     paddingVertical: LayoutSpacing.md,
@@ -83,6 +84,7 @@ const styles = StyleSheet.create({
   },
   cardSpacer: {
     flex: 1,
+    minWidth: 0,
   },
   cardPressed: {
     opacity: 0.88,
