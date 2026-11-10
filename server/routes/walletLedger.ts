@@ -15,6 +15,7 @@ import {
   updatePractitionerBankDetails,
 } from "../services/practitionerWalletLedger";
 import { fetchCommissionRate } from "../services/platformSettings";
+import { isValidPayoutAmount } from "../lib/walletBank";
 
 async function handleSellerSync(req: Request, res: Response) {
   try {
@@ -77,8 +78,8 @@ async function handleSellerRequestPayout(req: Request, res: Response) {
     if (!profile) return;
 
     const { amount } = req.body as { amount?: number };
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: "amount is required" });
+    if (!isValidPayoutAmount(amount)) {
+      return res.status(400).json({ error: "amount must be a valid positive amount" });
     }
 
     const supabase = requireSupabaseAdmin();
@@ -184,8 +185,8 @@ async function handlePractitionerRequestPayout(req: Request, res: Response) {
     if (!profile) return;
 
     const { amount } = req.body as { amount?: number };
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: "amount is required" });
+    if (!isValidPayoutAmount(amount)) {
+      return res.status(400).json({ error: "amount must be a valid positive amount" });
     }
 
     const supabase = requireSupabaseAdmin();
