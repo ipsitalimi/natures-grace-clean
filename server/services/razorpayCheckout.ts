@@ -26,6 +26,18 @@ export function isCheckoutConfigured(): boolean {
   return Boolean(getAuthHeader());
 }
 
+export function isValidBookingPaymentInput(
+  durationMinutes: number,
+  amountInr: number
+): boolean {
+  return (
+    Number.isSafeInteger(durationMinutes) &&
+    durationMinutes > 0 &&
+    Number.isFinite(amountInr) &&
+    amountInr >= 1
+  );
+}
+
 function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
 }
