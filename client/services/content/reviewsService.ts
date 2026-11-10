@@ -516,28 +516,37 @@ export async function deleteMyReview(reviewId: string): Promise<boolean> {
 export async function updateReviewStatus(
   id: string,
   status: ReviewStatus
-): Promise<void> {
+): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return;
+  if (!supabase) return false;
 
-  const { data: row } = await supabase
+  const { data: row, error: fetchError } = await supabase
     .from("reviews")
     .select("practitioner_id")
     .eq("id", id)
     .maybeSingle();
+  if (fetchError || !row) {
+    console.error("[reviewsService] update status fetch:", fetchError?.message ?? "Review not found");
+    return false;
+  }
 
-  const { error } = await supabase.from("reviews").update({ status }).eq("id", id);
-  if (error) {
-    console.error("[reviewsService] update status:", error.message);
-    throw new Error(error.message);
+  const { data: updated, error } = await supabase
+    .from("reviews")
+    .update({ status })
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) {
+    console.error("[reviewsService] update status:", error?.message ?? "Review was not updated");
+    return false;
   }
 
   const practitionerId = (row as { practitioner_id?: string } | null)?.practitioner_id;
   if (practitionerId) {
     await syncPractitionerReviewAggregate(practitionerId);
   }
+  return true;
 }
-
 export async function countReviews(): Promise<number> {
   const supabase = getSupabase();
   if (!supabase) return 0;
