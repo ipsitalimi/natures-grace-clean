@@ -532,7 +532,7 @@ export default function SellerHomeScreen() {
               style={[styles.orderRow, index === recentOrders.length - 1 && styles.orderRowLast]}
             >
               <View style={styles.orderLeft}>
-                <ThemedText style={styles.orderName}>{order.customerName}</ThemedText>
+                <ThemedText style={styles.orderName} numberOfLines={1}>{order.customerName}</ThemedText>
                 <ThemedText style={styles.orderProduct} numberOfLines={1}>
                   {order.productName}
                 </ThemedText>
@@ -810,7 +810,8 @@ const styles = StyleSheet.create({
   },
   orderLeft: {
     flex: 1,
-    marginRight: LayoutSpacing.lg,
+    minWidth: 0,
+    marginRight: LayoutSpacing.sm,
   },
   orderName: {
     fontSize: 15,
@@ -825,6 +826,7 @@ const styles = StyleSheet.create({
   orderRight: {
     alignItems: "flex-end",
     gap: 6,
+    flexShrink: 0,
   },
   orderPrice: {
     fontSize: 15,
