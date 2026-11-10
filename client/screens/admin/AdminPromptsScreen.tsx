@@ -10,7 +10,7 @@ interface AdminPromptsScreenProps {
 }
 
 export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsScreenProps) {
-  const { dailyPrompts, addPrompt, removePrompt, togglePromptActive } = useGratitude();
+  const { dailyPrompts, promptsError, refreshPrompts, addPrompt, removePrompt, togglePromptActive } = useGratitude();
   const [newPromptText, setNewPromptText] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -87,6 +87,14 @@ export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsSc
       <ThemedText style={styles.infoText}>
         Active prompts are shown to users in the Guided Reflection feature. Add new prompts daily to keep the experience fresh.
       </ThemedText>
+
+      {promptsError ? (
+        <Pressable onPress={() => void refreshPrompts()} testID="button-prompts-retry">
+          <ThemedText style={styles.errorText}>
+            Could not load saved prompts: {promptsError}. Tap to retry.
+          </ThemedText>
+        </Pressable>
+      ) : null}
 
       <Pressable style={styles.dateDropdown} onPress={() => setDateDropdownOpen((open) => !open)} testID="dropdown-daily-activity-date">
         <ThemedText style={styles.dateDropdownText}>Daily activity date: {dateLabel}</ThemedText>
@@ -262,6 +270,12 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     marginBottom: Spacing.lg,
     opacity: 0.7,
+  },
+  errorText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#8B3A3A",
+    marginBottom: Spacing.md,
   },
   addButton: {
     flexDirection: "row",
