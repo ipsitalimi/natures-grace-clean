@@ -69,13 +69,17 @@ export async function requireBearerUser(
   req: Request,
   res: Response
 ): Promise<AuthUser | null> {
-  const user = await getBearerUser(req);
-  if (!user) {
+  const profile = await getBearerProfile(req);
+  if (!profile) {
     console.warn("[auth][booking] sending 401 Unauthorized");
     res.status(401).json({ error: "Unauthorized" });
     return null;
   }
-  return user;
+  if (["Suspended", "Deletion Requested", "Deleted"].includes(profile.status ?? "")) {
+    res.status(403).json({ error: "Account is not active" });
+    return null;
+  }
+  return { id: profile.id, email: profile.email };
 }
 
 export async function requireRole(
