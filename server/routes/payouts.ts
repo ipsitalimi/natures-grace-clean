@@ -5,7 +5,7 @@ import {
   getPayoutById,
   reconcilePendingPayout,
 } from "../services/payoutLifecycle";
-import { getBearerUser } from "../middleware/auth";
+import { requireBearerUser } from "../middleware/auth";
 import { verifySellerPayoutOwnership } from "../services/sellerWalletLedger";
 import {
   MANUAL_PAYOUT_MESSAGE,
@@ -20,10 +20,8 @@ function paramId(value: string | string[]): string {
 /** POST /api/payouts/:payoutId/dispatch — queue payout for manual admin transfer */
 async function handleDispatch(req: Request, res: Response) {
   try {
-    const user = await getBearerUser(req);
-    if (!user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    const user = await requireBearerUser(req, res);
+    if (!user) return;
 
     const payoutId = paramId(req.params.payoutId);
     const supabase = requireSupabaseAdmin();
@@ -97,8 +95,8 @@ async function handleDevComplete(req: Request, res: Response) {
   }
 
   try {
-    const user = await getBearerUser(req);
-    if (!user) return res.status(401).json({ error: "Unauthorized" });
+    const user = await requireBearerUser(req, res);
+    if (!user) return;
 
     const supabase = requireSupabaseAdmin();
     const ownsPayout = await verifySellerPayoutOwnership(
