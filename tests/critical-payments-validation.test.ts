@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { verifyPaymentWebhookSignature } from "../server/services/paymentWebhooks";
 import { isValidBookingPaymentInput } from "../server/services/razorpayCheckout";
 import { isValidPayoutAmount, validateBankDetailsInput } from "../server/lib/walletBank";
+import { isInactiveAccountStatus } from "../server/middleware/auth";
 import {
   computeSellerPromoDiscount,
   normalizeStoreOrderItems,
@@ -140,4 +141,13 @@ test("seller promo discounts enforce limits and cap discounts at the subtotal", 
     computeSellerPromoDiscount(50, { ...base, min_order: null, discount_type: "fixed", discount_value: 500 }),
     { ok: true, discount: 50 }
   );
+});
+
+
+test("role-protected APIs reject suspended and deletion-requested accounts", () => {
+  assert.equal(isInactiveAccountStatus("Active"), false);
+  assert.equal(isInactiveAccountStatus("Suspended"), true);
+  assert.equal(isInactiveAccountStatus("Deletion Requested"), true);
+  assert.equal(isInactiveAccountStatus("Deleted"), true);
+  assert.equal(isInactiveAccountStatus(null), false);
 });
