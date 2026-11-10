@@ -15,13 +15,13 @@ export function verifyPaymentWebhookSignature(
   if (!signature) return false;
 
   const body = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
-  const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
+  // Razorpay sends a 64-character SHA-256 hex digest. Reject malformed
+  // lengths/characters before timingSafeEqual, which requires equal buffers.
+  if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
 
-  try {
-    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-  } catch {
-    return expected === signature;
-  }
+  const expected = crypto.createHmac("sha256", secret).update(body).digest();
+  const supplied = Buffer.from(signature, "hex");
+  return crypto.timingSafeEqual(expected, supplied);
 }
 
 async function resolveStoreOrderId(
