@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import {
   confirmBookingPayment,
   createBookingOrder,
+  isValidBookingPaymentInput,
 } from "../services/razorpayCheckout";
 import { requireSupabaseAdmin } from "../lib/supabaseAdmin";
 import { requireBearerUser } from "../middleware/auth";
@@ -19,6 +20,10 @@ async function validateBookingAmount(
   amountInr: number,
   offeringId?: string
 ): Promise<{ ok: true; amountInr: number } | { ok: false; error: string }> {
+  if (!isValidBookingPaymentInput(durationMinutes, amountInr)) {
+    return { ok: false, error: "Invalid booking duration or amount" };
+  }
+
   const supabase = requireSupabaseAdmin();
 
   if (offeringId) {
