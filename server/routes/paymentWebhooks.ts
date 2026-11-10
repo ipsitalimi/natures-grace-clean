@@ -31,9 +31,8 @@ async function handleRazorpayPaymentWebhook(req: Request, res: Response) {
 
     return res.status(200).json({ received: true, matched: false, event });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Webhook failed";
-    console.error("[paymentWebhooks]", err);
-    return res.status(500).json({ error: message });
+    console.error("[paymentWebhooks] processing failed");
+    return res.status(500).json({ error: "Webhook processing failed" });
   }
 }
 
