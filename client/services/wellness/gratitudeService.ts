@@ -162,30 +162,34 @@ export async function deleteGratitudeEntry(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("gratitude_entries")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[gratitudeService] deleteGratitudeEntry:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
 
 export async function hideGratitudeEntry(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("gratitude_entries")
     .update({ is_public: false })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[gratitudeService] hideGratitudeEntry:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
