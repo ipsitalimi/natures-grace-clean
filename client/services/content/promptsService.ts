@@ -13,7 +13,7 @@ export async function fetchPrompts(): Promise<DailyPrompt[]> {
 
   if (error) {
     console.error("[promptsService] fetch:", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return ((data ?? []) as DbPromptRow[]).map(promptRowToDaily);
 }
