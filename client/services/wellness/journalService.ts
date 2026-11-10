@@ -119,10 +119,15 @@ export async function deleteJournalEntry(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  const { error } = await supabase.from("journal_entries").delete().eq("id", id);
+  const { data, error } = await supabase
+    .from("journal_entries")
+    .delete()
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) {
     console.error("[journalService] delete:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
