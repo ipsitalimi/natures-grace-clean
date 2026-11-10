@@ -12,40 +12,25 @@ export type AuthProfile = {
 
 export async function getBearerUser(req: Request): Promise<AuthUser | null> {
   const authHeader = req.header("authorization");
-  console.log("[auth][booking] authorization header present:", Boolean(authHeader));
   if (!authHeader?.startsWith("Bearer ")) {
-    console.warn("[auth][booking] 401 reason: missing or malformed Bearer header");
     return null;
   }
 
   const token = authHeader.slice(7).trim();
   if (!token) {
-    console.warn("[auth][booking] 401 reason: empty Bearer token");
     return null;
   }
 
   const supabase = requireSupabaseAdmin();
   try {
-    console.log("[auth][booking] verifying JWT with Supabase");
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user) {
-      console.warn("[auth][booking] JWT verification failed:", {
-        reason: error?.message ?? "no user",
-        status: error?.status,
-      });
       return null;
     }
 
-    console.log("[auth][booking] JWT verification succeeded:", {
-      userId: data.user.id,
-      emailPresent: Boolean(data.user.email),
-    });
     return { id: data.user.id, email: data.user.email };
   } catch (err) {
-    console.error("[auth][booking] JWT verification threw:", err);
-    if (err instanceof Error) {
-      console.error("[auth][booking] JWT verification stack:", err.stack);
-    }
+    console.error("[auth] JWT verification failed");
     throw err;
   }
 }
@@ -71,7 +56,6 @@ export async function requireBearerUser(
 ): Promise<AuthUser | null> {
   const profile = await getBearerProfile(req);
   if (!profile) {
-    console.warn("[auth][booking] sending 401 Unauthorized");
     res.status(401).json({ error: "Unauthorized" });
     return null;
   }
