@@ -422,7 +422,6 @@ export async function fetchPractitionerProfileDetailsResult(
       bio: (data.bio as string) ?? "",
       experience: (data.experience as string) ?? "",
       certifications: (data.certifications as string[]) ?? [],
-      pricePerSession: Number(data.price_per_session) || 0,
       isActive: Boolean(data.is_active),
       meetingLink: (data.meeting_link as string) ?? "",
       photoUrl: (data.photo_url as string) ?? "",
