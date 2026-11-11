@@ -1,5 +1,5 @@
 import React from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
@@ -14,6 +14,22 @@ export default function AdminSellersScreen({
   const { users, updateUser, settings } = usePlatformConfig();
   const { sellerCatalog } = useDataContext();
   const sellers = users.filter((u) => u.role === "Seller");
+
+  const handleSellerStatus = (seller: (typeof sellers)[number]) => {
+    const nextStatus = seller.status === "Suspended" ? "Active" : "Suspended";
+    const apply = async () => {
+      const result = await updateUser(seller.id, { status: nextStatus });
+      if (result.error) Alert.alert("Update failed", result.error);
+    };
+    if (nextStatus === "Suspended") {
+      Alert.alert("Suspend seller", `Suspend ${seller.name}'s seller access?`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Suspend", style: "destructive", onPress: () => void apply() },
+      ]);
+    } else {
+      void apply();
+    }
+  };
 
   return (
     <ScrollView
@@ -79,11 +95,7 @@ export default function AdminSellersScreen({
             <View style={styles.actions}>
               <Pressable
                 style={styles.actionBtn}
-                onPress={() =>
-                  updateUser(seller.id, {
-                    status: seller.status === "Suspended" ? "Active" : "Suspended",
-                  })
-                }
+                onPress={() => handleSellerStatus(seller)}
               >
                 <ThemedText style={styles.actionText}>
                   {seller.status === "Suspended" ? "Activate" : "Suspend"}

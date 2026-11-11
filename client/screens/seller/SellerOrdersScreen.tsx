@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -13,12 +13,16 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { BackHeader } from "@/components/layout";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import * as ImagePicker from "expo-image-picker";
+import type { LocalFile } from "@/lib/storageUpload";
+import { uploadOrderDispatchVideo } from "@/lib/storageUpload";
 import { formatInr } from "@/lib/formatCurrency";
 import {
   getOrderStatusColor,
@@ -114,7 +118,7 @@ function OrderCard({
         <View style={styles.advanceHint}>
           <Feather name="chevron-right" size={14} color={Colors.light.accent} />
           <ThemedText style={styles.advanceHintText}>
-            Tap to mark as {nextStatus.toLowerCase()}
+            {nextStatus === "Shipped" ? "Submit dispatch video & mark shipped" : `Tap to mark as ${nextStatus.toLowerCase()}`}
           </ThemedText>
         </View>
       ) : null}
@@ -131,6 +135,8 @@ function ShipOrderModal({
   trackingNumber,
   onCourierChange,
   onTrackingChange,
+  dispatchVideo,
+  onPickDispatchVideo,
   onCancel,
   onConfirm,
 }: {
@@ -140,8 +146,10 @@ function ShipOrderModal({
   shipError: string;
   courier: string;
   trackingNumber: string;
+  dispatchVideo: LocalFile | null;
   onCourierChange: (v: string) => void;
   onTrackingChange: (v: string) => void;
+  onPickDispatchVideo: () => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -169,6 +177,19 @@ function ShipOrderModal({
             placeholderTextColor={Colors.light.textMuted}
             testID="input-ship-courier"
           />
+
+          <ThemedText style={styles.fieldLabel}>Dispatch video (required)</ThemedText>
+          <Pressable
+            style={styles.dispatchVideoButton}
+            onPress={onPickDispatchVideo}
+            disabled={submitting}
+            testID="button-pick-dispatch-video"
+          >
+            <ThemedText style={dispatchVideo ? styles.dispatchVideoSelected : styles.dispatchVideoPlaceholder}>
+              {dispatchVideo?.name ?? "Choose packing / dispatch video (max 50 MB)"}
+            </ThemedText>
+            <Feather name={dispatchVideo ? "check-circle" : "video"} size={18} color={Colors.light.accent} />
+          </Pressable>
 
           <ThemedText style={styles.fieldLabel}>Tracking number</ThemedText>
           <TextInput
@@ -211,9 +232,15 @@ export default function SellerOrdersScreen() {
   const [activeTab, setActiveTab] = useState<OrderStatus>("Pending");
   const { orders, advanceOrderStatus, ordersLoading, ordersError, refreshOrders } =
     useOrdersContext();
+  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (isFocused) void refreshOrders({ silent: true });
+  }, [isFocused, refreshOrders]);
   const [shipOrder, setShipOrder] = useState<SellerOrder | null>(null);
   const [courier, setCourier] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
+  const [dispatchVideo, setDispatchVideo] = useState<LocalFile | null>(null);
   const [shipError, setShipError] = useState("");
   const [shipSubmitting, setShipSubmitting] = useState(false);
 
@@ -227,6 +254,7 @@ export default function SellerOrdersScreen() {
     setShipOrder(null);
     setCourier("");
     setTrackingNumber("");
+    setDispatchVideo(null);
     setShipError("");
     setShipSubmitting(false);
   };
@@ -239,6 +267,7 @@ export default function SellerOrdersScreen() {
       setShipOrder(order);
       setCourier("");
       setTrackingNumber("");
+      setDispatchVideo(null);
       setShipError("");
       return;
     }
@@ -258,18 +287,58 @@ export default function SellerOrdersScreen() {
     );
   };
 
+  const handlePickDispatchVideo = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow media library access to attach the dispatch video.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    if (asset.fileSize && asset.fileSize > 50 * 1024 * 1024) {
+      setShipError("Dispatch video must be 50 MB or smaller.");
+      return;
+    }
+    setDispatchVideo({
+      uri: asset.uri,
+      name: asset.fileName ?? `dispatch-${shipOrder?.orderId ?? "order"}-${Date.now()}.mp4`,
+      mimeType: asset.mimeType ?? "video/mp4",
+    });
+    setShipError("");
+  };
+
   const handleConfirmShip = async () => {
     if (!shipOrder || shipSubmitting) return;
     if (!trackingNumber.trim()) {
       setShipError("Enter a tracking number before marking as shipped.");
       return;
     }
+    if (!dispatchVideo) {
+      setShipError("Attach the dispatch video before marking as shipped.");
+      return;
+    }
     setShipSubmitting(true);
     setShipError("");
-    await advanceOrderStatus(shipOrder.id, {
+    const uploaded = await uploadOrderDispatchVideo(shipOrder.id, dispatchVideo);
+    if (uploaded.error || !uploaded.path) {
+      setShipError(uploaded.error ?? "Dispatch video upload failed.");
+      setShipSubmitting(false);
+      return;
+    }
+    const updated = await advanceOrderStatus(shipOrder.id, {
       courier: courier.trim() || undefined,
       trackingNumber: trackingNumber.trim(),
+      dispatchVideoPath: uploaded.path,
     });
+    if (!updated) {
+      setShipError("Could not update order status. Please try again.");
+      setShipSubmitting(false);
+      return;
+    }
     closeShipModal();
   };
 
@@ -343,8 +412,10 @@ export default function SellerOrdersScreen() {
         shipError={shipError}
         courier={courier}
         trackingNumber={trackingNumber}
+        dispatchVideo={dispatchVideo}
         onCourierChange={setCourier}
         onTrackingChange={setTrackingNumber}
+        onPickDispatchVideo={() => void handlePickDispatchVideo()}
         onCancel={closeShipModal}
         onConfirm={() => void handleConfirmShip()}
       />
@@ -585,6 +656,27 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
     marginTop: Spacing.xs,
+  },
+  dispatchVideoSelected: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+  },
+  dispatchVideoPlaceholder: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
+  dispatchVideoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 12,
   },
   modalInput: {
     backgroundColor: Colors.light.cardBackground,

@@ -72,16 +72,30 @@ export default function AdminUsersScreen({
     );
   });
 
-  const toggleUserStatus = async (userId: string) => {
+  const toggleUserStatus = (userId: string) => {
     const user = users.find((u) => u.id === userId);
     if (!user) return;
     const newStatus = user.status === "Active" ? "Suspended" : "Active";
-    const result = await updateUser(userId, { status: newStatus });
-    if (result.error) {
-      Alert.alert("Update failed", result.error);
-      return;
+    const applyStatus = async () => {
+      const result = await updateUser(userId, { status: newStatus });
+      if (result.error) {
+        Alert.alert("Update failed", result.error);
+        return;
+      }
+      logActivity(`${user.name} ${newStatus === "Suspended" ? "suspended" : "activated"}`, "user");
+    };
+    if (newStatus === "Suspended") {
+      Alert.alert(
+        "Suspend user",
+        `Suspend ${user.name}? They may lose access to platform features.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Suspend", style: "destructive", onPress: () => void applyStatus() },
+        ]
+      );
+    } else {
+      void applyStatus();
     }
-    logActivity(`${user.name} ${newStatus === "Suspended" ? "suspended" : "activated"}`, "user");
   };
 
   const cycleUserRole = (userId: string) => {

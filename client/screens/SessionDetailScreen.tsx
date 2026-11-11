@@ -21,7 +21,6 @@ import { usePractitionerContext } from "@/context/PractitionerContext";
 import { useReviews } from "@/context/ReviewsContext";
 import type { Review } from "@/data/reviews";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
-import { openMeetingLink } from "@/lib/meetingLink";
 import { useCancellationPolicy } from "@/lib/cancellationPolicy";
 
 type ParamList = {
@@ -142,10 +141,6 @@ export default function SessionDetailScreen() {
   }
 
   const isUpcoming = session.status === "Upcoming";
-
-  const handleJoinSession = () => {
-    openMeetingLink(session.meetingLink);
-  };
 
   const handleCancelSession = () => {
     const refundNote = bookingCancelMessage(`${session.date}T${session.time || "12:00"}`);
@@ -330,14 +325,7 @@ export default function SessionDetailScreen() {
 
         {isUpcoming ? (
           <View style={styles.actionSection}>
-            <Pressable
-              style={styles.joinButton}
-              onPress={handleJoinSession}
-              testID="button-join-session"
-            >
-              <ThemedText style={styles.joinButtonText}>Join Session</ThemedText>
-            </Pressable>
-            <Pressable
+<Pressable
               style={[styles.cancelButton, cancelling && styles.submitReviewDisabled]}
               onPress={handleCancelSession}
               disabled={cancelling}
@@ -521,6 +509,16 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     marginBottom: Spacing.lg,
     gap: 10,
+  },
+  introChatButton: {
+    backgroundColor: Colors.light.accent,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: Spacing.md,
   },
   joinButton: {
     backgroundColor: Colors.light.button,

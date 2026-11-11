@@ -7,6 +7,26 @@ import type {
 } from "@/data/practitionerBookings";
 import { getSupabase } from "@/lib/supabase";
 import { resolvePractitionerId } from "@/services/content/practitionerId";
+import { cancelUserBooking } from "@/services/bookingCancellationApi";
+
+function sessionTimeMinutes(value: string): number {
+  const match = value.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (match) {
+    let hour = Number(match[1]) % 12;
+    if (match[3].toUpperCase() === "PM") hour += 12;
+    return hour * 60 + Number(match[2] ?? "0");
+  }
+  const twentyFourHour = value.trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (twentyFourHour) return Number(twentyFourHour[1]) * 60 + Number(twentyFourHour[2]);
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function sortBookingsBySessionStart(rows: DbBookingRow[]): DbBookingRow[] {
+  return [...rows].sort((a, b) =>
+    a.session_date.localeCompare(b.session_date) ||
+    sessionTimeMinutes(a.session_time) - sessionTimeMinutes(b.session_time)
+  );
+}
 
 function uiStatus(row: DbBookingRow): PractitionerSessionStatus {
   if (row.booking_status === "Cancelled") return "Cancelled";
@@ -93,7 +113,6 @@ export function toPractitionerSession(row: DbBookingRow): PractitionerSession {
     notes: row.notes ?? undefined,
     amount: Number(row.amount),
     paymentStatus: row.payment_status,
-    meetingLink: row.meeting_link ?? undefined,
   };
 }
 
@@ -111,7 +130,6 @@ export function toUserSessionHistory(
     duration: `${row.duration_minutes} min`,
     price: Number(row.amount).toLocaleString("en-IN"),
     time: row.session_time,
-    meetingLink: row.meeting_link ?? undefined,
     paymentStatus: row.payment_status,
   };
 }
@@ -130,7 +148,8 @@ export async function fetchPractitionerBookings(
   let query = supabase
     .from("practitioner_bookings")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("session_date", { ascending: true })
+    .order("session_time", { ascending: true });
 
   if (practitionerId) {
     query = query.eq("practitioner_id", practitionerId);
@@ -141,7 +160,7 @@ export async function fetchPractitionerBookings(
     console.error("[practitionerBookings] fetch:", error.message);
     return [];
   }
-  return ((data ?? []) as DbBookingRow[]).map(toPractitionerSession);
+  return sortBookingsBySessionStart((data ?? []) as DbBookingRow[]).map(toPractitionerSession);
 }
 
 export async function fetchUserBookings(
@@ -154,7 +173,8 @@ export async function fetchUserBookings(
     .from("practitioner_bookings")
     .select("*")
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    .order("session_date", { ascending: true })
+    .order("session_time", { ascending: true });
 
   if (error) {
     console.error("[practitionerBookings] user fetch:", error.message);
@@ -177,7 +197,7 @@ export async function fetchUserBookings(
     }
   }
 
-  return rows.map((row) =>
+  return sortBookingsBySessionStart(rows).map((row) =>
     toUserSessionHistory(row, nameById.get(row.practitioner_id ?? "") ?? "Practitioner")
   );
 }
@@ -315,7 +335,7 @@ export async function completeBooking(
 export async function cancelBooking(
   bookingId: string,
   commissionRate: number,
-  options?: { notes?: string; requestRefund?: boolean }
+  options?: { notes?: string; requestRefund?: boolean; accessToken?: string }
 ): Promise<PractitionerSession | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
@@ -323,6 +343,22 @@ export async function cancelBooking(
   const existing = await getBookingById(bookingId);
   if (!existing) return null;
 
+  // User cancellations go through the authenticated API and atomic server RPC.
+  if (options?.requestRefund) {
+    if (!options.accessToken) {
+      console.error("[practitionerBookings] user cancellation requires auth token");
+      return null;
+    }
+    const result = await cancelUserBooking(bookingId, options.accessToken, options.notes);
+    if (!result.ok) {
+      console.error("[practitionerBookings] user cancellation:", result.error);
+      return null;
+    }
+    const updated = await getBookingById(bookingId);
+    return updated ? toPractitionerSession(updated) : null;
+  }
+
+  // Practitioner cancellation path (no customer refund request).
   const { data, error } = await supabase
     .from("practitioner_bookings")
     .update({
@@ -338,36 +374,7 @@ export async function cancelBooking(
     return null;
   }
 
-  const row = data as DbBookingRow;
-
-  if (
-    options?.requestRefund &&
-    existing.payment_status === "Paid" &&
-    existing.user_id
-  ) {
-    const { data: openRefund } = await supabase
-      .from("refund_requests")
-      .select("id")
-      .eq("booking_id", bookingId)
-      .in("status", ["pending", "in_review", "approved"])
-      .maybeSingle();
-
-    if (!openRefund) {
-      const { error: refundError } = await supabase.from("refund_requests").insert({
-        user_id: existing.user_id,
-        booking_id: bookingId,
-        reason: "Session cancelled",
-        description:
-          options.notes?.trim() ||
-          "Session cancelled by user. Refund eligibility per cancellation policy.",
-      });
-      if (refundError) {
-        console.error("[practitionerBookings] refund request:", refundError.message);
-      }
-    }
-  }
-
-  return toPractitionerSession(row);
+  return toPractitionerSession(data as DbBookingRow);
 }
 
 async function recordSessionHistory(row: DbBookingRow): Promise<void> {

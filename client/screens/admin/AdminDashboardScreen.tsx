@@ -437,11 +437,13 @@ const styles = StyleSheet.create({
   },
   activityText: {
     flex: 1,
+    minWidth: 0,
     fontSize: 13,
     color: Colors.light.text,
     lineHeight: 18,
   },
   activityTime: {
+    flexShrink: 0,
     fontSize: 11,
     color: Colors.light.textMuted,
   },

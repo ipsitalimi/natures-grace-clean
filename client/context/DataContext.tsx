@@ -41,10 +41,10 @@ interface DataContextType {
   refreshContent: (options?: { silent?: boolean }) => Promise<void>;
 
   events: CommunityEvent[];
-  addEvent: (event: Omit<CommunityEvent, "id" | "dbId">) => void;
-  updateEvent: (id: string, patch: eventsService.EventUpdatePatch) => Promise<void>;
-  deleteEvent: (id: string) => void;
-  setEventVisibility: (id: string, visible: boolean) => void;
+  addEvent: (event: Omit<CommunityEvent, "id" | "dbId">) => Promise<boolean>;
+  updateEvent: (id: string, patch: eventsService.EventUpdatePatch) => Promise<boolean>;
+  deleteEvent: (id: string) => Promise<boolean>;
+  setEventVisibility: (id: string, visible: boolean) => Promise<boolean>;
 
   discussions: Discussion[];
   moderationDiscussions: Discussion[];
@@ -71,17 +71,18 @@ interface DataContextType {
   ) => Promise<boolean>;
 
   resources: ResourceItem[];
-  addResource: (resource: Omit<ResourceItem, "id">) => void;
-  deleteResource: (id: string) => void;
-  setResourcePublished: (id: string, published: boolean) => void;
-  updateResource: (id: string, patch: resourcesService.ResourceUpdatePatch) => Promise<void>;
+  addResource: (resource: Omit<ResourceItem, "id">) => Promise<boolean>;
+  deleteResource: (id: string) => Promise<boolean>;
+  setResourcePublished: (id: string, published: boolean) => Promise<boolean>;
+  updateResource: (id: string, patch: resourcesService.ResourceUpdatePatch) => Promise<boolean>;
 
   allProducts: StoreProduct[];
   storeCategories: StoreCategory[];
   sellerCatalog: SellerProduct[];
+  refreshSellerCatalog: () => Promise<void>;
   addProduct: (product: Omit<StoreProduct, "id"> & { id?: string }) => Promise<StoreProduct | null>;
-  updateProduct: (id: string, updates: Partial<StoreProduct>) => void;
-  deleteProduct: (id: string) => void;
+  updateProduct: (id: string, updates: Partial<StoreProduct>) => Promise<boolean>;
+  deleteProduct: (id: string) => Promise<boolean>;
 
   practitionerCategories: Category[];
   practitionersLoading: boolean;
@@ -98,6 +99,8 @@ interface DataContextType {
     id: string,
     patch: Partial<Pick<Practitioner, "approvalStatus" | "isVerified" | "featured">>
   ) => void;
+  updatePractitionerBio: (id: string, bio: string) => Promise<boolean>;
+  updatePractitionerPrice: (id: string, price: number) => Promise<boolean>;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -318,80 +321,85 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addEvent = useCallback(
-    async (event: Omit<CommunityEvent, "id" | "dbId">) => {
-      if (!isSupabaseConfigured()) return;
+    async (event: Omit<CommunityEvent, "id" | "dbId">): Promise<boolean> => {
+      if (!isSupabaseConfigured()) return false;
       const created = await eventsService.insertEvent({
         ...event,
         id: generateId("evt"),
       } as CommunityEvent);
-      if (created) {
-        setEvents((prev) => [...prev, created]);
-      }
+      if (!created) return false;
+      setEvents((prev) => [...prev, created]);
+      return true;
     },
     []
   );
 
-  const updateEvent = useCallback(async (id: string, patch: eventsService.EventUpdatePatch) => {
-    if (!isSupabaseConfigured()) return;
+  const updateEvent = useCallback(async (id: string, patch: eventsService.EventUpdatePatch): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const target = events.find((e) => e.id === id);
-    if (!target?.dbId) return;
+    if (!target?.dbId) return false;
     const updated = await eventsService.updateEvent(target.dbId, patch);
-    if (updated) {
-      setEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
-    }
+    if (!updated) return false;
+    setEvents((prev) => prev.map((e) => (e.id === id ? updated : e)));
+    return true;
   }, [events]);
 
-  const deleteEvent = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured()) return;
+  const deleteEvent = useCallback(async (id: string): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const target = events.find((e) => e.id === id);
-    if (target?.dbId) {
-      await eventsService.deleteEventByDbId(target.dbId);
-    }
-    setEvents((prev) => prev.filter((e) => e.id !== id));
+    if (!target?.dbId) return false;
+    const deleted = await eventsService.deleteEventByDbId(target.dbId);
+    if (!deleted) return false;
+    setEvents((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, status: "Ended", isVisible: false } : e))
+    );
+    return true;
   }, [events]);
 
   const setEventVisibility = useCallback(
-    async (id: string, visible: boolean) => {
-      if (!isSupabaseConfigured()) return;
+    async (id: string, visible: boolean): Promise<boolean> => {
+      if (!isSupabaseConfigured()) return false;
       const target = events.find((e) => e.id === id);
-      if (target?.dbId) {
-        await eventsService.updateEventVisibility(target.dbId, visible);
-      }
-      setEvents((prev) =>
-        prev.map((e) => (e.id === id ? { ...e, isVisible: visible } : e))
-      );
+      if (!target?.dbId) return false;
+      const updated = await eventsService.updateEventVisibility(target.dbId, visible);
+      if (!updated) return false;
+      setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, isVisible: visible, status: visible ? "Active" : "Ended" } : e)));
+      return true;
     },
     [events]
   );
 
-  const addResource = useCallback(async (resource: Omit<ResourceItem, "id">) => {
-    if (!isSupabaseConfigured()) return;
+  const addResource = useCallback(async (resource: Omit<ResourceItem, "id">): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const created = await resourcesService.insertResource(resource);
-    if (created) {
-      setResources((prev) => [...prev, created]);
-    }
+    if (!created) return false;
+    setResources((prev) => [...prev, created]);
+    return true;
   }, []);
 
-  const deleteResource = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured()) await resourcesService.deleteResource(id);
+  const deleteResource = useCallback(async (id: string): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
+    const deleted = await resourcesService.deleteResource(id);
+    if (!deleted) return false;
     setResources((prev) => prev.filter((r) => r.id !== id));
+    return true;
   }, []);
 
-  const setResourcePublished = useCallback(async (id: string, published: boolean) => {
-    if (!isSupabaseConfigured()) return;
-    await resourcesService.setResourcePublished(id, published);
-    setResources((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, published } : r))
-    );
+  const setResourcePublished = useCallback(async (id: string, published: boolean): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
+    const updated = await resourcesService.setResourcePublished(id, published);
+    if (!updated) return false;
+    setResources((prev) => prev.map((r) => (r.id === id ? { ...r, published } : r)));
+    return true;
   }, []);
 
   const updateResource = useCallback(
-    async (id: string, patch: resourcesService.ResourceUpdatePatch) => {
-      if (!isSupabaseConfigured()) return;
+    async (id: string, patch: resourcesService.ResourceUpdatePatch): Promise<boolean> => {
+      if (!isSupabaseConfigured()) return false;
       const updated = await resourcesService.updateResource(id, patch);
-      if (updated) {
-        setResources((prev) => prev.map((r) => (r.id === id ? updated : r)));
-      }
+      if (!updated) return false;
+      setResources((prev) => prev.map((r) => (r.id === id ? updated : r)));
+      return true;
     },
     []
   );
@@ -423,20 +431,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [profile?.id, profile?.role, platformSettings.autoApproveProducts]
   );
 
-  const updateProduct = useCallback(async (id: string, updates: Partial<StoreProduct>) => {
-    if (!isSupabaseConfigured()) return;
+  const updateProduct = useCallback(async (id: string, updates: Partial<StoreProduct>): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const updated = await productsService.updateProduct(id, updates);
-    if (updated) {
-      setAllProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
-      setSellerCatalogProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
-    }
+    if (!updated) return false;
+    setAllProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    setSellerCatalogProducts((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    return true;
   }, []);
 
   const deleteProduct = useCallback(async (id: string) => {
-    if (!isSupabaseConfigured()) return;
-    await productsService.deleteProduct(id);
+    if (!isSupabaseConfigured()) return false;
+    const deleted = await productsService.deleteProduct(id);
+    if (!deleted) return false;
     setAllProducts((prev) => prev.filter((p) => p.id !== id));
     setSellerCatalogProducts((prev) => prev.filter((p) => p.id !== id));
+    return true;
   }, []);
 
   const addPractitioner = useCallback(
@@ -507,6 +517,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const updatePractitionerBio = useCallback(async (id: string, bio: string): Promise<boolean> => {
+    if (!isSupabaseConfigured() || bio.trim().length > 600) return false;
+    const ok = await practitionersService.updatePractitioner(id, { bio: bio.trim() });
+    if (!ok) return false;
+    setPractitionerCats((prev) => prev.map((cat) => ({
+      ...cat,
+      practitioners: cat.practitioners.map((p) => p.id === id ? { ...p, bio: bio.trim() } : p),
+    })));
+    return true;
+  }, []);
+
+  const updatePractitionerPrice = useCallback(async (id: string, price: number): Promise<boolean> => {
+    if (!isSupabaseConfigured() || !Number.isFinite(price) || price < 0) return false;
+    const ok = await practitionersService.updatePractitioner(id, { price_per_session: price });
+    if (!ok) return false;
+    setPractitionerCats((prev) => prev.map((cat) => ({
+      ...cat,
+      practitioners: cat.practitioners.map((p) => p.id === id ? { ...p, pricePerSession: price } : p),
+    })));
+    return true;
+  }, []);
+
   const value: DataContextType = {
     dataLoading,
     dataError,
@@ -532,6 +564,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     allProducts,
     storeCategories,
     sellerCatalog,
+    refreshSellerCatalog,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -541,6 +574,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     togglePractitioner,
     deletePractitioner,
     updatePractitionerMeta,
+    updatePractitionerBio,
+    updatePractitionerPrice,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

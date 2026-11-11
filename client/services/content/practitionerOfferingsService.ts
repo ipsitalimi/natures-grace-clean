@@ -115,7 +115,12 @@ export async function upsertOffering(
     }
     const mapped = mapOffering(data as DbOfferingRow);
     if (availability) {
-      await saveAvailabilityForOffering(mapped.id, availability, profileId);
+      try {
+        await saveAvailabilityForOffering(mapped.id, availability, profileId);
+      } catch (availabilityError) {
+        console.error("[practitionerOfferings] availability update failed", availabilityError);
+        return null;
+      }
     }
     return mapped;
   }
@@ -132,7 +137,12 @@ export async function upsertOffering(
   }
   const mapped = mapOffering(data as DbOfferingRow);
   if (availability) {
-    await saveAvailabilityForOffering(mapped.id, availability, profileId);
+    try {
+      await saveAvailabilityForOffering(mapped.id, availability, profileId);
+    } catch (availabilityError) {
+      console.error("[practitionerOfferings] availability insert failed", availabilityError);
+      return null;
+    }
   }
   return mapped;
 }

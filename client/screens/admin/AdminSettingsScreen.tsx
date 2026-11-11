@@ -91,6 +91,10 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
   const [acceptCards, setAcceptCards] = useState(settings.acceptCards);
   const [acceptWallet, setAcceptWallet] = useState(settings.acceptWallet);
   const [payoutCycle, setPayoutCycle] = useState<"Weekly" | "Bi-Weekly" | "Monthly">(settings.payoutCycle);
+  const [platformFeeEnabled, setPlatformFeeEnabled] = useState(settings.platformFeeEnabled);
+  const [platformFeePercent, setPlatformFeePercent] = useState(String(settings.platformFeePercent));
+  const [platformGstEnabled, setPlatformGstEnabled] = useState(settings.platformGstEnabled);
+  const [platformGstPercent, setPlatformGstPercent] = useState(String(settings.platformGstPercent));
 
   const handleSave = async () => {
     if (saving) return;
@@ -109,6 +113,10 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
       acceptCards,
       acceptWallet,
       payoutCycle,
+      platformFeeEnabled,
+      platformFeePercent: Math.min(100, Math.max(0, Number(platformFeePercent) || 0)),
+      platformGstEnabled,
+      platformGstPercent: Math.min(100, Math.max(0, Number(platformGstPercent) || 0)),
       twoFactorEnabled: twoFactor,
       sessionTimeoutMinutes: timeoutMinutes,
     });
@@ -316,6 +324,13 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
         Checkout uses Razorpay — these toggles are stored only and do not change the payment sheet yet.
       </ThemedText>
       <View style={styles.settingsCard}>
+        <ToggleRow label="Platform Fee" value={platformFeeEnabled} onToggle={() => setPlatformFeeEnabled(!platformFeeEnabled)} testID="toggle-platform-fee" />
+        <ThemedText style={styles.inputLabel}>Platform Fee (%)</ThemedText>
+        <TextInput style={styles.input} value={platformFeePercent} onChangeText={setPlatformFeePercent} keyboardType="decimal-pad" testID="input-platform-fee-percent" />
+        <ToggleRow label="Platform GST" value={platformGstEnabled} onToggle={() => setPlatformGstEnabled(!platformGstEnabled)} testID="toggle-platform-gst" />
+        <ThemedText style={styles.inputLabel}>Platform GST (%)</ThemedText>
+        <TextInput style={styles.input} value={platformGstPercent} onChangeText={setPlatformGstPercent} keyboardType="decimal-pad" testID="input-platform-gst-percent" />
+        <ThemedText style={styles.plannedHint}>These controls save platform fee/GST preferences. Razorpay gateway charges and GST are separate. Checkout calculation will be enabled only after backend pricing and refund handling are connected.</ThemedText>
         <ToggleRow
           label="Accept UPI"
           value={acceptUPI}

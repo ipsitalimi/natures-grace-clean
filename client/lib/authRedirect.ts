@@ -41,14 +41,27 @@ function isDevOnlyRedirect(url: string): boolean {
   );
 }
 
+function isWebRedirectUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function getWebAuthRedirectUrl(override?: string): string {
-  if (override && !isDevOnlyRedirect(override)) {
+  // Native deep links (for example natures-grace://auth/callback) must never
+  // be sent by the browser client. Use an HTTP(S) web callback instead.
+  if (override && isWebRedirectUrl(override) && !isDevOnlyRedirect(override)) {
     return override;
   }
   if (typeof window !== "undefined" && window.location?.origin) {
     return `${window.location.origin}/${AUTH_REDIRECT_PATH}`;
   }
-  return override ?? Linking.createURL(`/${AUTH_REDIRECT_PATH}`);
+  return override && isWebRedirectUrl(override)
+    ? override
+    : Linking.createURL(`/${AUTH_REDIRECT_PATH}`);
 }
 
 /** Redirect target for Supabase signup confirmation and password-reset emails. */

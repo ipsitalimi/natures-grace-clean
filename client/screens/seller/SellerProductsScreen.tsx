@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { View, StyleSheet, ScrollView, Pressable, TextInput, FlatList, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect } from "react-native-svg";
 
@@ -158,7 +158,12 @@ function EmptyState() {
 export default function SellerProductsScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const navigation = useNavigation<any>();
-  const { sellerCatalog: sellerProducts, dataLoading } = useDataContext();
+  const { sellerCatalog: sellerProducts, dataLoading, refreshSellerCatalog } = useDataContext();
+  const isFocused = useIsFocused();
+
+  useEffect(() => {
+    if (isFocused) void refreshSellerCatalog();
+  }, [isFocused, refreshSellerCatalog]);
   const { openDrawer } = useDrawer();
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [search, setSearch] = useState("");

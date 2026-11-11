@@ -16,6 +16,13 @@
       "env": {
         "EXPO_PUBLIC_AUTH_REDIRECT_URL": "natures-grace://auth/callback"
       }
+    },
+    "staging": {
+      "extends": "preview",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_AUTH_REDIRECT_URL": "natures-grace://auth/callback"
+      }
     }
   },
   "submit": {

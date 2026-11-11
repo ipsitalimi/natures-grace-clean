@@ -111,6 +111,7 @@ export default function EventDetailScreen() {
 
   const registrationFree = isEventRegistrationFree(event.pricing);
   const registrationNote = eventRegistrationNote(event.pricing);
+  const eventAcceptingRegistrations = event.status === "Active" && event.isVisible !== false;
 
   return (
     <View style={styles.container}>
@@ -187,15 +188,13 @@ export default function EventDetailScreen() {
           </View>
         ) : (
           <View style={styles.pricingCard}>
-            <ThemedText style={styles.pricingSectionTitle}>Reference pricing</ThemedText>
-            <ThemedText style={styles.pricingDisclaimer}>
-              Shown for information only. You will not be charged when you register below.
-            </ThemedText>
+            <ThemedText style={styles.pricingSectionTitle}>Registration fee</ThemedText>
+            
             {event.pricing.map((item, index) => (
               <View key={index} style={styles.pricingRow}>
                 <ThemedText style={styles.pricingLabel}>{item.label}</ThemedText>
                 <ThemedText style={styles.pricingAmount}>
-                  {formatInr(Number(item.amount) || 0)}/-
+                  {formatInr(Number(item.amount) || 0)}
                 </ThemedText>
               </View>
             ))}
@@ -220,11 +219,22 @@ export default function EventDetailScreen() {
               You&apos;re registered for this event
             </ThemedText>
           ) : null}
-          <Pressable style={styles.ctaButton} onPress={handleJoin}>
-            <ThemedText style={styles.ctaButtonText}>
-              {registered ? "View registration" : event.ctaText}
+          {registered || eventAcceptingRegistrations ? (
+            <Pressable
+              style={[styles.ctaButton, !eventAcceptingRegistrations && !registered ? { opacity: 0.5 } : null]}
+              onPress={handleJoin}
+              disabled={!eventAcceptingRegistrations && !registered}
+              testID="button-event-register"
+            >
+              <ThemedText style={styles.ctaButtonText}>
+                {registered ? "View registration" : event.ctaText}
+              </ThemedText>
+            </Pressable>
+          ) : (
+            <ThemedText style={styles.registeredLabel} testID="text-event-registration-closed">
+              Registration is closed for this event.
             </ThemedText>
-          </Pressable>
+          )}
           {registrationsLoading && !registered ? (
             <ThemedText style={styles.bottomNote}>Checking registration…</ThemedText>
           ) : null}

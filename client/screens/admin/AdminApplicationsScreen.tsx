@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
+  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -22,6 +23,7 @@ import {
   approveRoleApplication,
   fetchAllRoleApplications,
   rejectRoleApplication,
+  updateRoleApplicationBio,
 } from "@/services/platform/roleApplicationsService";
 
 function formatDate(iso: string): string {
@@ -92,6 +94,9 @@ export default function AdminApplicationsScreen({
   const [actionError, setActionError] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<RoleApplication | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [bioDraft, setBioDraft] = useState("");
+  const [bioSaving, setBioSaving] = useState(false);
+  const [bioError, setBioError] = useState("");
 
   const loadApplications = useCallback(async () => {
     if (!isSupabaseConfigured()) {
@@ -128,6 +133,26 @@ export default function AdminApplicationsScreen({
   const sellerApplications = applications.filter((a) => a.targetRole === "Seller");
   const practitionerApplications = applications.filter((a) => a.targetRole === "Practitioner");
   const selected = selectedId ? applications.find((a) => a.id === selectedId) : null;
+
+  const saveApplicationBio = async () => {
+    if (!selected) return;
+    setBioSaving(true); setBioError("");
+    const ok = await updateRoleApplicationBio(selected.id, bioDraft);
+    setBioSaving(false);
+    if (!ok) { setBioError("Could not save the application bio. Check admin permissions."); return; }
+    setApplications((prev) => prev.map((a) => a.id === selected.id ? { ...a, formData: { ...a.formData, bio: bioDraft.trim() } } : a));
+  };
+
+  const confirmApprove = (application: RoleApplication) => {
+    Alert.alert(
+      "Approve application",
+      `Approve ${application.targetRole.toLowerCase()} access for ${applicationDisplayName(application.formData)}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Approve", onPress: () => void handleApprove(application) },
+      ]
+    );
+  };
 
   const handleApprove = async (application: RoleApplication) => {
     setActionBusy(true);
@@ -201,7 +226,12 @@ export default function AdminApplicationsScreen({
               <DetailField label="Certifications" value={form.certifications ?? ""} />
               <DetailField label="Session types" value={form.sessionTypes ?? ""} />
               <DetailField label="Price range" value={form.priceRange ?? ""} />
-              <DetailField label="Bio" value={form.bio ?? ""} />
+              <ThemedText style={styles.detailLabel}>Bio (admin draft before approval)</ThemedText>
+              <TextInput value={bioDraft || form.bio || ""} onChangeText={setBioDraft} multiline maxLength={600} placeholder="Edit practitioner bio…" placeholderTextColor={Colors.light.textMuted} style={styles.bioInput} textAlignVertical="top" />
+              <Pressable style={styles.saveBioButton} onPress={() => void saveApplicationBio()} disabled={bioSaving || selected.status !== "Pending"}>
+                {bioSaving ? <ActivityIndicator color="#fff" size="small" /> : <ThemedText style={styles.actionButtonText}>Save bio draft</ThemedText>}
+              </Pressable>
+              {bioError ? <ThemedText style={styles.errorText}>{bioError}</ThemedText> : null}
               <DetailField label="Why join" value={form.whyJoin ?? ""} />
               <DetailField label="Availability" value={form.availability ?? ""} />
             </>
@@ -227,7 +257,7 @@ export default function AdminApplicationsScreen({
           <View style={styles.actionRow}>
             <Pressable
               style={[styles.actionButton, styles.approveButton]}
-              onPress={() => void handleApprove(selected)}
+              onPress={() => confirmApprove(selected)}
               disabled={actionBusy}
               testID="button-approve-application"
             >
@@ -339,7 +369,7 @@ export default function AdminApplicationsScreen({
         <ThemedText style={styles.emptyGroup}>No practitioner applications yet.</ThemedText>
       ) : (
         practitionerApplications.map((app) => (
-          <ApplicationCard key={app.id} application={app} onPress={() => setSelectedId(app.id)} />
+          <ApplicationCard key={app.id} application={app} onPress={() => { setSelectedId(app.id); setBioDraft(app.formData.bio ?? ""); setBioError(""); }} />
         ))
       )}
 
@@ -461,6 +491,8 @@ const styles = StyleSheet.create({
   detailRole: { fontSize: 14, color: Colors.light.textSecondary, marginTop: 4 },
   detailMeta: { fontSize: 12, color: Colors.light.textMuted, marginTop: 2, marginBottom: Spacing.sm },
   detailField: { marginTop: Spacing.md },
+  bioInput: { borderWidth: 1, borderColor: Colors.light.divider, borderRadius: BorderRadius.sm, minHeight: 110, padding: Spacing.md, color: Colors.light.text, fontSize: 14, marginTop: Spacing.sm },
+  saveBioButton: { backgroundColor: Colors.light.accent, paddingVertical: 10, paddingHorizontal: 14, borderRadius: BorderRadius.sm, alignSelf: "flex-start", marginTop: Spacing.sm },
   detailLabel: {
     fontSize: 12,
     fontWeight: "600",

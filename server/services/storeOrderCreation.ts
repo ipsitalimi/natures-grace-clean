@@ -17,6 +17,37 @@ export type CreateStoreOrderInput = {
   platformPromoId?: string | null;
 };
 
+export function normalizeStoreOrderItems(
+  items: CreateStoreOrderItemInput[]
+):
+  | { ok: true; items: CreateStoreOrderItemInput[] }
+  | { ok: false; error: string } {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { ok: false, error: "Cart is empty" };
+  }
+
+  const quantities = new Map<string, number>();
+  for (const item of items) {
+    const productId = typeof item?.productId === "string" ? item.productId.trim() : "";
+    const quantity = Number(item?.quantity);
+    if (!productId) return { ok: false, error: "Invalid product" };
+    if (!Number.isSafeInteger(quantity) || quantity <= 0) {
+      return { ok: false, error: "Quantity must be a positive whole number" };
+    }
+
+    const combined = (quantities.get(productId) ?? 0) + quantity;
+    if (!Number.isSafeInteger(combined)) {
+      return { ok: false, error: "Invalid quantity" };
+    }
+    quantities.set(productId, combined);
+  }
+
+  return {
+    ok: true,
+    items: [...quantities].map(([productId, quantity]) => ({ productId, quantity })),
+  };
+}
+
 type ProductRow = {
   id: string;
   name: string;
@@ -68,7 +99,7 @@ function deliveryFeeForOption(settings: DeliverySettings, optionId: string): num
   return settings.standard.enabled ? settings.standard.price : 0;
 }
 
-function computeSellerPromoDiscount(
+export function computeSellerPromoDiscount(
   subtotal: number,
   row: {
     status: string;
@@ -82,17 +113,26 @@ function computeSellerPromoDiscount(
   }
 ): { ok: true; discount: number } | { ok: false; error: string } {
   if (row.status !== "Active") return { ok: false, error: "Promo is not active" };
+  if (!Number.isFinite(subtotal) || subtotal <= 0) {
+    return { ok: false, error: "Invalid order subtotal" };
+  }
+  if (
+    !Number.isFinite(Number(row.discount_value)) ||
+    Number(row.discount_value) <= 0 ||
+    (row.discount_type === "percentage" && Number(row.discount_value) > 100) ||
+    !["percentage", "fixed"].includes(row.discount_type)
+  ) {
+    return { ok: false, error: "Invalid promo discount" };
+  }
   if (row.starts_at) {
     const st = new Date(row.starts_at);
-    if (!Number.isNaN(st.getTime()) && st.getTime() > Date.now()) {
-      return { ok: false, error: "Promo is not valid yet" };
-    }
+    if (Number.isNaN(st.getTime())) return { ok: false, error: "Invalid promo start date" };
+    if (st.getTime() > Date.now()) return { ok: false, error: "Promo is not valid yet" };
   }
   if (row.expires_at) {
     const ex = new Date(row.expires_at);
-    if (!Number.isNaN(ex.getTime()) && ex.getTime() < Date.now()) {
-      return { ok: false, error: "Promo has expired" };
-    }
+    if (Number.isNaN(ex.getTime())) return { ok: false, error: "Invalid promo expiry date" };
+    if (ex.getTime() < Date.now()) return { ok: false, error: "Promo has expired" };
   }
   if (row.usage_limit != null && row.usage_count >= row.usage_limit) {
     return { ok: false, error: "Promo usage limit reached" };
@@ -108,7 +148,7 @@ function computeSellerPromoDiscount(
   return { ok: true, discount };
 }
 
-function computePlatformPromoDiscount(
+export function computePlatformPromoDiscount(
   subtotal: number,
   row: {
     status: string;
@@ -153,11 +193,11 @@ export async function createValidatedStoreOrder(
 > {
   const supabase = requireSupabaseAdmin();
 
-  if (!input.items.length) {
-    return { ok: false, error: "Cart is empty" };
-  }
+  const normalized = normalizeStoreOrderItems(input.items);
+  if (!normalized.ok) return normalized;
+  const items = normalized.items;
 
-  const productIds = [...new Set(input.items.map((i) => i.productId))];
+  const productIds = items.map((item) => item.productId);
   const { data: products, error: productsError } = await supabase
     .from("products")
     .select("id, name, category, price, stock, seller_id, approval_status")
@@ -182,11 +222,8 @@ export async function createValidatedStoreOrder(
     lineTotal: number;
   }[] = [];
 
-  for (const item of input.items) {
-    const qty = Math.floor(Number(item.quantity));
-    if (!Number.isFinite(qty) || qty <= 0) {
-      return { ok: false, error: "Invalid quantity" };
-    }
+  for (const item of items) {
+    const qty = item.quantity;
 
     const product = productMap.get(item.productId);
     if (!product) {

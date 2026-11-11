@@ -111,7 +111,8 @@ export function ResourceEnrollmentsProvider({ children }: { children: React.Reac
   const cancelEnrollmentForResource = useCallback(
     async (resourceId: string) => {
       if (!isSupabaseConfigured() || !session?.user) return false;
-      await resourceEnrollmentsService.cancelEnrollmentForResource(resourceId);
+      const cancelled = await resourceEnrollmentsService.cancelEnrollmentForResource(resourceId);
+      if (!cancelled) return false;
       setEnrollments((prev) =>
         prev.map((e) =>
           e.resourceId === resourceId && e.userId === session.user.id && e.status === "Enrolled"
@@ -127,11 +128,10 @@ export function ResourceEnrollmentsProvider({ children }: { children: React.Reac
   const toggleEnrollment = useCallback(
     async (resourceId: string) => {
       if (isEnrolledForResource(resourceId)) {
-        await cancelEnrollmentForResource(resourceId);
-        return false;
+        return await cancelEnrollmentForResource(resourceId);
       }
-      await enrollForResource(resourceId);
-      return true;
+      const created = await enrollForResource(resourceId);
+      return Boolean(created);
     },
     [isEnrolledForResource, cancelEnrollmentForResource, enrollForResource]
   );

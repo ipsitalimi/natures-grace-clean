@@ -113,7 +113,14 @@ export type DbReviewRow = {
 
 export function eventRowToCommunityEvent(row: DbEventRow): CommunityEvent {
   const meta = row.metadata ?? {};
-  const pricing = (meta.pricing as CommunityEvent["pricing"]) ?? [];
+  const savedPricing = (meta.pricing as CommunityEvent["pricing"]) ?? [];
+  const legacyPrice = Number(String(row.price_label ?? "").replace(/,/g, "").replace(/[^\d.]/g, ""));
+  const pricing =
+    savedPricing.length > 0
+      ? savedPricing
+      : Number.isFinite(legacyPrice) && legacyPrice > 0
+        ? [{ label: "Entry Fee", amount: String(legacyPrice) }]
+        : [];
   const whatToExpect = (meta.whatToExpect as string[]) ?? [];
   const legacyId = (meta.legacy_id as string) || row.id;
   return {
@@ -188,6 +195,7 @@ export function resourceRowToItem(row: DbResourceRow): ResourceItem {
     published: row.is_published,
     instructorName:
       typeof meta.instructorName === "string" ? meta.instructorName : undefined,
+    schedule: typeof meta.schedule === "string" ? meta.schedule : undefined,
     locations: typeof meta.locations === "string" ? meta.locations : undefined,
     certificateNote:
       typeof meta.certificateNote === "string" ? meta.certificateNote : undefined,

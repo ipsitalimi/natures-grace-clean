@@ -64,6 +64,7 @@ export default function DashboardStatCard({
 const styles = StyleSheet.create({
   card: {
     width: "47.5%",
+    minWidth: 0,
     flexGrow: 1,
     backgroundColor: Colors.light.cardBackground,
     padding: LayoutSpacing.sm,

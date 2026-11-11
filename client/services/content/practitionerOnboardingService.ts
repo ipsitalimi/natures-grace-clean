@@ -5,8 +5,6 @@ export type PractitionerOnboardingState = {
   practitionerId: string;
   name: string;
   bio: string;
-  pricePerSession: number;
-  meetingLink: string;
   onboardingComplete: boolean;
 };
 
@@ -17,7 +15,7 @@ function parseOnboardingComplete(metadata: unknown): boolean {
 
 export function isPractitionerOnboardingComplete(state: PractitionerOnboardingState): boolean {
   if (state.onboardingComplete) return true;
-  return state.bio.trim().length > 20 && state.pricePerSession > 0;
+  return state.name.trim().length > 0 && state.bio.trim().length > 20;
 }
 
 export async function fetchPractitionerOnboardingState(
@@ -33,7 +31,7 @@ export async function fetchPractitionerOnboardingState(
 
   const { data, error } = await supabase
     .from("practitioners")
-    .select("id, name, bio, price_per_session, meeting_link, metadata")
+    .select("id, name, bio, metadata")
     .eq("id", practitionerId)
     .maybeSingle();
 
@@ -47,8 +45,6 @@ export async function fetchPractitionerOnboardingState(
       practitionerId: data.id as string,
       name: (data.name as string) ?? "",
       bio: (data.bio as string) ?? "",
-      pricePerSession: Number(data.price_per_session) || 0,
-      meetingLink: (data.meeting_link as string) ?? "",
       onboardingComplete: parseOnboardingComplete(data.metadata),
     },
   };
@@ -59,8 +55,6 @@ export async function completePractitionerOnboarding(
   input: {
     name: string;
     bio: string;
-    pricePerSession: number;
-    meetingLink?: string;
   }
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = getSupabase();
@@ -87,8 +81,6 @@ export async function completePractitionerOnboarding(
     .update({
       name: input.name.trim(),
       bio: input.bio.trim(),
-      price_per_session: input.pricePerSession,
-      meeting_link: input.meetingLink?.trim() || null,
       metadata: { ...priorMeta, onboarding_complete: true },
     })
     .eq("id", practitionerId);

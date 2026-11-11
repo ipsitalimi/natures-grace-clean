@@ -13,7 +13,7 @@ export async function fetchPrompts(): Promise<DailyPrompt[]> {
 
   if (error) {
     console.error("[promptsService] fetch:", error.message);
-    return [];
+    throw new Error(error.message);
   }
   return ((data ?? []) as DbPromptRow[]).map(promptRowToDaily);
 }
@@ -38,14 +38,23 @@ export async function insertPrompt(text: string, dateISO: string): Promise<Daily
 export async function deletePrompt(id: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-  const { error } = await supabase.from("prompts").delete().eq("id", id);
-  return !error;
+  const { data, error } = await supabase.from("prompts").delete().eq("id", id).select("id").maybeSingle();
+  if (error) {
+    console.error("[promptsService] delete:", error.message);
+    return false;
+  }
+  return Boolean(data?.id);
 }
 
-export async function setPromptActive(id: string, active: boolean): Promise<void> {
+export async function setPromptActive(id: string, active: boolean): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return;
-  await supabase.from("prompts").update({ active }).eq("id", id);
+  if (!supabase) return false;
+  const { data, error } = await supabase.from("prompts").update({ active }).eq("id", id).select("id").maybeSingle();
+  if (error) {
+    console.error("[promptsService] toggle active:", error.message);
+    return false;
+  }
+  return Boolean(data?.id);
 }
 
 export async function countPrompts(): Promise<number> {

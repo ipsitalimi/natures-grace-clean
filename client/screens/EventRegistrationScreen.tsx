@@ -18,7 +18,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useEventRegistrations } from "@/context/EventRegistrationsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
-import { eventRegistrationNote } from "@/lib/eventPricing";
+import { eventRegistrationNote, isEventRegistrationFree } from "@/lib/eventPricing";
+import { runEventCheckoutPayment } from "@/services/eventCheckoutService";
+import { formatInr } from "@/lib/formatCurrency";
 
 type ParamList = {
   EventRegistration: { eventId: string };
@@ -41,6 +43,7 @@ export default function EventRegistrationScreen() {
   } = useEventRegistrations();
   const event = events.find((e) => e.id === eventId);
   const eventDbId = event?.dbId;
+  const eventAcceptingRegistrations = event?.status === "Active" && event.isVisible !== false;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -73,6 +76,10 @@ export default function EventRegistrationScreen() {
 
   const handleSubmit = async () => {
     if (!isValid || submitting) return;
+    if (!eventAcceptingRegistrations) {
+      setSubmitError("This event is no longer accepting registrations.");
+      return;
+    }
 
     if (!isSupabaseConfigured()) {
       setSubmitError("Sign in and connect Supabase to register for events.");
@@ -90,15 +97,35 @@ export default function EventRegistrationScreen() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const created = await registerForEvent({
-        eventDbId,
-        attendeeName: name,
-        attendeeEmail: email,
-        attendeePhone: phone,
-        message,
-      });
-      if (!created) {
-        setSubmitError("Registration could not be saved. Please try again.");
+      if (event && !isEventRegistrationFree(event.pricing)) {
+        if (!session.access_token) {
+          setSubmitError("Your session expired. Please sign in again.");
+          return;
+        }
+        const payment = await runEventCheckoutPayment({
+          eventId: eventDbId,
+          attendeeName: name,
+          attendeeEmail: email,
+          attendeePhone: phone,
+          message,
+          accessToken: session.access_token,
+        });
+        if (payment.error) {
+          setSubmitError(payment.error);
+        } else {
+          await refreshRegistrations();
+        }
+      } else {
+        const created = await registerForEvent({
+          eventDbId,
+          attendeeName: name,
+          attendeeEmail: email,
+          attendeePhone: phone,
+          message,
+        });
+        if (!created) {
+          setSubmitError("Registration could not be saved. Please try again.");
+        }
       }
     } catch (err) {
       setSubmitError(
@@ -122,7 +149,7 @@ export default function EventRegistrationScreen() {
     setCancelling(false);
   };
 
-  const showConfirmation = Boolean(existingRegistration);
+  const showConfirmation = Boolean(existingRegistration && existingRegistration.paymentStatus !== "Pending");
 
   if (showConfirmation) {
     return (
@@ -202,6 +229,12 @@ export default function EventRegistrationScreen() {
         {event && !eventDbId && isSupabaseConfigured() ? (
           <ThemedText style={styles.errorText}>
             This event is still loading. Pull to refresh community events and try again.
+          </ThemedText>
+        ) : null}
+
+        {event && !eventAcceptingRegistrations && !existingRegistration ? (
+          <ThemedText style={styles.errorText} testID="text-event-registration-closed">
+            This event is not accepting registrations.
           </ThemedText>
         ) : null}
 
@@ -288,18 +321,20 @@ export default function EventRegistrationScreen() {
         <Pressable
           style={[
             styles.submitButton,
-            (!isValid || submitting || registrationsLoading || !eventDbId) &&
+            (!isValid || submitting || registrationsLoading || !eventDbId || !eventAcceptingRegistrations) &&
               styles.submitButtonDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={!isValid || submitting || registrationsLoading || !eventDbId}
+          disabled={!isValid || submitting || registrationsLoading || !eventDbId || !eventAcceptingRegistrations}
           testID="button-submit-registration"
         >
           {submitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <ThemedText style={styles.submitButtonText}>
-              {event?.ctaText === "Join Event" ? "Confirm Registration" : "Register Interest"}
+              {event && !isEventRegistrationFree(event.pricing)
+                ? `Pay ${formatInr(Number(event.pricing[0]?.amount) || 0)} & Register`
+                : event?.ctaText === "Join Event" ? "Confirm Registration" : "Register Interest"}
             </ThemedText>
           )}
         </Pressable>

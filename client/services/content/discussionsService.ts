@@ -201,7 +201,7 @@ export async function insertReply(input: {
       author_id: input.authorId ?? null,
       author_name: input.authorName,
       body: input.body.trim(),
-      moderation_status: "Approved",
+      moderation_status: "Pending",
     })
     .select()
     .single();
@@ -228,16 +228,20 @@ export async function updateThreadModeration(
   if (patch.moderationStatus) row.moderation_status = patch.moderationStatus;
   if (patch.visibility) row.visibility = patch.visibility;
 
-  const { error } = await supabase
+  if (Object.keys(row).length === 0) return false;
+
+  const { data, error } = await supabase
     .from("discussion_threads")
     .update(row)
-    .eq("id", threadId);
+    .eq("id", threadId)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[discussionsService] update thread:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
 
 export async function updateReplyModeration(
@@ -247,16 +251,18 @@ export async function updateReplyModeration(
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("discussion_replies")
     .update({ moderation_status: moderationStatus })
-    .eq("id", replyId);
+    .eq("id", replyId)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[discussionsService] update reply:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
 
 export async function countDiscussionThreads(): Promise<number> {

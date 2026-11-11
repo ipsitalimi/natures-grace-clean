@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, Pressable, Image, type ViewStyle } from "react-native";
+import { View, StyleSheet, Pressable, Image, useWindowDimensions, type ViewStyle } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
@@ -44,6 +44,8 @@ export default function ScreenHeader({
   testID = "screen-header",
 }: ScreenHeaderProps) {
   const navigation = useNavigation();
+  const { width: windowWidth } = useWindowDimensions();
+  const headerSideWidth = windowWidth < 360 ? 56 : Layout.headerSideWidth;
   const { headerPaddingTop, headerPaddingTopCompact, gutter } = useLayoutInsets();
   const unreadCount = useUnreadNotificationCount();
   const compact = variant === "compact";
@@ -84,9 +86,9 @@ export default function ScreenHeader({
       return (
         <ThemedText
           style={styles.headerTitle}
-          numberOfLines={2}
+          numberOfLines={1}
           adjustsFontSizeToFit
-          minimumFontScale={0.75}
+          minimumFontScale={0.65}
           maxFontSizeMultiplier={1.25}
           testID="header-inline-title"
         >
@@ -131,9 +133,9 @@ export default function ScreenHeader({
       testID={testID}
     >
       <View style={styles.row}>
-        <View style={styles.side}>{renderLeft()}</View>
+        <View style={[styles.side, { width: headerSideWidth }]}>{renderLeft()}</View>
         <View style={styles.center}>{renderCenter()}</View>
-        <View style={[styles.side, styles.sideRight]}>{renderRight()}</View>
+        <View style={[styles.side, styles.sideRight, { width: headerSideWidth }]}>{renderRight()}</View>
       </View>
     </View>
   );

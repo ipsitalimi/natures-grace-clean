@@ -177,7 +177,7 @@ async function applyTargetModeration(
 
   if (targetType === "discussion_thread") {
     if (action === "remove_content" || action === "ban_reporter") {
-      await discussionsService.updateThreadModeration(targetId, {
+      return discussionsService.updateThreadModeration(targetId, {
         moderationStatus: "Removed",
         visibility: "Hidden",
       });
@@ -187,14 +187,14 @@ async function applyTargetModeration(
 
   if (targetType === "discussion_reply") {
     if (action === "remove_content" || action === "ban_reporter") {
-      await discussionsService.updateReplyModeration(targetId, "Removed");
+      return discussionsService.updateReplyModeration(targetId, "Removed");
     }
     return true;
   }
 
   if (targetType === "review") {
     if (action === "remove_content" || action === "ban_reporter") {
-      await reviewsService.updateReviewStatus(targetId, "Flagged");
+      return reviewsService.updateReviewStatus(targetId, "Flagged");
     }
     return true;
   }
@@ -252,7 +252,7 @@ export async function applyModerationAction(
   const status: ContentReportStatus =
     action === "dismiss" ? "dismissed" : "actioned";
 
-  const { error } = await supabase
+  const { data: updatedReport, error } = await supabase
     .from("content_reports")
     .update({
       status,
@@ -260,10 +260,12 @@ export async function applyModerationAction(
       resolved_by: moderatorId ?? null,
       resolved_at: new Date().toISOString(),
     })
-    .eq("id", reportId);
+    .eq("id", reportId)
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
-    console.error("[contentReportsService] apply action:", error.message);
+  if (error || !updatedReport) {
+    console.error("[contentReportsService] apply action:", error?.message ?? "Report was not updated");
     return false;
   }
 

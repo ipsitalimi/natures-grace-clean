@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import {
   confirmBookingPayment,
   createBookingOrder,
+  isValidBookingPaymentInput,
 } from "../services/razorpayCheckout";
 import { requireSupabaseAdmin } from "../lib/supabaseAdmin";
 import { requireBearerUser } from "../middleware/auth";
@@ -19,6 +20,10 @@ async function validateBookingAmount(
   amountInr: number,
   offeringId?: string
 ): Promise<{ ok: true; amountInr: number } | { ok: false; error: string }> {
+  if (!isValidBookingPaymentInput(durationMinutes, amountInr)) {
+    return { ok: false, error: "Invalid booking duration or amount" };
+  }
+
   const supabase = requireSupabaseAdmin();
 
   if (offeringId) {
@@ -73,20 +78,10 @@ async function validateBookingAmount(
 /** POST /api/bookings/checkout/create-order */
 async function handleCreateOrder(req: Request, res: Response) {
   try {
-    console.log("[bookingCheckout][server] create-order reached backend", {
-      method: req.method,
-      path: req.path,
-      authorizationHeaderPresent: Boolean(req.header("authorization")),
-    });
     const user = await requireBearerUser(req, res);
     if (!user) {
-      console.warn("[bookingCheckout][server] create-order stopped at auth middleware");
       return;
     }
-    console.log("[bookingCheckout][server] create-order auth passed", {
-      userId: user.id,
-      emailPresent: Boolean(user.email),
-    });
 
     const body = req.body as {
       practitionerId?: string;
@@ -169,11 +164,8 @@ async function handleCreateOrder(req: Request, res: Response) {
       keyId,
     });
   } catch (err) {
-    console.error("[bookingCheckout][server] create-order threw:", err);
-    if (err instanceof Error) {
-      console.error("[bookingCheckout][server] create-order stack:", err.stack);
-    }
-    const message = err instanceof Error ? err.message : "Create order failed";
+    console.error("[bookingCheckout] create-order failed");
+    const message = "Create order failed";
     return res.status(500).json({ error: message });
   }
 }
@@ -181,20 +173,10 @@ async function handleCreateOrder(req: Request, res: Response) {
 /** POST /api/bookings/checkout/confirm */
 async function handleConfirmPayment(req: Request, res: Response) {
   try {
-    console.log("[bookingCheckout][server] confirm reached backend", {
-      method: req.method,
-      path: req.path,
-      authorizationHeaderPresent: Boolean(req.header("authorization")),
-    });
     const user = await requireBearerUser(req, res);
     if (!user) {
-      console.warn("[bookingCheckout][server] confirm stopped at auth middleware");
       return;
     }
-    console.log("[bookingCheckout][server] confirm auth passed", {
-      userId: user.id,
-      emailPresent: Boolean(user.email),
-    });
 
     const { orderId, paymentId, signature, devMode, booking } = req.body as {
       orderId?: string;
@@ -253,11 +235,8 @@ async function handleConfirmPayment(req: Request, res: Response) {
       bookingNumber: created.bookingNumber,
     });
   } catch (err) {
-    console.error("[bookingCheckout][server] confirm threw:", err);
-    if (err instanceof Error) {
-      console.error("[bookingCheckout][server] confirm stack:", err.stack);
-    }
-    const message = err instanceof Error ? err.message : "Confirm failed";
+    console.error("[bookingCheckout] payment confirmation failed");
+    const message = "Payment confirmation failed";
     return res.status(500).json({ error: message });
   }
 }

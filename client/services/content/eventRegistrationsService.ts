@@ -140,17 +140,20 @@ export async function cancelRegistration(registrationId: string): Promise<boolea
   } = await supabase.auth.getUser();
   if (!user) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("event_registrations")
     .update({ status: "Cancelled" })
     .eq("id", registrationId)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .eq("status", "Registered")
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[eventRegistrationsService] cancel:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
 
 export function countRegistrationsByEvent(
@@ -158,7 +161,7 @@ export function countRegistrationsByEvent(
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const r of registrations) {
-    if (r.status !== "Registered") continue;
+    if (r.status !== "Registered" || r.paymentStatus === "Pending") continue;
     counts.set(r.eventId, (counts.get(r.eventId) ?? 0) + 1);
   }
   return counts;

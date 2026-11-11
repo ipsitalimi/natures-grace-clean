@@ -17,6 +17,7 @@ export interface SellerOrder {
   paymentStatus: PaymentStatus;
   deliveryStatus: DeliveryStatus;
   date: string;
+  dispatchVideoUrl?: string | null;
 }
 
 export function deliveryStatusForOrderStatus(status: OrderStatus): DeliveryStatus {

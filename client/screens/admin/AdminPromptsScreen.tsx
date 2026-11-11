@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, TextInput, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
@@ -10,26 +10,37 @@ interface AdminPromptsScreenProps {
 }
 
 export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsScreenProps) {
-  const { dailyPrompts, addPrompt, removePrompt, togglePromptActive } = useGratitude();
+  const { dailyPrompts, promptsError, refreshPrompts, addPrompt, removePrompt, togglePromptActive } = useGratitude();
   const [newPromptText, setNewPromptText] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>("all");
+  const [dateDropdownOpen, setDateDropdownOpen] = useState(false);
 
-  const handleAddPrompt = () => {
+  const handleAddPrompt = async () => {
     if (!newPromptText.trim()) return;
-    addPrompt(newPromptText.trim());
+    const created = await addPrompt(newPromptText.trim());
+    if (!created) {
+      Alert.alert("Could not add prompt", "Please check your connection and admin permissions, then try again.");
+      return;
+    }
     setNewPromptText("");
     setShowAddForm(false);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirmDeleteId === id) {
-      removePrompt(id);
-      setConfirmDeleteId(null);
-    } else {
+  const handleDelete = async (id: string) => {
+    if (confirmDeleteId !== id) {
       setConfirmDeleteId(id);
-      setTimeout(() => setConfirmDeleteId(null), 3000);
+      return;
     }
+    const deleted = await removePrompt(id);
+    setConfirmDeleteId(null);
+    if (!deleted) Alert.alert("Could not delete prompt", "Please check your connection and admin permissions, then try again.");
+  };
+
+  const handleTogglePrompt = async (id: string) => {
+    const updated = await togglePromptActive(id);
+    if (!updated) Alert.alert("Could not update prompt", "Please check your connection and admin permissions, then try again.");
   };
 
   const activeCount = dailyPrompts.filter((p) => p.active).length;
@@ -42,6 +53,8 @@ export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsSc
     groupedPrompts[key].push(p);
   });
   const sortedDates = Object.keys(groupedPrompts).sort().reverse();
+  const visibleDates = selectedDate === "all" ? sortedDates : sortedDates.filter((d) => d === selectedDate);
+  const dateLabel = selectedDate === "all" ? "All dates" : groupedPrompts[selectedDate]?.[0]?.date ?? selectedDate;
 
   return (
     <ScrollView
@@ -74,6 +87,31 @@ export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsSc
       <ThemedText style={styles.infoText}>
         Active prompts are shown to users in the Guided Reflection feature. Add new prompts daily to keep the experience fresh.
       </ThemedText>
+
+      {promptsError ? (
+        <Pressable onPress={() => void refreshPrompts()} testID="button-prompts-retry">
+          <ThemedText style={styles.errorText}>
+            Could not load saved prompts: {promptsError}. Tap to retry.
+          </ThemedText>
+        </Pressable>
+      ) : null}
+
+      <Pressable style={styles.dateDropdown} onPress={() => setDateDropdownOpen((open) => !open)} testID="dropdown-daily-activity-date">
+        <ThemedText style={styles.dateDropdownText}>Daily activity date: {dateLabel}</ThemedText>
+        <Feather name={dateDropdownOpen ? "chevron-up" : "chevron-down"} size={16} color={Colors.light.accent} />
+      </Pressable>
+      {dateDropdownOpen ? (
+        <View style={styles.dateDropdownOptions}>
+          <Pressable style={styles.dateOption} onPress={() => { setSelectedDate("all"); setDateDropdownOpen(false); }}>
+            <ThemedText style={styles.dateOptionText}>All dates</ThemedText>
+          </Pressable>
+          {visibleDates.map((dateISO) => (
+            <Pressable key={dateISO} style={styles.dateOption} onPress={() => { setSelectedDate(dateISO); setDateDropdownOpen(false); }}>
+              <ThemedText style={styles.dateOptionText}>{groupedPrompts[dateISO][0].date}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {showAddForm ? (
         <View style={styles.addForm}>
@@ -140,7 +178,7 @@ export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsSc
                 <View style={styles.promptActions}>
                   <Pressable
                     style={[styles.statusChip, prompt.active ? styles.statusActive : styles.statusPaused]}
-                    onPress={() => togglePromptActive(prompt.id)}
+                    onPress={() => void handleTogglePrompt(prompt.id)}
                     testID={`toggle-prompt-${prompt.id}`}
                   >
                     <Feather
@@ -154,7 +192,7 @@ export default function AdminPromptsScreen({ onBackToDashboard }: AdminPromptsSc
                   </Pressable>
                   <Pressable
                     style={[styles.deleteBtn, confirmDeleteId === prompt.id && styles.deleteBtnConfirm]}
-                    onPress={() => handleDelete(prompt.id)}
+                    onPress={() => void handleDelete(prompt.id)}
                     testID={`delete-prompt-${prompt.id}`}
                   >
                     <Feather name="trash-2" size={14} color={confirmDeleteId === prompt.id ? "#FFFFFF" : "#C47A7A"} />
@@ -220,6 +258,11 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     marginTop: 2,
   },
+  dateDropdown: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: Colors.light.cardBackground, padding: 12, borderRadius: 10, marginBottom: Spacing.md },
+  dateDropdownText: { color: Colors.light.text, fontSize: 13, fontWeight: "600" },
+  dateDropdownOptions: { backgroundColor: Colors.light.cardBackground, borderRadius: 10, marginBottom: Spacing.md, overflow: "hidden" },
+  dateOption: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Colors.light.divider },
+  dateOptionText: { color: Colors.light.text, fontSize: 13 },
   infoText: {
     fontSize: 13,
     lineHeight: 19,
@@ -227,6 +270,12 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     marginBottom: Spacing.lg,
     opacity: 0.7,
+  },
+  errorText: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: "#8B3A3A",
+    marginBottom: Spacing.md,
   },
   addButton: {
     flexDirection: "row",

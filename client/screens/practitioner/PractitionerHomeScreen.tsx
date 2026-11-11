@@ -347,7 +347,7 @@ export default function PractitionerHomeScreen() {
                 testID={`recent-session-${session.id}`}
               >
                 <View style={styles.sessionLeft}>
-                  <ThemedText style={styles.sessionName}>{session.userName}</ThemedText>
+                  <ThemedText style={styles.sessionName} numberOfLines={1}>{session.userName}</ThemedText>
                   <ThemedText style={styles.sessionService} numberOfLines={1}>
                     {session.service}
                   </ThemedText>
@@ -573,7 +573,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
     paddingBottom: 0,
   },
-  sessionLeft: { flex: 1, marginRight: LayoutSpacing.lg },
+  sessionLeft: { flex: 1, minWidth: 0, marginRight: LayoutSpacing.sm },
   sessionName: {
     fontSize: 15,
     fontWeight: "700",
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     marginTop: 4,
   },
-  sessionRight: { alignItems: "flex-end", gap: 6 },
+  sessionRight: { alignItems: "flex-end", gap: 6, flexShrink: 0 },
   sessionTime: {
     fontSize: 13,
     color: Colors.light.textMuted,

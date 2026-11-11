@@ -336,7 +336,6 @@ export type PractitionerProfileDetails = {
   bio: string;
   experience: string;
   certifications: string[];
-  pricePerSession: number;
   isActive: boolean;
   meetingLink: string;
   photoUrl: string;
@@ -423,7 +422,6 @@ export async function fetchPractitionerProfileDetailsResult(
       bio: (data.bio as string) ?? "",
       experience: (data.experience as string) ?? "",
       certifications: (data.certifications as string[]) ?? [],
-      pricePerSession: Number(data.price_per_session) || 0,
       isActive: Boolean(data.is_active),
       meetingLink: (data.meeting_link as string) ?? "",
       photoUrl: (data.photo_url as string) ?? "",
@@ -438,9 +436,7 @@ export async function updatePractitionerProfileDetails(
     bio: string;
     experience: string;
     certifications: string[];
-    pricePerSession: number;
     isActive: boolean;
-    meetingLink: string;
     photoUrl: string;
   }>
 ): Promise<{ error?: string; code?: PractitionerProvisionErrorCode }> {
@@ -463,9 +459,7 @@ export async function updatePractitionerProfileDetails(
   if (patch.bio !== undefined) dbPatch.bio = patch.bio;
   if (patch.experience !== undefined) dbPatch.experience = patch.experience;
   if (patch.certifications !== undefined) dbPatch.certifications = patch.certifications;
-  if (patch.pricePerSession !== undefined) dbPatch.price_per_session = patch.pricePerSession;
   if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
-  if (patch.meetingLink !== undefined) dbPatch.meeting_link = patch.meetingLink.trim() || null;
   if (patch.photoUrl !== undefined) dbPatch.photo_url = patch.photoUrl.trim() || null;
 
   const { error } = await supabase

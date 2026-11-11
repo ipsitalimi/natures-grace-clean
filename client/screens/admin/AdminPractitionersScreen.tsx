@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, Modal, TextInput, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
@@ -22,6 +22,8 @@ function PractitionerCard({
   onApprove,
   onReject,
   onToggleVerification,
+  onEditBio,
+  onEditPrice,
 }: {
   practitioner: Practitioner;
   state: PractitionerState;
@@ -29,6 +31,8 @@ function PractitionerCard({
   onApprove: () => void;
   onReject: () => void;
   onToggleVerification: () => void;
+  onEditBio: () => void;
+  onEditPrice: () => void;
 }) {
   const getApprovalBadgeColor = (status: ApprovalStatus) => {
     switch (status) {
@@ -63,7 +67,16 @@ function PractitionerCard({
           </View>
           <ThemedText style={styles.practitionerCategory}>{practitioner.category}</ThemedText>
           <ThemedText style={styles.practitionerExperience}>{practitioner.experience}</ThemedText>
+          <ThemedText style={styles.bioPreview} numberOfLines={3}>{practitioner.bio || "No public bio yet."}</ThemedText>
+          <Pressable style={styles.editBioButton} onPress={onEditBio} testID={`button-edit-bio-${practitioner.id}`}>
+            <Feather name="edit-2" size={13} color={Colors.light.accent} />
+            <ThemedText style={styles.editBioText}>Edit / publish bio</ThemedText>
+          </Pressable>
           <ThemedText style={styles.practitionerPrice}>{formatInr(practitioner.pricePerSession)}/-</ThemedText>
+          <Pressable style={styles.editBioButton} onPress={onEditPrice} testID={`button-edit-price-${practitioner.id}`}>
+            <Feather name="edit-2" size={13} color={Colors.light.accent} />
+            <ThemedText style={styles.editBioText}>Set session price</ThemedText>
+          </Pressable>
           
           <View style={styles.credentialSection}>
             <View style={styles.credentialHeader}>
@@ -132,8 +145,37 @@ export default function AdminPractitionersScreen({
   onAddPractitioner: () => void;
   onBackToDashboard: () => void;
 }) {
-  const { practitionerCategories, deletePractitioner, updatePractitionerMeta } = useDataContext();
+  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio, updatePractitionerPrice } = useDataContext();
   const { logActivity } = usePlatformConfig();
+  const [bioTarget, setBioTarget] = useState<Practitioner | null>(null);
+  const [bioDraft, setBioDraft] = useState("");
+  const [bioBusy, setBioBusy] = useState(false);
+  const [bioError, setBioError] = useState("");
+  const [priceTarget, setPriceTarget] = useState<Practitioner | null>(null);
+  const [priceDraft, setPriceDraft] = useState("");
+  const [priceBusy, setPriceBusy] = useState(false);
+  const [priceError, setPriceError] = useState("");
+  const savePrice = async () => {
+    if (!priceTarget) return;
+    const value = Number(priceDraft);
+    if (!Number.isInteger(value) || value < 0) { setPriceError("Enter a non-negative whole-number price in INR."); return; }
+    setPriceBusy(true); setPriceError("");
+    const ok = await updatePractitionerPrice(priceTarget.id, value);
+    setPriceBusy(false);
+    if (!ok) { setPriceError("Could not save price. Check admin permissions and ensure the pricing migration is applied."); return; }
+    logActivity(`Practitioner price updated for ${priceTarget.name}`, "user");
+    setPriceTarget(null);
+  };
+  const saveBio = async () => {
+    if (!bioTarget) return;
+    if (bioDraft.trim().length > 600) { setBioError("Keep the public bio under 600 characters (about 4–5 lines)."); return; }
+    setBioBusy(true); setBioError("");
+    const ok = await updatePractitionerBio(bioTarget.id, bioDraft);
+    setBioBusy(false);
+    if (!ok) { setBioError("Could not save bio. Check admin permissions and try again."); return; }
+    logActivity(`Practitioner bio updated for ${bioTarget.name}`, "user");
+    setBioTarget(null);
+  };
   const allPractitioners = practitionerCategories.flatMap((c) => c.practitioners);
 
   const getPractitionerState = (practitioner: (typeof allPractitioners)[0]): PractitionerState => ({
@@ -156,6 +198,7 @@ export default function AdminPractitionersScreen({
   };
 
   return (
+    <>
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.contentContainer}
@@ -220,10 +263,82 @@ export default function AdminPractitionersScreen({
             const current = getPractitionerState(practitioner);
             updatePractitionerState(practitioner.id, { isVerified: !current.isVerified });
           }}
+          onEditBio={() => {
+            setBioTarget(practitioner);
+            setBioDraft(practitioner.bio ?? "");
+            setBioError("");
+          }}
+          onEditPrice={() => {
+            setPriceTarget(practitioner);
+            setPriceDraft(String(practitioner.pricePerSession ?? 0));
+            setPriceError("");
+          }}
         />
       ))
       )}
     </ScrollView>
+
+      <Modal visible={bioTarget !== null} transparent animationType="fade" onRequestClose={() => setBioTarget(null)}>
+        <View style={styles.bioModalOverlay}>
+          <View style={styles.bioModalCard}>
+            <ThemedText style={styles.bioModalTitle}>Edit practitioner bio</ThemedText>
+            <ThemedText style={styles.bioModalHint}>
+              Admin-managed public bio. Keep it concise (about 4–5 lines; max 600 characters).
+            </ThemedText>
+            <TextInput
+              style={styles.bioInput}
+              value={bioDraft}
+              onChangeText={setBioDraft}
+              multiline
+              maxLength={600}
+              textAlignVertical="top"
+              placeholder="Write the practitioner's public bio…"
+              placeholderTextColor={Colors.light.textMuted}
+              testID="input-admin-practitioner-bio"
+            />
+            <ThemedText style={styles.bioCount}>{bioDraft.length}/600</ThemedText>
+            {bioError ? <ThemedText style={styles.bioError}>{bioError}</ThemedText> : null}
+            <View style={styles.bioActions}>
+              <Pressable onPress={() => setBioTarget(null)} disabled={bioBusy}>
+                <ThemedText style={styles.bioCancel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable style={styles.bioSave} onPress={() => void saveBio()} disabled={bioBusy}>
+                {bioBusy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <ThemedText style={styles.bioSaveText}>Save bio</ThemedText>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={priceTarget !== null} transparent animationType="fade" onRequestClose={() => setPriceTarget(null)}>
+        <View style={styles.bioModalOverlay}>
+          <View style={styles.bioModalCard}>
+            <ThemedText style={styles.bioModalTitle}>Set practitioner session price</ThemedText>
+            <ThemedText style={styles.bioModalHint}>
+              Pricing is managed by Admin and remains independent of service booking prices.
+            </ThemedText>
+            <TextInput
+              style={styles.bioInput}
+              value={priceDraft}
+              onChangeText={setPriceDraft}
+              keyboardType="numeric"
+              placeholder="Session price in INR"
+              placeholderTextColor={Colors.light.textMuted}
+              testID="input-admin-practitioner-price"
+            />
+            {priceError ? <ThemedText style={styles.bioError}>{priceError}</ThemedText> : null}
+            <View style={styles.bioActions}>
+              <Pressable onPress={() => setPriceTarget(null)} disabled={priceBusy}>
+                <ThemedText style={styles.bioCancel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable style={styles.bioSave} onPress={() => void savePrice()} disabled={priceBusy}>
+                {priceBusy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <ThemedText style={styles.bioSaveText}>Save price</ThemedText>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -446,6 +561,20 @@ const styles = StyleSheet.create({
   deleteButton: {
     padding: Spacing.xs,
   },
+  bioPreview: { fontSize: 12, color: Colors.light.textSecondary, lineHeight: 17, marginVertical: Spacing.xs },
+  editBioButton: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", paddingVertical: 5, marginBottom: Spacing.sm },
+  editBioText: { color: Colors.light.accent, fontSize: 12, fontFamily: "Nunito_700Bold" },
+  bioModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", padding: Spacing.lg },
+  bioModalCard: { backgroundColor: Colors.light.cardBackground, borderRadius: BorderRadius.md, padding: Spacing.lg },
+  bioModalTitle: { fontSize: 18, fontFamily: "Nunito_700Bold", marginBottom: 6 },
+  bioModalHint: { fontSize: 13, color: Colors.light.textSecondary, lineHeight: 18, marginBottom: Spacing.md },
+  bioInput: { borderWidth: 1, borderColor: Colors.light.divider, borderRadius: BorderRadius.sm, minHeight: 140, padding: Spacing.md, color: Colors.light.text, fontSize: 14 },
+  bioCount: { fontSize: 11, color: Colors.light.textMuted, textAlign: "right", marginTop: 4 },
+  bioError: { color: "#8B3A3A", fontSize: 12, marginTop: Spacing.sm },
+  bioActions: { flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: Spacing.md, marginTop: Spacing.lg },
+  bioCancel: { color: Colors.light.textSecondary, fontSize: 14 },
+  bioSave: { backgroundColor: Colors.light.accent, borderRadius: BorderRadius.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, minWidth: 110, alignItems: "center" },
+  bioSaveText: { color: "#FFFFFF", fontSize: 13, fontFamily: "Nunito_700Bold" },
   emptyCard: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,

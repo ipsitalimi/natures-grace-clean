@@ -1,6 +1,6 @@
 export type EventPricingLine = { label: string; amount: string };
 
-/** Events have no in-app payment — treat empty/zero pricing as free registration. */
+/** Events with no configured amount remain free RSVP events. */
 export function isEventRegistrationFree(pricing: EventPricingLine[]): boolean {
   if (!pricing.length) return true;
   return pricing.every((line) => {
@@ -9,9 +9,14 @@ export function isEventRegistrationFree(pricing: EventPricingLine[]): boolean {
   });
 }
 
+/** Explain whether the customer will pay in-app or simply RSVP. */
 export function eventRegistrationNote(pricing: EventPricingLine[]): string {
   if (isEventRegistrationFree(pricing)) {
-    return "Free registration — no payment is collected in the app.";
+    return "Free registration — reserve your place in the app.";
   }
-  return "Registration is free in the app. Any fees shown are for reference — payment, if required, is arranged separately.";
+  const amount = Number(String(pricing[0]?.amount ?? "").replace(/[^\d.]/g, ""));
+  const formatted = Number.isFinite(amount)
+    ? `₹${amount.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`
+    : "the listed fee";
+  return `Registration fee: ${formatted}. Pay securely through Razorpay to confirm your place.`;
 }

@@ -67,12 +67,14 @@ function EventCard({
   attendeeCount,
   attendees,
   onEdit,
+  onToggleVisibility,
   onDelete,
 }: {
   event: CommunityEvent;
   attendeeCount: number | null;
   attendees: EventRegistration[];
   onEdit: () => void;
+  onToggleVisibility: () => void;
   onDelete: () => void;
 }) {
   return (
@@ -91,6 +93,9 @@ function EventCard({
         <ThemedText style={styles.cardPrice}>{event.price}</ThemedText>
         <Pressable style={styles.deleteIconBtn} onPress={onEdit} testID={`button-edit-event-${event.id}`}>
           <Feather name="edit-2" size={14} color={Colors.light.accent} />
+        </Pressable>
+        <Pressable style={styles.deleteIconBtn} onPress={onToggleVisibility} testID={`button-toggle-event-visibility-${event.id}`}>
+          <Feather name={event.isVisible === false ? "eye-off" : "eye"} size={14} color={Colors.light.accent} />
         </Pressable>
         <Pressable style={styles.deleteIconBtn} onPress={onDelete} testID={`button-delete-event-${event.id}`}>
           <Feather name="trash-2" size={14} color="#8B3A3A" />
@@ -244,28 +249,41 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     resetForm();
   };
 
-  const handleSaveEvent = () => {
-    if (!title.trim()) return;
+  const handleSaveEvent = async () => {
+    if (!title.trim() || !date.trim() || !time.trim()) {
+      Alert.alert("Missing event details", "Enter the event title, date, and time before saving.");
+      return;
+    }
+    if (price.trim()) {
+      const normalizedPrice = price.trim().replace(/,/g, "");
+      const eventPrice = Number(normalizedPrice);
+      if (!/^\d+(\.\d{1,2})?$/.test(normalizedPrice) || !Number.isFinite(eventPrice) || eventPrice < 1) {
+        Alert.alert("Invalid event price", "Enter a valid event price of at least ₹1 with up to two decimal places, or leave it empty for a free event.");
+        return;
+      }
+    }
     const mapped = {
       title: title.trim(),
       description: description.trim() || `${title.trim()} - a community wellness event.`,
-      date: date.trim() || "TBD",
-      time: time.trim() || "TBD",
+      date: date.trim(),
+      time: time.trim(),
       mode,
-      pricing: price.trim() ? [{ label: "Per Session", amount: price.trim() }] : [],
+      pricing: price.trim() ? [{ label: "Entry Fee", amount: price.trim() }] : [],
       price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
     };
 
-    if (editingEventId) {
-      void updateEvent(editingEventId, mapped);
-    } else {
-      addEvent({
-        ...mapped,
-        whatToExpect: ["A nurturing and supportive environment", "Expert guidance and facilitation"],
-        ctaText: "Join Event",
-        bottomNote: "",
-        status: "Active",
-      });
+    const savedSuccessfully = editingEventId
+      ? await updateEvent(editingEventId, mapped)
+      : await addEvent({
+          ...mapped,
+          whatToExpect: ["A nurturing and supportive environment", "Expert guidance and facilitation"],
+          ctaText: "Join Event",
+          bottomNote: "",
+          status: "Active",
+        });
+    if (!savedSuccessfully) {
+      Alert.alert("Could not save event", "Check your connection and admin permissions, then try again.");
+      return;
     }
     setSaved(true);
     setTimeout(() => {
@@ -304,9 +322,32 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     }
   };
 
-  const handleHideEvent = (eventId: string) => {
-    setEventVisibility(eventId, false);
-    logActivity(`Event ${eventId} hidden from community`, "event");
+  const handleHideEvent = async (eventId: string) => {
+    const event = events.find((item) => item.id === eventId);
+    if (!event) return;
+    const nextVisible = event.isVisible === false;
+    const updated = await setEventVisibility(eventId, nextVisible);
+    if (!updated) {
+      Alert.alert("Could not update event", "Check your connection and admin permissions, then try again.");
+      return;
+    }
+    logActivity(`Event ${eventId} ${nextVisible ? "made visible" : "hidden"}`, "event");
+  };
+
+  const handleDeleteEvent = (eventId: string) => {
+    Alert.alert("Archive event", "Hide this event from customers and mark it ended? The event and its registration history will be retained.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Archive", style: "destructive", onPress: () => {
+        void (async () => {
+          const deleted = await deleteEvent(eventId);
+          if (!deleted) {
+            Alert.alert("Could not delete event", "Check your connection and admin permissions, then try again.");
+            return;
+          }
+          logActivity(`Event ${eventId} deleted`, "event");
+        })();
+      }},
+    ]);
   };
 
   return (
@@ -381,15 +422,16 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
           attendees={
             event.dbId
               ? registrations.filter(
-                  (r) => r.eventId === event.dbId && r.status === "Registered"
+                  (r) =>
+                    r.eventId === event.dbId &&
+                    r.status === "Registered" &&
+                    r.paymentStatus !== "Pending"
                 )
               : []
           }
           onEdit={() => openEditForm(event)}
-          onDelete={() => {
-            handleHideEvent(event.id);
-            deleteEvent(event.id);
-          }}
+          onToggleVisibility={() => void handleHideEvent(event.id)}
+          onDelete={() => handleDeleteEvent(event.id)}
         />
       ))}
 
@@ -610,7 +652,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
                 </Pressable>
               </View>
 
-              <ThemedText style={styles.inputLabel}>Price (leave empty for Free)</ThemedText>
+              <ThemedText style={styles.inputLabel}>Ticket price in INR (leave empty for Free)</ThemedText>
               <TextInput
                 style={styles.input}
                 value={price}

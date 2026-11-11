@@ -15,7 +15,6 @@ import * as ImagePicker from "expo-image-picker";
 import { ThemedText } from "@/components/ThemedText";
 import { BackHeader, BelowHeaderTitle, KeyboardFormLayout } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { formatInr } from "@/lib/formatCurrency";
 import { uploadPractitionerPhoto, type LocalFile } from "@/lib/storageUpload";
 import { useAuth } from "@/context/AuthContext";
 import { useDataContext } from "@/context/DataContext";
@@ -24,16 +23,6 @@ import {
   fetchPractitionerProfileDetailsResult,
   updatePractitionerProfileDetails,
 } from "@/services/content/practitionerId";
-
-function parsePriceFromLabel(label: string): number {
-  const match = label.match(/(\d[\d,]*)/);
-  return match ? Number(match[1].replace(/,/g, "")) : 0;
-}
-
-function formatPriceLabel(amount: number): string {
-  if (!amount) return `${formatInr(0)} per session`;
-  return `${formatInr(amount)} per session`;
-}
 
 export default function PractitionerProfileScreen() {
   const navigation = useNavigation();
@@ -53,9 +42,7 @@ export default function PractitionerProfileScreen() {
   const [bio, setBio] = useState("");
   const [experience, setExperience] = useState("");
   const [certifications, setCertifications] = useState("");
-  const [pricing, setPricing] = useState("");
   const [available, setAvailable] = useState(true);
-  const [meetingLink, setMeetingLink] = useState("");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -76,9 +63,7 @@ export default function PractitionerProfileScreen() {
       setBio(details.bio);
       setExperience(details.experience);
       setCertifications(details.certifications.join(", "));
-      setPricing(formatPriceLabel(details.pricePerSession));
       setAvailable(details.isActive);
-      setMeetingLink(details.meetingLink);
       setPhotoUrl(details.photoUrl);
       setPhotoPreviewUri(details.photoUrl || null);
       setLoading(false);
@@ -148,9 +133,7 @@ export default function PractitionerProfileScreen() {
         .split(",")
         .map((c) => c.trim())
         .filter(Boolean),
-      pricePerSession: parsePriceFromLabel(pricing),
       isActive: available,
-      meetingLink: meetingLink.trim(),
     });
     setSaving(false);
     if (result.error) {
@@ -218,6 +201,7 @@ export default function PractitionerProfileScreen() {
           onChangeText={setBio}
           multiline
           numberOfLines={4}
+          maxLength={600}
           placeholderTextColor={Colors.light.textMuted}
           testID="input-bio"
         />
@@ -242,15 +226,6 @@ export default function PractitionerProfileScreen() {
           testID="input-certifications"
         />
 
-        <ThemedText style={styles.fieldLabel}>Pricing</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={pricing}
-          onChangeText={setPricing}
-          placeholderTextColor={Colors.light.textMuted}
-          testID="input-pricing"
-        />
-
         <View style={styles.availabilityRow}>
           <ThemedText style={styles.fieldLabel}>Availability</ThemedText>
           <Pressable
@@ -263,22 +238,6 @@ export default function PractitionerProfileScreen() {
         </View>
         <ThemedText style={styles.availabilityHint}>
           {available ? "You are currently accepting new clients" : "You are not accepting new clients"}
-        </ThemedText>
-
-        <ThemedText style={styles.fieldLabel}>Session meeting link</ThemedText>
-        <TextInput
-          style={styles.input}
-          value={meetingLink}
-          onChangeText={setMeetingLink}
-          placeholder="https://zoom.us/j/... or Google Meet link"
-          placeholderTextColor={Colors.light.textMuted}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          testID="input-meeting-link"
-        />
-        <ThemedText style={styles.availabilityHint}>
-          Clients can join upcoming sessions from this link. Update it before each session if needed.
         </ThemedText>
 
         <View style={styles.sessionSetupSection}>

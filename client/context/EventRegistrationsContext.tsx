@@ -132,7 +132,10 @@ export function EventRegistrationsProvider({ children }: { children: React.React
   );
 
   const isRegisteredForEvent = useCallback(
-    (eventDbId: string) => Boolean(getMyRegistrationForEvent(eventDbId)),
+    (eventDbId: string) => {
+      const registration = getMyRegistrationForEvent(eventDbId);
+      return Boolean(registration && registration.paymentStatus !== "Pending");
+    },
     [getMyRegistrationForEvent]
   );
 

@@ -68,6 +68,10 @@ export interface PlatformSettings {
   acceptWallet: boolean;
   payoutCycle: "Weekly" | "Bi-Weekly" | "Monthly";
   commissionRate: number;
+  platformFeeEnabled: boolean;
+  platformFeePercent: number;
+  platformGstEnabled: boolean;
+  platformGstPercent: number;
   minimumPrice: number;
   autoApproveProducts: boolean;
   featureFlags: {

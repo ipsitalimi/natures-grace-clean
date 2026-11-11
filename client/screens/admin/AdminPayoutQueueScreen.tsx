@@ -100,6 +100,22 @@ export default function AdminPayoutQueueScreen({
     }, [load])
   );
 
+  const applyStatus = async (
+    type: "seller" | "practitioner",
+    id: string,
+    status: string
+  ) => {
+    if (!session?.access_token) return;
+    setBusyId(id);
+    const result = await updatePayoutStatus(session.access_token, type, id, status);
+    setBusyId(null);
+    if (!result.ok) {
+      Alert.alert("Error", result.error ?? "Could not update payout");
+      return;
+    }
+    await load();
+  };
+
   const handleStatus = async (
     type: "seller" | "practitioner",
     id: string,
@@ -110,14 +126,18 @@ export default function AdminPayoutQueueScreen({
       setRejectModal({ type, id });
       return;
     }
-    setBusyId(id);
-    const result = await updatePayoutStatus(session.access_token, type, id, status);
-    setBusyId(null);
-    if (!result.ok) {
-      Alert.alert("Error", result.error ?? "Could not update payout");
+    if (status === "Completed") {
+      Alert.alert(
+        "Confirm payout completion",
+        "Confirm that the withdrawal has been manually transferred to the recipient. This marks the payout as completed.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Mark completed", onPress: () => void applyStatus(type, id, status) },
+        ]
+      );
       return;
     }
-    await load();
+    await applyStatus(type, id, status);
   };
 
   const confirmReject = async () => {

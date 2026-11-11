@@ -9,7 +9,6 @@ import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollV
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
-import { openMeetingLink } from "@/lib/meetingLink";
 
 export default function PractitionerSessionDetailScreen() {
   const navigation = useNavigation();
@@ -27,10 +26,6 @@ export default function PractitionerSessionDetailScreen() {
   const [actionError, setActionError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const handleJoinSession = () => {
-    if (!session) return;
-    openMeetingLink(session.meetingLink);
-  };
 
   const runAction = async (action: "complete" | "cancel") => {
     if (!sessionId || submitting) return;
@@ -160,14 +155,12 @@ export default function PractitionerSessionDetailScreen() {
 
         {session.status === "Upcoming" ? (
           <View style={styles.actionButtons}>
-            <Pressable
-              style={styles.joinButton}
-              onPress={handleJoinSession}
-              testID="button-join-session"
-            >
-              <Feather name="video" size={16} color="#FFFFFF" />
-              <ThemedText style={styles.joinButtonText}>Join Session</ThemedText>
-            </Pressable>
+            {session.paymentStatus === "Paid" ? (
+              <Pressable style={styles.introChatButton} onPress={() => (navigation as any).navigate("BookingIntroChat", { bookingId: session.id })} testID="button-booking-intro-chat">
+                <Feather name="message-circle" size={16} color="#FFFFFF" />
+                <ThemedText style={styles.joinButtonText}>7-minute Intro Chat</ThemedText>
+              </Pressable>
+            ) : null}
             <View style={styles.secondaryButtonsRow}>
               <Pressable
                 style={[styles.completeButton, submitting && styles.buttonDisabled]}
@@ -312,21 +305,21 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     fontStyle: "italic",
   },
-  actionButtons: { gap: Spacing.md },
-  joinButton: {
+  introChatButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.light.button,
+    backgroundColor: Colors.light.accent,
     borderRadius: BorderRadius.sm,
-    paddingVertical: Spacing.lg,
-    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    gap: Spacing.xs,
   },
   joinButtonText: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "700",
     color: "#FFFFFF",
   },
+  actionButtons: { gap: Spacing.md },
   secondaryButtonsRow: {
     flexDirection: "row",
     gap: Spacing.md,

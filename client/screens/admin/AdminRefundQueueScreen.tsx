@@ -129,7 +129,13 @@ export default function AdminRefundQueueScreen({
       <Modal visible={notesModal != null} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <ThemedText style={styles.modalTitle}>Admin notes (optional)</ThemedText>
+            <ThemedText style={styles.modalTitle}>
+              {notesModal?.status === "approved" ? "Confirm refund approval" : notesModal?.status === "rejected" ? "Confirm refund rejection" : "Move refund to review"}
+            </ThemedText>
+            {notesModal?.status === "approved" ? (
+              <ThemedText style={styles.modalDescription}>Approval initiates a refund through the payment provider and updates the related order or booking.</ThemedText>
+            ) : null}
+            <ThemedText style={styles.modalDescription}>Admin notes (optional)</ThemedText>
             <TextInput
               style={styles.modalInput}
               placeholder="Notes visible to user when applicable"
@@ -194,6 +200,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     padding: Spacing.lg,
   },
+  modalDescription: { color: Colors.light.textSecondary, fontSize: 12, lineHeight: 18, marginBottom: Spacing.sm },
   modalTitle: { fontSize: 17, fontWeight: "600", marginBottom: Spacing.md },
   modalInput: {
     borderWidth: 1,

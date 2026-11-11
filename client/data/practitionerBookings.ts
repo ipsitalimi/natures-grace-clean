@@ -21,7 +21,6 @@ export interface PractitionerSession {
   notes?: string;
   amount?: number;
   paymentStatus?: "Pending" | "Paid" | "Refunded";
-  meetingLink?: string;
 }
 
 export type BookingStatus = "Pending" | "Confirmed" | "Completed" | "Cancelled";
@@ -44,7 +43,6 @@ export type DbBookingRow = {
   payment_status: BookingPaymentStatus;
   razorpay_payment_id: string | null;
   notes: string | null;
-  meeting_link: string | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -145,6 +143,5 @@ export type UserSessionHistory = {
   duration: string;
   price: string;
   time: string;
-  meetingLink?: string;
   paymentStatus?: BookingPaymentStatus;
 };

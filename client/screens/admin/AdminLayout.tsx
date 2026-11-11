@@ -38,6 +38,7 @@ export type AdminScreenName =
   | "Payouts"
   | "Refunds"
   | "AuditLog"
+  | "Scheduling"
   | "Settings";
 
 interface DrawerItem {
@@ -65,6 +66,7 @@ const drawerItems: DrawerItem[] = [
   { name: "Payouts", icon: "credit-card", label: "Withdrawals" },
   { name: "Refunds", icon: "rotate-ccw", label: "Refunds" },
   { name: "AuditLog", icon: "clipboard", label: "Audit Log" },
+  { name: "Scheduling", icon: "calendar", label: "Session Scheduling" },
   { name: "Legal", icon: "file-text", label: "Legal" },
   { name: "Settings", icon: "settings", label: "Settings" },
 ];

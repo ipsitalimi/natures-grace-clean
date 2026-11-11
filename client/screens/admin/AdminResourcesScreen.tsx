@@ -1,11 +1,13 @@
-import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, ScrollView, StyleSheet, Pressable, TextInput, Alert } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { ResourceItem } from "@/data/mockResources";
+import { isSupabaseConfigured } from "@/lib/supabaseConfig";
+import * as resourceEnrollmentsService from "@/services/content/resourceEnrollmentsService";
 
 type ResourceType = "Article" | "Practice" | "Audio Session" | "Course";
 
@@ -97,12 +99,14 @@ function ResourceRow({
 
 function CourseResourceRow({
   resource,
+  registrations,
   isPublished,
   onTogglePublish,
   onDelete,
   onSave,
 }: {
   resource: ResourceItem;
+  registrations: resourceEnrollmentsService.AdminCourseInterest[];
   isPublished: boolean;
   onTogglePublish: () => void;
   onDelete: () => void;
@@ -111,15 +115,17 @@ function CourseResourceRow({
     body: string;
     description: string;
     instructorName: string;
+    schedule: string;
     locations: string;
     certificateNote: string;
     price: string;
-  }) => void;
+  }) => Promise<boolean>;
 }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(resource.title);
   const [body, setBody] = useState(resource.body ?? "");
   const [instructorName, setInstructorName] = useState(resource.instructorName ?? "");
+  const [schedule, setSchedule] = useState(resource.schedule ?? "");
   const [locations, setLocations] = useState(resource.locations ?? "");
   const [certificateNote, setCertificateNote] = useState(resource.certificateNote ?? "");
   const [price, setPrice] = useState(resource.price ?? "");
@@ -128,6 +134,7 @@ function CourseResourceRow({
     setTitle(resource.title);
     setBody(resource.body ?? "");
     setInstructorName(resource.instructorName ?? "");
+    setSchedule(resource.schedule ?? "");
     setLocations(resource.locations ?? "");
     setCertificateNote(resource.certificateNote ?? "");
     setPrice(resource.price ?? "");
@@ -149,6 +156,20 @@ function CourseResourceRow({
           <View style={[styles.typeBadge, { backgroundColor: getTypeBadgeColor("Courses") }]}>
             <ThemedText style={styles.typeBadgeText}>Course</ThemedText>
           </View>
+        </View>
+        <View style={styles.courseInterestBlock} testID={`course-interest-list-${resource.id}`}>
+          <ThemedText style={styles.courseInterestHeading}>
+            Active interest requests: {registrations.length}
+          </ThemedText>
+          {registrations.map((registration) => (
+            <View key={registration.id} style={styles.courseInterestRow}>
+              <ThemedText style={styles.courseInterestName}>{registration.attendeeName}</ThemedText>
+              <ThemedText style={styles.courseInterestContact}>{registration.attendeeEmail || registration.userId}</ThemedText>
+              {registration.attendeePhone ? (
+                <ThemedText style={styles.courseInterestContact}>{registration.attendeePhone}</ThemedText>
+              ) : null}
+            </View>
+          ))}
         </View>
         {editing ? (
           <View style={styles.courseEditFields}>
@@ -175,6 +196,14 @@ function CourseResourceRow({
               value={instructorName}
               onChangeText={setInstructorName}
               placeholder="Instructor name"
+              placeholderTextColor={Colors.light.textSecondary}
+            />
+            <ThemedText style={styles.inputLabel}>Schedule / Dates (optional)</ThemedText>
+            <TextInput
+              style={styles.input}
+              value={schedule}
+              onChangeText={setSchedule}
+              placeholder="e.g. 6–8 Dec 2026 · 10 AM–1 PM IST"
               placeholderTextColor={Colors.light.textSecondary}
             />
             <ThemedText style={styles.inputLabel}>Locations</ThemedText>
@@ -205,17 +234,24 @@ function CourseResourceRow({
             <Pressable
               style={styles.saveButton}
               onPress={() => {
-                const trimmedBody = body.trim();
-                onSave({
-                  title: title.trim(),
-                  body: trimmedBody,
-                  description: trimmedBody.substring(0, 100) || resource.description,
-                  instructorName,
-                  locations,
-                  certificateNote,
-                  price,
-                });
-                setEditing(false);
+                void (async () => {
+                  const trimmedBody = body.trim();
+                  const saved = await onSave({
+                    title: title.trim(),
+                    body: trimmedBody,
+                    description: trimmedBody.substring(0, 100) || resource.description,
+                    instructorName,
+                    schedule,
+                    locations,
+                    certificateNote,
+                    price,
+                  });
+                  if (!saved) {
+                    Alert.alert("Could not save course", "Check your connection and admin permissions, then try again.");
+                    return;
+                  }
+                  setEditing(false);
+                })();
               }}
               testID={`button-save-course-${resource.id}`}
             >
@@ -245,16 +281,70 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
   const [formDuration, setFormDuration] = useState("");
   const [formContent, setFormContent] = useState("");
   const [formInstructor, setFormInstructor] = useState("");
+  const [formSchedule, setFormSchedule] = useState("");
   const [formLocations, setFormLocations] = useState("");
   const [formCertificate, setFormCertificate] = useState("");
   const [formPrice, setFormPrice] = useState("");
   const [saved, setSaved] = useState(false);
+  const [courseInterests, setCourseInterests] = useState<resourceEnrollmentsService.AdminCourseInterest[]>([]);
+  const [courseInterestsLoading, setCourseInterestsLoading] = useState(() => isSupabaseConfigured());
+  const [courseInterestsError, setCourseInterestsError] = useState<string | null>(null);
   const isPublished = (resource: (typeof resources)[0]) => resource.published !== false;
 
-  const togglePublish = (id: string) => {
+  useEffect(() => {
+    let cancelled = false;
+    const loadCourseInterests = async () => {
+      if (!isSupabaseConfigured()) {
+        setCourseInterestsLoading(false);
+        setCourseInterestsError("Connect Supabase to view course interest requests.");
+        return;
+      }
+      try {
+        const rows = await resourceEnrollmentsService.fetchActiveCourseInterestsForAdmin();
+        if (!cancelled) {
+          setCourseInterests(rows);
+          setCourseInterestsError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCourseInterests([]);
+          setCourseInterestsError(error instanceof Error ? error.message : "Could not load course interest requests.");
+        }
+      } finally {
+        if (!cancelled) setCourseInterestsLoading(false);
+      }
+    };
+    void loadCourseInterests();
+    return () => { cancelled = true; };
+  }, []);
+
+  const togglePublish = async (id: string) => {
     const resource = resources.find((r) => r.id === id);
     if (!resource) return;
-    setResourcePublished(id, !isPublished(resource));
+    const updated = await setResourcePublished(id, !isPublished(resource));
+    if (!updated) Alert.alert("Could not update publication", "Check your connection and admin permissions, then try again.");
+  };
+
+  const handleDeleteResource = (id: string, title: string, isCourse = false) => {
+    Alert.alert(
+      isCourse ? "Archive course" : "Delete resource",
+      isCourse
+        ? `Unpublish "${title}" from customer-facing courses? Existing interest records will be retained.`
+        : `Delete "${title}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: isCourse ? "Unpublish" : "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              const ok = isCourse ? await setResourcePublished(id, false) : await deleteResource(id);
+              if (!ok) Alert.alert(isCourse ? "Could not unpublish course" : "Could not delete resource", "Check your connection and admin permissions, then try again.");
+            })();
+          },
+        },
+      ]
+    );
   };
 
   const articles = resources.filter((r) => r.section === "Articles");
@@ -271,15 +361,16 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
     setFormDuration("");
     setFormContent("");
     setFormInstructor("");
+    setFormSchedule("");
     setFormLocations("");
     setFormCertificate("");
     setFormPrice("");
     setSaved(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formTitle.trim() || !selectedType) return;
-    addResource({
+    const created = await addResource({
       title: formTitle.trim(),
       description: formContent.trim().substring(0, 100) || `${formTitle.trim()} - a wellness resource.`,
       section: sectionFromType(selectedType),
@@ -288,9 +379,14 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       body: formContent.trim() || `${formTitle.trim()} content will be available soon.`,
       price: selectedType === "Course" ? formPrice.trim() || undefined : undefined,
       instructorName: selectedType === "Course" ? formInstructor.trim() || undefined : undefined,
+      schedule: selectedType === "Course" ? formSchedule.trim() || undefined : undefined,
       locations: selectedType === "Course" ? formLocations.trim() || undefined : undefined,
       certificateNote: selectedType === "Course" ? formCertificate.trim() || undefined : undefined,
     });
+    if (!created) {
+      Alert.alert("Could not save resource", "Check your connection and admin permissions, then try again.");
+      return;
+    }
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -299,6 +395,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       setFormDuration("");
       setFormContent("");
       setFormInstructor("");
+      setFormSchedule("");
       setFormLocations("");
       setFormCertificate("");
       setFormPrice("");
@@ -433,6 +530,15 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
                   placeholderTextColor={Colors.light.textSecondary}
                   testID="input-course-instructor"
                 />
+                <ThemedText style={styles.inputLabel}>Schedule / Dates (optional)</ThemedText>
+                <TextInput
+                  style={styles.input}
+                  value={formSchedule}
+                  onChangeText={setFormSchedule}
+                  placeholder="e.g. 6–8 Dec 2026 · 10 AM–1 PM IST"
+                  placeholderTextColor={Colors.light.textSecondary}
+                  testID="input-course-schedule"
+                />
                 <ThemedText style={styles.inputLabel}>Locations</ThemedText>
                 <TextInput
                   style={styles.input}
@@ -493,19 +599,26 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       {courses.length === 0 ? (
         <ThemedText style={styles.emptyText}>No courses yet. Add a course above.</ThemedText>
       ) : null}
+      {courseInterestsLoading ? (
+        <ThemedText style={styles.emptyText}>Loading course interest requests…</ThemedText>
+      ) : courseInterestsError ? (
+        <ThemedText style={styles.emptyText}>{courseInterestsError}</ThemedText>
+      ) : null}
       {courses.map((resource) => (
         <CourseResourceRow
           key={resource.id}
           resource={resource}
-          onDelete={() => deleteResource(resource.id)}
+          registrations={courseInterests.filter((registration) => registration.resourceId === resource.id)}
+          onDelete={() => handleDeleteResource(resource.id, resource.title, true)}
           isPublished={isPublished(resource)}
           onTogglePublish={() => togglePublish(resource.id)}
           onSave={(patch) =>
-            void updateResource(resource.id, {
+            updateResource(resource.id, {
               title: patch.title,
               body: patch.body,
               description: patch.description,
               instructorName: patch.instructorName,
+              schedule: patch.schedule,
               locations: patch.locations,
               certificateNote: patch.certificateNote,
               price: patch.price,
@@ -519,7 +632,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
         <ResourceRow
           key={resource.id}
           resource={resource}
-          onDelete={() => deleteResource(resource.id)}
+          onDelete={() => handleDeleteResource(resource.id, resource.title)}
           isPublished={isPublished(resource)}
           onTogglePublish={() => togglePublish(resource.id)}
         />
@@ -775,6 +888,11 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: "#013220",
   },
+  courseInterestBlock: { marginTop: Spacing.sm, padding: Spacing.sm, backgroundColor: Colors.light.backgroundRoot, borderRadius: BorderRadius.sm, gap: 4 },
+  courseInterestHeading: { fontSize: 12, fontWeight: "700", color: Colors.light.accent },
+  courseInterestRow: { paddingTop: 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: Colors.light.divider },
+  courseInterestName: { fontSize: 12, fontWeight: "600", color: Colors.light.text },
+  courseInterestContact: { fontSize: 11, color: Colors.light.textSecondary },
   courseEditFields: {
     marginTop: Spacing.md,
     gap: Spacing.xs,

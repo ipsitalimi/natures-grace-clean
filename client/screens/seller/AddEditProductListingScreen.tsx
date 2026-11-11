@@ -112,7 +112,11 @@ export default function AddEditProductListingScreen() {
       setSaveError(uploaded.error ?? "Image upload failed. Product was saved without a new image.");
       return false;
     }
-    await updateProduct(productId, { imageUrl: uploaded.url });
+    const updated = await updateProduct(productId, { imageUrl: uploaded.url });
+    if (!updated) {
+      setSaveError("Image uploaded, but the product listing could not be updated.");
+      return false;
+    }
     return true;
   };
 
@@ -132,10 +136,12 @@ export default function AddEditProductListingScreen() {
     };
     try {
       if (isEdit && listingId) {
-        await updateProduct(listingId, payload);
-        if (imageFile) {
-          await uploadImageForProduct(listingId);
+        const updated = await updateProduct(listingId, payload);
+        if (!updated) {
+          setSaveError("Could not update this product. Please try again.");
+          return;
         }
+        if (imageFile && !(await uploadImageForProduct(listingId))) return;
         setSaved(true);
       } else {
         const created = await addProduct(payload);
@@ -144,9 +150,7 @@ export default function AddEditProductListingScreen() {
           return;
         }
         setSavedPendingApproval(created.approvalStatus === "Pending");
-        if (imageFile) {
-          await uploadImageForProduct(created.id);
-        }
+        if (imageFile && !(await uploadImageForProduct(created.id))) return;
         setSaved(true);
       }
       setTimeout(() => {

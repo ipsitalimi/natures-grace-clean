@@ -28,11 +28,11 @@ interface OrdersContextType {
   refreshOrders: (options?: { silent?: boolean }) => Promise<void>;
   pendingOrderCount: number;
   recentOrders: SellerOrder[];
-  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<boolean>;
   advanceOrderStatus: (
     orderId: string,
-    options?: { courier?: string; trackingNumber?: string }
-  ) => Promise<void>;
+    options?: { courier?: string; trackingNumber?: string; dispatchVideoPath?: string }
+  ) => Promise<boolean>;
   createOrderFromCheckout: (input: ordersService.CreateOrderInput) => Promise<SellerOrder | null>;
 }
 
@@ -93,31 +93,37 @@ export function OrdersProvider({ children }: { children: React.ReactNode }) {
     refreshOrders();
   }, [refreshOrders, authConfigured, authLoading, session?.user?.id, profile?.role]);
 
-  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus) => {
-    if (!isSupabaseConfigured()) return;
+  const updateOrderStatus = useCallback(async (orderId: string, status: OrderStatus): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
     const updated = await ordersService.updateOrderStatus(orderId, status);
-    if (updated) {
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
-    }
+    if (!updated) return false;
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
+    return true;
   }, []);
 
   const advanceOrderStatus = useCallback(
-    async (orderId: string, options?: { courier?: string; trackingNumber?: string }) => {
+    async (
+      orderId: string,
+      options?: { courier?: string; trackingNumber?: string; dispatchVideoPath?: string }
+    ): Promise<boolean> => {
       const current = orders.find((o) => o.id === orderId);
-      if (!current || current.status === "Cancelled" || current.status === "Delivered") return;
+      if (!current || current.status === "Cancelled" || current.status === "Delivered") return false;
       const idx = ORDER_STATUS_FLOW.indexOf(current.status);
       const next =
         idx >= 0 && idx < ORDER_STATUS_FLOW.length - 1 ? ORDER_STATUS_FLOW[idx + 1] : current.status;
 
-      if (next === "Shipped" && options) {
-        await ordersService.updateOrderShipping(orderId, {
+      if (next === "Shipped") {
+        if (!options?.trackingNumber?.trim() || !options.dispatchVideoPath?.trim()) return false;
+        const shippingSaved = await ordersService.updateOrderShipping(orderId, {
           courier: options.courier,
           trackingNumber: options.trackingNumber,
           trackingStatus: "In transit",
+          dispatchVideoPath: options.dispatchVideoPath,
         });
+        if (!shippingSaved) return false;
       }
 
-      await updateOrderStatus(orderId, next);
+      return await updateOrderStatus(orderId, next);
     },
     [orders, updateOrderStatus]
   );

@@ -15,138 +15,121 @@ import {
 
 type PayoutStatus = "Pending" | "Under Review" | "Processing" | "Completed" | "Rejected";
 
-async function updateSellerPayoutStatus(
+async function notifyPayoutStatus(
+  payoutType: "seller" | "practitioner",
   payoutId: string,
   status: PayoutStatus,
-  adminId: string,
   rejectionReason?: string
 ) {
+  if (status !== "Completed" && status !== "Rejected") return;
   const supabase = requireSupabaseAdmin();
-
-  const { data: payout } = await supabase
-    .from("seller_payouts")
-    .select("*, seller_wallets(seller_id, sellers(profile_id))")
-    .eq("id", payoutId)
-    .maybeSingle();
-
-  if (!payout) return { error: "Payout not found" };
-
-  const patch: Record<string, unknown> = {
-    status,
-    processed_by: adminId,
-    updated_at: new Date().toISOString(),
-  };
-  if (status === "Completed") patch.completed_at = new Date().toISOString();
-  if (status === "Rejected") {
-    patch.rejection_reason = rejectionReason ?? "Rejected by admin";
-    const amount = Number((payout as { amount: number }).amount);
-    const walletId = (payout as { wallet_id: string }).wallet_id;
-    const { data: wallet } = await supabase
-      .from("seller_wallets")
-      .select("available_balance, pending_payout")
-      .eq("id", walletId)
-      .single();
-    if (wallet) {
-      await supabase
-        .from("seller_wallets")
-        .update({
-          available_balance: Number(wallet.available_balance) + amount,
-          pending_payout: Math.max(0, Number(wallet.pending_payout) - amount),
-        })
-        .eq("id", walletId);
-    }
-  }
-
-  await supabase.from("seller_payouts").update(patch).eq("id", payoutId);
-
-  const profileId =
-    (payout as { seller_wallets?: { sellers?: { profile_id?: string } } }).seller_wallets?.sellers
-      ?.profile_id ?? null;
-
-  if (profileId) {
-    const amountStr = `₹${Number((payout as { amount: number }).amount).toLocaleString("en-IN")}`;
-    if (status === "Completed") {
-      await dispatchUserNotification(supabase, {
-        userId: profileId,
-        event: "withdrawal_completed",
-        message: `Your withdrawal of ${amountStr} has been completed.`,
-        linkRoute: "Main",
-      });
-    } else if (status === "Rejected") {
-      await dispatchUserNotification(supabase, {
-        userId: profileId,
-        event: "withdrawal_received",
-        message: `Your withdrawal request was not approved. Funds returned to your wallet.`,
-        linkRoute: "Main",
-      });
-    }
-  }
-
-  return { ok: true };
-}
-
-async function updatePractitionerPayoutStatus(
-  payoutId: string,
-  status: PayoutStatus,
-  adminId: string,
-  rejectionReason?: string
-) {
-  const supabase = requireSupabaseAdmin();
-
-  const { data: payout } = await supabase
-    .from("practitioner_payouts")
-    .select("*, practitioner_wallets(practitioner_id, practitioners(profile_id))")
-    .eq("id", payoutId)
-    .maybeSingle();
-
-  if (!payout) return { error: "Payout not found" };
-
-  const patch: Record<string, unknown> = {
-    status,
-    processed_by: adminId,
-    updated_at: new Date().toISOString(),
-  };
-  if (status === "Completed") patch.completed_at = new Date().toISOString();
-  if (status === "Rejected") {
-    patch.rejection_reason = rejectionReason ?? "Rejected by admin";
-    const amount = Number((payout as { amount: number }).amount);
-    const walletId = (payout as { wallet_id: string }).wallet_id;
-    const { data: wallet } = await supabase
-      .from("practitioner_wallets")
-      .select("available_balance, pending_payout")
-      .eq("id", walletId)
-      .single();
-    if (wallet) {
-      await supabase
-        .from("practitioner_wallets")
-        .update({
-          available_balance: Number(wallet.available_balance) + amount,
-          pending_payout: Math.max(0, Number(wallet.pending_payout) - amount),
-        })
-        .eq("id", walletId);
-    }
-  }
-
-  await supabase.from("practitioner_payouts").update(patch).eq("id", payoutId);
-
-  const profileId =
-    (payout as { practitioner_wallets?: { practitioners?: { profile_id?: string } } })
-      .practitioner_wallets?.practitioners?.profile_id ?? null;
-
-  if (profileId && status === "Completed") {
-    const amountStr = `₹${Number((payout as { amount: number }).amount).toLocaleString("en-IN")}`;
-    await dispatchUserNotification(supabase, {
-      userId: profileId,
-      event: "withdrawal_completed",
-      message: `Your withdrawal of ${amountStr} has been completed.`,
-      linkRoute: "Main",
-    });
-  }
-
-  return { ok: true };
+  const table = payoutType === "seller" ? "seller_payouts" : "practitioner_payouts";
+  const relation = payoutType === "seller"
+    ? "seller_wallets(sellers(profile_id))"
+    : "practitioner_wallets(practitioners(profile_id))";
+  const { data } = await supabase.from(table).select(`amount, ${relation}`).eq("id", payoutId).maybeSingle();
+  const row = data as Record<string, unknown> | null;
+  const nested = payoutType === "seller"
+    ? (row?.seller_wallets as { sellers?: { profile_id?: string } } | null)?.sellers
+    : (row?.practitioner_wallets as { practitioners?: { profile_id?: string } } | null)?.practitioners;
+  const profileId = nested?.profile_id;
+  if (!profileId) return;
+  const amountStr = `₹${Number(row?.amount ?? 0).toLocaleString("en-IN")}`;
+  await dispatchUserNotification(supabase, {
+    userId: profileId,
+    event: status === "Completed" ? "withdrawal_completed" : "withdrawal_received",
+    message: status === "Completed"
+      ? `Your withdrawal of ${amountStr} has been completed.`
+      : `Your withdrawal request was not approved. Funds returned to your wallet. ${rejectionReason ?? ""}`.trim(),
+    linkRoute: "Main",
+  });
 }
 
 export function registerAdminOperationsRoutes(app: Express) {
+  app.get("/api/admin/bookings/schedule", async (req: Request, res: Response) => {
+    const admin = await requireRole(req, res, "Admin");
+    if (!admin) return;
+
+    const supabase = requireSupabaseAdmin();
+    let query = supabase
+      .from("practitioner_bookings")
+      .select("id, booking_number, user_id, practitioner_id, client_name, service_name, session_date, session_time, duration_minutes, booking_status, payment_status, meeting_link")
+      .in("booking_status", ["Pending", "Confirmed"])
+      .order("session_date", { ascending: true })
+      .order("session_time", { ascending: true });
+
+    const from = typeof req.query.from === "string" ? req.query.from : undefined;
+    const to = typeof req.query.to === "string" ? req.query.to : undefined;
+    if (from) query = query.gte("session_date", from);
+    if (to) query = query.lte("session_date", to);
+
+    const { data, error } = await query.limit(250);
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({ sessions: data ?? [] });
+  });
+
+  app.patch("/api/admin/bookings/:id/schedule", async (req: Request, res: Response) => {
+    const admin = await requireRole(req, res, "Admin");
+    if (!admin) return;
+
+    const bookingId = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
+    const { sessionDate, sessionTime, meetingLink } = req.body as {
+      sessionDate?: string;
+      sessionTime?: string;
+      meetingLink?: string | null;
+    };
+    if (!sessionDate || !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate)) {
+      return res.status(400).json({ error: "Session date must use YYYY-MM-DD." });
+    }
+    if (!sessionTime || !/^([01]\d|2[0-3]):[0-5]\d$/.test(sessionTime)) {
+      return res.status(400).json({ error: "Session time must use 24-hour HH:MM." });
+    }
+    if (meetingLink != null && meetingLink.trim()) {
+      try {
+        const parsed = new URL(meetingLink.trim());
+        if (parsed.protocol !== "https:") throw new Error("HTTPS required");
+      } catch {
+        return res.status(400).json({ error: "Meeting link must be a valid HTTPS URL." });
+      }
+    }
+
+    const supabase = requireSupabaseAdmin();
+    const { data: existing, error: fetchError } = await supabase
+      .from("practitioner_bookings")
+      .select("id, booking_status")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (fetchError || !existing) return res.status(404).json({ error: "Booking not found." });
+    if (!["Pending", "Confirmed"].includes(existing.booking_status)) {
+      return res.status(409).json({ error: "Only pending or confirmed sessions can be rescheduled." });
+    }
+
+    const { data: booking, error } = await supabase
+      .from("practitioner_bookings")
+      .update({
+        session_date: sessionDate,
+        session_time: sessionTime,
+        meeting_link: meetingLink?.trim() || null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", bookingId)
+      .in("booking_status", ["Pending", "Confirmed"])
+      .select("id, session_date, session_time, meeting_link")
+      .maybeSingle();
+    if (error) return res.status(400).json({ error: error.message });
+    if (!booking) return res.status(409).json({ error: "Booking changed before the schedule update was saved." });
+
+    await insertActivityLog(supabase, {
+      actorId: admin.id,
+      actorName: admin.email,
+      actionType: "booking",
+      description: `Booking ${bookingId} rescheduled by admin`,
+      targetType: "booking",
+      targetId: bookingId,
+    });
+    return res.json({ ok: true, booking });
+  });
+
   app.get("/api/admin/payouts", async (req: Request, res: Response) => {
     const admin = await requireRole(req, res, "Admin");
     if (!admin) return;
@@ -187,18 +170,29 @@ export function registerAdminOperationsRoutes(app: Express) {
       return res.status(400).json({ error: "Invalid status" });
     }
 
-    const result =
-      typeParam === "seller"
-        ? await updateSellerPayoutStatus(payoutId, status, admin.id, rejectionReason)
-        : typeParam === "practitioner"
-          ? await updatePractitionerPayoutStatus(payoutId, status, admin.id, rejectionReason)
-          : { error: "Invalid type" };
-
-    if ("error" in result && result.error) {
-      return res.status(400).json(result);
+    if (typeParam !== "seller" && typeParam !== "practitioner") {
+      return res.status(400).json({ error: "Invalid type" });
     }
 
-    await insertActivityLog(requireSupabaseAdmin(), {
+    const supabase = requireSupabaseAdmin();
+    const { data: rpcData, error: rpcError } = await supabase.rpc("admin_update_payout_status", {
+      p_payout_type: typeParam,
+      p_payout_id: payoutId,
+      p_status: status,
+      p_admin_id: admin.id,
+      p_rejection_reason: rejectionReason ?? null,
+    });
+    if (rpcError) return res.status(400).json({ error: rpcError.message });
+    const rpcResult = rpcData as { ok?: boolean; error?: string; already_applied?: boolean } | null;
+    if (!rpcResult?.ok) {
+      return res.status(400).json({ error: rpcResult?.error ?? "Could not update payout status" });
+    }
+
+    if (!rpcResult.already_applied) {
+      await notifyPayoutStatus(typeParam, payoutId, status, rejectionReason);
+    }
+
+    await insertActivityLog(supabase, {
       actorId: admin.id,
       actorName: admin.email,
       actionType: "settings",
@@ -232,6 +226,9 @@ export function registerAdminOperationsRoutes(app: Express) {
       status: "in_review" | "approved" | "rejected";
       adminNotes?: string;
     };
+    if (!["in_review", "approved", "rejected"].includes(status)) {
+      return res.status(400).json({ error: "Invalid refund status" });
+    }
     const refundId = String(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
     const supabase = requireSupabaseAdmin();
 
@@ -253,6 +250,10 @@ export function registerAdminOperationsRoutes(app: Express) {
     const userId = (existing as { user_id: string }).user_id;
     const orderId = (existing as { order_id?: string | null }).order_id;
     const bookingId = (existing as { booking_id?: string | null }).booking_id;
+
+    if (status === "approved" && Boolean(orderId) === Boolean(bookingId)) {
+      return res.status(400).json({ error: "Refund request must reference exactly one order or booking" });
+    }
 
     if (status === "approved") {
       const commissionRate = await fetchCommissionRate(supabase);
@@ -380,7 +381,7 @@ export function registerAdminOperationsRoutes(app: Express) {
     } else if (status === "rejected") {
       await dispatchUserNotification(supabase, {
         userId,
-        event: "refund_approved",
+        event: "refund_rejected",
         message: "Your refund request was reviewed and could not be approved.",
         linkRoute: "OrderHistory",
         emailVars: { reference: refundId },

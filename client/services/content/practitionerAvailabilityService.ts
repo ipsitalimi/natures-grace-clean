@@ -56,7 +56,7 @@ export async function fetchAvailabilityForOffering(
     };
   }
 
-  const dated = rows.filter((r) => r.specific_date);
+  const dated = rows.filter((r) => r.specific_date && r.is_available);
   const timingMode = (dated[0]?.timing_mode as "same" | "custom") ?? "same";
   const selectedDates = dated.map((r) => r.specific_date as string);
   const dateTimings: Record<string, { start: string; end: string }> = {};
@@ -89,10 +89,14 @@ export async function saveAvailabilityForOffering(
 
   const practitionerId = await resolvePractitionerId(profileId);
 
-  await supabase.from("practitioner_availability").delete().eq("offering_id", offeringId);
+  const { error: deleteError } = await supabase
+    .from("practitioner_availability")
+    .delete()
+    .eq("offering_id", offeringId);
+  if (deleteError) throw new Error("Could not replace availability: " + deleteError.message);
 
   if (input.alwaysAvailable) {
-    await supabase.from("practitioner_availability").insert({
+    const { error: insertError } = await supabase.from("practitioner_availability").insert({
       practitioner_id: practitionerId,
       offering_id: offeringId,
       start_time: input.globalTiming.start,
@@ -101,6 +105,7 @@ export async function saveAvailabilityForOffering(
       timing_mode: input.timingMode,
       metadata: { alwaysAvailable: true },
     });
+    if (insertError) throw new Error("Could not save availability: " + insertError.message);
     return;
   }
 
@@ -122,6 +127,7 @@ export async function saveAvailabilityForOffering(
   });
 
   if (rows.length) {
-    await supabase.from("practitioner_availability").insert(rows);
+    const { error: insertError } = await supabase.from("practitioner_availability").insert(rows);
+    if (insertError) throw new Error("Could not save availability: " + insertError.message);
   }
 }

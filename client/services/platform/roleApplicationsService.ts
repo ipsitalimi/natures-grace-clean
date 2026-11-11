@@ -344,6 +344,18 @@ export async function rejectRoleApplication(
   return { ok: true };
 }
 
+export async function updateRoleApplicationBio(applicationId: string, bio: string): Promise<boolean> {
+  if (bio.trim().length > 600) return false;
+  const supabase = getSupabase();
+  if (!supabase) return false;
+  const { data: row, error: fetchError } = await supabase.from("role_applications").select("form_data,target_role").eq("id", applicationId).maybeSingle();
+  if (fetchError || !row || row.target_role !== "Practitioner") return false;
+  const formData = (row.form_data ?? {}) as Record<string, string>;
+  const { error } = await supabase.from("role_applications").update({ form_data: { ...formData, bio: bio.trim() } }).eq("id", applicationId);
+  if (error) { console.error("[roleApplicationsService] update application bio:", error.message); return false; }
+  return true;
+}
+
 export async function updateApplicationProgressStage(
   applicationId: string,
   progressStage: ApplicationProgressStage

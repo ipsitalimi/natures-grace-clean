@@ -19,8 +19,11 @@ function getCategoryColor(category: string): { bg: string; text: string } {
       return { bg: "#E8A0B522", text: "#9B5C73" };
     case "Conscious Nutrition":
       return { bg: "#4A9A5B22", text: "#4A7C59" };
+    case "Festive Gifting":
     case "Spirit & Space":
       return { bg: "#6CB4D922", text: "#3A7CA5" };
+    case "Pets Products":
+      return { bg: "#8B735522", text: "#8B7355" };
     case "Sacred Rituals":
       return { bg: "#D4943A22", text: "#8B6F47" };
     case "Daily Vitality":
@@ -34,7 +37,7 @@ export default function ProductListingsScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(30);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
-  const { sellerCatalog, deleteProduct } = useDataContext();
+  const { sellerCatalog, deleteProduct, refreshSellerCatalog } = useDataContext();
 
   const listings: SellerProduct[] = sellerCatalog;
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -42,8 +45,9 @@ export default function ProductListingsScreen() {
   useEffect(() => {
     if (isFocused) {
       setDeleteConfirm(null);
+      void refreshSellerCatalog();
     }
-  }, [isFocused]);
+  }, [isFocused, refreshSellerCatalog]);
 
   const handleDelete = (id: string, productName: string) => {
     Alert.alert("Remove product", `Remove "${productName}" from your store?`, [
@@ -51,8 +55,12 @@ export default function ProductListingsScreen() {
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => {
-          deleteProduct(id);
+        onPress: async () => {
+          const deleted = await deleteProduct(id);
+          if (!deleted) {
+            Alert.alert("Could not remove product", "Please try again.");
+            return;
+          }
           setDeleteConfirm(id);
           setTimeout(() => setDeleteConfirm(null), 2000);
         },
