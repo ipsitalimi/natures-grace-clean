@@ -305,6 +305,20 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     fontStyle: "italic",
   },
+  introChatButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.light.accent,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: Spacing.md,
+    gap: Spacing.xs,
+  },
+  joinButtonText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
   actionButtons: { gap: Spacing.md },
   secondaryButtonsRow: {
     flexDirection: "row",
