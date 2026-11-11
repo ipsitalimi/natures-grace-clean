@@ -145,6 +145,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     addEvent,
     updateEvent,
     deleteEvent,
+    setEventVisibility,
     moderationDiscussions,
     discussionsLoading,
     setDiscussionModeration,
@@ -311,6 +312,18 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     } else {
       Alert.alert("Moderation", "Could not ban this user. Please try again.");
     }
+  };
+
+  const handleHideEvent = async (eventId: string) => {
+    const event = events.find((item) => item.id === eventId);
+    if (!event) return;
+    const nextVisible = event.isVisible === false;
+    const updated = await setEventVisibility(eventId, nextVisible);
+    if (!updated) {
+      Alert.alert("Could not update event", "Check your connection and admin permissions, then try again.");
+      return;
+    }
+    logActivity(`Event ${eventId} ${nextVisible ? "made visible" : "hidden"}`, "event");
   };
 
   const handleDeleteEvent = (eventId: string) => {
