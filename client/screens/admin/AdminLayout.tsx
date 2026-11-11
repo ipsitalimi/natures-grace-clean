@@ -65,7 +65,8 @@ const drawerItems: DrawerItem[] = [
   { name: "Support", icon: "help-circle", label: "Support" },
   { name: "Payouts", icon: "credit-card", label: "Withdrawals" },
   { name: "Refunds", icon: "rotate-ccw", label: "Refunds" },
-  { name: "AuditLog", icon: "clipboard", label: "Audit Log" },\n  { name: "Scheduling", icon: "calendar", label: "Session Scheduling" },
+  { name: "AuditLog", icon: "clipboard", label: "Audit Log" },
+  { name: "Scheduling", icon: "calendar", label: "Session Scheduling" },
   { name: "Legal", icon: "file-text", label: "Legal" },
   { name: "Settings", icon: "settings", label: "Settings" },
 ];
