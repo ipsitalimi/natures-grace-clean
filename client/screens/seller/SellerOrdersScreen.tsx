@@ -657,6 +657,18 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     marginTop: Spacing.xs,
   },
+  dispatchVideoSelected: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+    color: Colors.light.accent,
+  },
+  dispatchVideoPlaceholder: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
   dispatchVideoButton: {
     flexDirection: "row",
     alignItems: "center",
