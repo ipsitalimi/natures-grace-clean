@@ -255,9 +255,10 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
       return;
     }
     if (price.trim()) {
-      const eventPrice = Number(price.trim().replace(/,/g, ""));
-      if (!Number.isFinite(eventPrice) || eventPrice < 1) {
-        Alert.alert("Invalid event price", "Enter a valid event price of at least ₹1, or leave it empty for a free event.");
+      const normalizedPrice = price.trim().replace(/,/g, "");
+      const eventPrice = Number(normalizedPrice);
+      if (!/^\d+(\.\d{1,2})?$/.test(normalizedPrice) || !Number.isFinite(eventPrice) || eventPrice < 1) {
+        Alert.alert("Invalid event price", "Enter a valid event price of at least ₹1 with up to two decimal places, or leave it empty for a free event.");
         return;
       }
     }
