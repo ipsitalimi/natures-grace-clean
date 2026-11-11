@@ -421,7 +421,10 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
           attendees={
             event.dbId
               ? registrations.filter(
-                  (r) => r.eventId === event.dbId && r.status === "Registered"
+                  (r) =>
+                    r.eventId === event.dbId &&
+                    r.status === "Registered" &&
+                    r.paymentStatus !== "Pending"
                 )
               : []
           }
