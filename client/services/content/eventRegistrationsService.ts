@@ -161,7 +161,7 @@ export function countRegistrationsByEvent(
 ): Map<string, number> {
   const counts = new Map<string, number>();
   for (const r of registrations) {
-    if (r.status !== "Registered") continue;
+    if (r.status !== "Registered" || r.paymentStatus === "Pending") continue;
     counts.set(r.eventId, (counts.get(r.eventId) ?? 0) + 1);
   }
   return counts;
