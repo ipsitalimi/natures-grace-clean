@@ -254,13 +254,20 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
       Alert.alert("Missing event details", "Enter the event title, date, and time before saving.");
       return;
     }
+    if (price.trim()) {
+      const eventPrice = Number(price.trim().replace(/,/g, ""));
+      if (!Number.isFinite(eventPrice) || eventPrice < 1) {
+        Alert.alert("Invalid event price", "Enter a valid event price of at least ₹1, or leave it empty for a free event.");
+        return;
+      }
+    }
     const mapped = {
       title: title.trim(),
       description: description.trim() || `${title.trim()} - a community wellness event.`,
       date: date.trim(),
       time: time.trim(),
       mode,
-      pricing: price.trim() ? [{ label: "Per Session", amount: price.trim() }] : [],
+      pricing: price.trim() ? [{ label: "Entry Fee", amount: price.trim() }] : [],
       price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
     };
 
@@ -641,7 +648,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
                 </Pressable>
               </View>
 
-              <ThemedText style={styles.inputLabel}>Price (leave empty for Free)</ThemedText>
+              <ThemedText style={styles.inputLabel}>Ticket price in INR (leave empty for Free)</ThemedText>
               <TextInput
                 style={styles.input}
                 value={price}
