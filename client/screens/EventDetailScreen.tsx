@@ -188,15 +188,13 @@ export default function EventDetailScreen() {
           </View>
         ) : (
           <View style={styles.pricingCard}>
-            <ThemedText style={styles.pricingSectionTitle}>Reference pricing</ThemedText>
-            <ThemedText style={styles.pricingDisclaimer}>
-              Shown for information only. You will not be charged when you register below.
-            </ThemedText>
+            <ThemedText style={styles.pricingSectionTitle}>Registration fee</ThemedText>
+            
             {event.pricing.map((item, index) => (
               <View key={index} style={styles.pricingRow}>
                 <ThemedText style={styles.pricingLabel}>{item.label}</ThemedText>
                 <ThemedText style={styles.pricingAmount}>
-                  {formatInr(Number(item.amount) || 0)}/-
+                  {formatInr(Number(item.amount) || 0)}
                 </ThemedText>
               </View>
             ))}
