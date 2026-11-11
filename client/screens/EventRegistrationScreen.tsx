@@ -18,7 +18,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useEventRegistrations } from "@/context/EventRegistrationsContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
-import { eventRegistrationNote } from "@/lib/eventPricing";
+import { eventRegistrationNote, isEventRegistrationFree } from "@/lib/eventPricing";
+import { runEventCheckoutPayment } from "@/services/eventCheckoutService";
+import { formatInr } from "@/lib/formatCurrency";
 
 type ParamList = {
   EventRegistration: { eventId: string };
@@ -95,15 +97,35 @@ export default function EventRegistrationScreen() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const created = await registerForEvent({
-        eventDbId,
-        attendeeName: name,
-        attendeeEmail: email,
-        attendeePhone: phone,
-        message,
-      });
-      if (!created) {
-        setSubmitError("Registration could not be saved. Please try again.");
+      if (event && !isEventRegistrationFree(event.pricing)) {
+        if (!session.access_token) {
+          setSubmitError("Your session expired. Please sign in again.");
+          return;
+        }
+        const payment = await runEventCheckoutPayment({
+          eventId: eventDbId,
+          attendeeName: name,
+          attendeeEmail: email,
+          attendeePhone: phone,
+          message,
+          accessToken: session.access_token,
+        });
+        if (payment.error) {
+          setSubmitError(payment.error);
+        } else {
+          await refreshRegistrations();
+        }
+      } else {
+        const created = await registerForEvent({
+          eventDbId,
+          attendeeName: name,
+          attendeeEmail: email,
+          attendeePhone: phone,
+          message,
+        });
+        if (!created) {
+          setSubmitError("Registration could not be saved. Please try again.");
+        }
       }
     } catch (err) {
       setSubmitError(
@@ -127,7 +149,7 @@ export default function EventRegistrationScreen() {
     setCancelling(false);
   };
 
-  const showConfirmation = Boolean(existingRegistration);
+  const showConfirmation = Boolean(existingRegistration && existingRegistration.paymentStatus !== "Pending");
 
   if (showConfirmation) {
     return (
@@ -310,7 +332,9 @@ export default function EventRegistrationScreen() {
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <ThemedText style={styles.submitButtonText}>
-              {event?.ctaText === "Join Event" ? "Confirm Registration" : "Register Interest"}
+              {event && !isEventRegistrationFree(event.pricing)
+                ? `Pay ${formatInr(Number(event.pricing[0]?.amount) || 0)} & Register`
+                : event?.ctaText === "Join Event" ? "Confirm Registration" : "Register Interest"}
             </ThemedText>
           )}
         </Pressable>
