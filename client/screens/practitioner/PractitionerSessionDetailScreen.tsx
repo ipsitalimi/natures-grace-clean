@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, Alert, TextInput, Linking } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
@@ -135,7 +135,18 @@ export default function PractitionerSessionDetailScreen() {
 
           <View style={styles.notesSection}>
             <ThemedText style={styles.notesLabel}>Session notes</ThemedText>
-            {session.status === "Upcoming" ? (
+            {session.status === "Upcoming" && session.paymentStatus === "Paid" && session.meetingLink ? (
+          <Pressable
+            style={styles.introChatButton}
+            onPress={() => void Linking.openURL(session.meetingLink!)}
+            testID="button-join-google-meet"
+          >
+            <Feather name="video" size={16} color="#FFFFFF" />
+            <ThemedText style={styles.joinButtonText}>Join Google Meet</ThemedText>
+          </Pressable>
+        ) : null}
+
+        {session.status === "Upcoming" ? (
               <TextInput
                 style={styles.notesInput}
                 placeholder="Private notes for this session (optional)"
