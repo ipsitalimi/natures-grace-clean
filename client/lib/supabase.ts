@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { Platform } from "react-native";
 
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured } from "@/lib/supabaseConfig";
 let client: SupabaseClient | null = null;
@@ -17,7 +16,9 @@ export function getSupabase(): SupabaseClient | null {
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: Platform.OS === "web",
+      // AuthContext processes browser callbacks explicitly with exchangeCodeForSession.
+      // Disable Supabase auto-detection to prevent the one-time code being consumed twice.
+      detectSessionInUrl: false,
     },
   });
 
