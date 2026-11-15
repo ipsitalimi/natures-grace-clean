@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  Modal,
   TextInput,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
