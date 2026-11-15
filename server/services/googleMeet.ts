@@ -115,16 +115,28 @@ export async function ensureBookingMeetLink(
       }
     );
 
-    const event = await response.json() as {
+    let event = await response.json() as {
       id?: string;
       hangoutLink?: string;
       conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> };
       error?: { message?: string };
     };
+
+    // A retry after a successful Google insert but failed DB write finds the same event.
+    if (response.status === 409) {
+      const existingResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (existingResponse.ok) {
+        event = await existingResponse.json() as typeof event;
+      }
+    }
+
     const meetUrl = event.hangoutLink
       ?? event.conferenceData?.entryPoints?.find((entry) => entry.entryPointType === "video")?.uri;
 
-    if (!response.ok || !event.id || !meetUrl) {
+    if ((!response.ok && response.status !== 409) || !event.id || !meetUrl) {
       throw new Error(event.error?.message ?? "Google Calendar did not return a Meet link");
     }
 
