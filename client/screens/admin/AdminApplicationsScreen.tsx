@@ -392,39 +392,6 @@ export default function AdminApplicationsScreen({
       )}
     </ScrollView>
 
-      <Modal visible={rejectTarget != null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <ThemedText style={styles.modalTitle}>Rejection reason</ThemedText>
-            <ThemedText style={styles.modalHint}>
-              This reason will be shown to the applicant so they can update and reapply.
-            </ThemedText>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Explain what needs to be corrected…"
-              placeholderTextColor={Colors.light.textMuted}
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              multiline
-            />
-            <View style={styles.modalActions}>
-              <Pressable onPress={() => { setRejectTarget(null); setRejectReason(""); }}>
-                <ThemedText style={styles.modalCancel}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  if (rejectTarget) void handleReject(rejectTarget, rejectReason);
-                }}
-                disabled={actionBusy || !rejectReason.trim()}
-              >
-                <ThemedText style={[styles.modalConfirm, !rejectReason.trim() && { opacity: 0.5 }]}>
-                  Reject application
-                </ThemedText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </>
   );
 }
