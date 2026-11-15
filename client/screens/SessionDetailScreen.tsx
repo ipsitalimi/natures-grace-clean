@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
   View,
+  Linking,
   StyleSheet,
   Pressable,
   TextInput,
@@ -236,6 +237,21 @@ export default function SessionDetailScreen() {
           <View style={styles.divider} />
           <DetailRow label="Price" value={`\u20B9${session.price}`} />
         </View>
+
+        {session.status === "Upcoming" && session.paymentStatus === "Paid" && session.meetingLink ? (
+          <Pressable
+            style={styles.refundCard}
+            onPress={() => void Linking.openURL(session.meetingLink!)}
+            testID="button-join-google-meet"
+          >
+            <Feather name="video" size={18} color={Colors.light.accent} />
+            <View style={styles.refundCardBody}>
+              <ThemedText style={styles.refundCardTitle}>Join Google Meet</ThemedText>
+              <ThemedText style={styles.refundCardText}>Open your booked session</ThemedText>
+            </View>
+            <Feather name="external-link" size={18} color={Colors.light.textMuted} />
+          </Pressable>
+        ) : null}
 
         {session.paymentStatus === "Paid" && session.status !== "Upcoming" ? (
           <Pressable
