@@ -467,12 +467,6 @@ export async function createPaidBooking(
 ): Promise<{ bookingId: string; bookingNumber: string } | { error: string }> {
   const bookingNumber = `BK-${Date.now().toString(36).toUpperCase()}`;
 
-  const { data: practitioner } = await supabase
-    .from("practitioners")
-    .select("meeting_link")
-    .eq("id", input.practitionerId)
-    .maybeSingle();
-
   const { data, error } = await supabase
     .from("practitioner_bookings")
     .insert({
@@ -491,7 +485,7 @@ export async function createPaidBooking(
       payment_status: "Paid",
       razorpay_payment_id: input.razorpayPaymentId,
       notes: input.notes ?? null,
-      meeting_link: (practitioner as { meeting_link?: string | null } | null)?.meeting_link ?? null,
+      meeting_link: null,
     })
     .select("id, booking_number, practitioner_id, booking_status, payment_status, amount, service_name")
     .single();
