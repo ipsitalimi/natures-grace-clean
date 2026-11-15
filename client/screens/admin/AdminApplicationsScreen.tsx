@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Modal,
   TextInput,
-  Alert,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
@@ -92,6 +91,7 @@ export default function AdminApplicationsScreen({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [approveTarget, setApproveTarget] = useState<RoleApplication | null>(null);
   const [rejectTarget, setRejectTarget] = useState<RoleApplication | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [bioDraft, setBioDraft] = useState("");
@@ -144,14 +144,10 @@ export default function AdminApplicationsScreen({
   };
 
   const confirmApprove = (application: RoleApplication) => {
-    Alert.alert(
-      "Approve application",
-      `Approve ${application.targetRole.toLowerCase()} access for ${applicationDisplayName(application.formData)}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Approve", onPress: () => void handleApprove(application) },
-      ]
-    );
+    // Use an in-screen confirmation instead of Alert.alert: React Native Alert
+    // is not consistently interactive in the web admin build.
+    setApproveTarget(application);
+    setActionError(null);
   };
 
   const handleApprove = async (application: RoleApplication) => {
@@ -171,6 +167,7 @@ export default function AdminApplicationsScreen({
     await refreshContent();
     await loadApplications();
     setSelectedId(null);
+    setApproveTarget(null);
   };
 
   const handleReject = async (application: RoleApplication, reason: string) => {
@@ -188,6 +185,7 @@ export default function AdminApplicationsScreen({
     );
     await loadApplications();
     setSelectedId(null);
+    setApproveTarget(null);
     setRejectTarget(null);
     setRejectReason("");
   };
@@ -283,9 +281,24 @@ export default function AdminApplicationsScreen({
         ) : null}
       </ScrollView>
 
-      <Modal visible={rejectTarget != null} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+        {approveTarget ? (
+          <View style={styles.confirmationCard} testID="approve-application-confirmation">
+            <ThemedText style={styles.modalTitle}>Approve application?</ThemedText>
+            <ThemedText style={styles.modalHint}>
+              This will grant {approveTarget.targetRole.toLowerCase()} access to {applicationDisplayName(approveTarget.formData)}.
+            </ThemedText>
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setApproveTarget(null)} disabled={actionBusy}>
+                <ThemedText style={styles.modalCancel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => { const target = approveTarget; setApproveTarget(null); void handleApprove(target); }} disabled={actionBusy}>
+                <ThemedText style={styles.approveConfirm}>{actionBusy ? "Approving…" : "Confirm approval"}</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+        {rejectTarget ? (
+          <View style={styles.confirmationCard} testID="reject-application-confirmation">
             <ThemedText style={styles.modalTitle}>Rejection reason</ThemedText>
             <ThemedText style={styles.modalHint}>
               This reason will be shown to the applicant so they can update and reapply.
@@ -299,23 +312,17 @@ export default function AdminApplicationsScreen({
               multiline
             />
             <View style={styles.modalActions}>
-              <Pressable onPress={() => { setRejectTarget(null); setRejectReason(""); }}>
+              <Pressable onPress={() => { setRejectTarget(null); setRejectReason(""); }} disabled={actionBusy}>
                 <ThemedText style={styles.modalCancel}>Cancel</ThemedText>
               </Pressable>
-              <Pressable
-                onPress={() => {
-                  if (rejectTarget) void handleReject(rejectTarget, rejectReason);
-                }}
-                disabled={actionBusy || !rejectReason.trim()}
-              >
-                <ThemedText style={[styles.modalConfirm, !rejectReason.trim() && { opacity: 0.5 }]}>
-                  Reject application
+              <Pressable onPress={() => { if (rejectTarget) void handleReject(rejectTarget, rejectReason); }} disabled={actionBusy || !rejectReason.trim()}>
+                <ThemedText style={[styles.rejectConfirm, (!rejectReason.trim() || actionBusy) && { opacity: 0.5 }]}>
+                  {actionBusy ? "Rejecting…" : "Confirm rejection"}
                 </ThemedText>
               </Pressable>
             </View>
           </View>
-        </View>
-      </Modal>
+        ) : null}
       </>
     );
   }
@@ -526,6 +533,14 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     padding: Spacing.lg,
   },
+  confirmationCard: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.light.divider,
+    padding: Spacing.lg,
+    marginTop: Spacing.md,
+  },
   modalTitle: { fontSize: 17, fontWeight: "700", marginBottom: 8 },
   modalHint: { fontSize: 13, color: Colors.light.textMuted, marginBottom: Spacing.md, lineHeight: 18 },
   modalInput: {
@@ -546,4 +561,6 @@ const styles = StyleSheet.create({
   },
   modalCancel: { color: Colors.light.textMuted, fontSize: 15 },
   modalConfirm: { color: "#8B3A3A", fontWeight: "700", fontSize: 15 },
+  approveConfirm: { color: "#2E7D32", fontWeight: "700", fontSize: 15 },
+  rejectConfirm: { color: "#8B3A3A", fontWeight: "700", fontSize: 15 },
 });
