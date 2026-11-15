@@ -89,6 +89,7 @@ export async function ensureBookingMeetLink(
     const start = parseSessionStart(row.session_date, row.session_time);
     const end = addMinutes(start, Number(row.duration_minutes));
     const requestId = `ng${row.id.replace(/-/g, "").toLowerCase()}`;
+    const eventId = requestId;
 
     const response = await fetch(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
@@ -99,6 +100,7 @@ export async function ensureBookingMeetLink(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          id: eventId,
           summary: `Nature's Grace — ${row.service_name}`,
           description: `Booking ${row.booking_number}\nClient: ${row.client_name}`,
           start: { dateTime: start, timeZone: "Asia/Kolkata" },
