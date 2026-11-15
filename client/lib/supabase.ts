@@ -16,6 +16,8 @@ export function getSupabase(): SupabaseClient | null {
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
+      // AuthContext processes browser callbacks explicitly with exchangeCodeForSession.
+      // Disable Supabase auto-detection to prevent the one-time code being consumed twice.
       detectSessionInUrl: false,
     },
   });
