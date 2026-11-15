@@ -66,6 +66,21 @@ async function getAccessToken(): Promise<string> {
   return payload.access_token;
 }
 
+function makeGoogleEventId(bookingId: string): string {
+  // Google Calendar event IDs allow only a-v and 0-9. Encode the UUID
+  // into that alphabet so retries always target the same valid event ID.
+  const alphabet = "abcdefghijklmnopqrstuv0123456789";
+  const hex = bookingId.replace(/-/g, "").toLowerCase();
+  if (!/^[0-9a-f]{32}$/.test(hex)) throw new Error("Booking ID must be a UUID");
+  let value = BigInt(`0x${hex}`);
+  let encoded = "";
+  for (let i = 0; i < 26; i += 1) {
+    encoded = alphabet[Number(value & 31n)] + encoded;
+    value >>= 5n;
+  }
+  return `ng${encoded}`;
+}
+
 export async function ensureBookingMeetLink(
   supabase: SupabaseClient,
   bookingId: string
@@ -88,8 +103,8 @@ export async function ensureBookingMeetLink(
     const accessToken = await getAccessToken();
     const start = parseSessionStart(row.session_date, row.session_time);
     const end = addMinutes(start, Number(row.duration_minutes));
-    const requestId = `ng${row.id.replace(/-/g, "").toLowerCase()}`;
-    const eventId = requestId;
+    const eventId = makeGoogleEventId(row.id);
+    const requestId = eventId;
 
     const response = await fetch(
       "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
