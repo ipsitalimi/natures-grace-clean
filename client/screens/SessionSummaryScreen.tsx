@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Image, Alert, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
@@ -79,6 +79,7 @@ export default function SessionSummaryScreen() {
   const { profile, session } = useAuth();
   const { refresh: refreshPractitionerData } = usePractitionerContext();
   const [confirming, setConfirming] = useState(false);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const { freeHours } = useCancellationPolicy();
 
   const { practitionerCategories } = useDataContext();
@@ -98,11 +99,11 @@ export default function SessionSummaryScreen() {
   const handleConfirmBooking = async () => {
     if (confirming) return;
     setConfirming(true);
-    const sessionDateLabel = displayDateLabel;
+    setCheckoutError(null);
 
     try {
       if (!isSupabaseConfigured()) {
-        Alert.alert("Booking unavailable", "Connect Supabase to book sessions.");
+        setCheckoutError("Booking unavailable: connect Supabase to book sessions.");
         return;
       }
       const accessToken = await resolveApiAccessToken(session?.access_token);
@@ -115,7 +116,7 @@ export default function SessionSummaryScreen() {
         });
       }
       if (!accessToken) {
-        Alert.alert("Payment", "Please sign in to book a session.");
+        setCheckoutError("Please sign in to book a session.");
         return;
       }
 
@@ -140,7 +141,7 @@ export default function SessionSummaryScreen() {
         },
       });
       if (checkout.error) {
-        Alert.alert("Payment", checkout.error);
+        setCheckoutError(checkout.error);
         return;
       }
 
@@ -150,6 +151,8 @@ export default function SessionSummaryScreen() {
       } else {
         navigation.navigate("SessionHistory" as never);
       }
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : "Something went wrong while starting your booking. Please try again.");
     } finally {
       setConfirming(false);
     }
@@ -232,6 +235,12 @@ export default function SessionSummaryScreen() {
             change the time, cancel (if eligible) and book again — in-app rescheduling is not available yet.
           </ThemedText>
         </View>
+
+        {checkoutError ? (
+          <View style={styles.checkoutErrorCard} accessibilityRole="alert">
+            <ThemedText style={styles.checkoutErrorText}>{checkoutError}</ThemedText>
+          </View>
+        ) : null}
 
         <Pressable
           style={[styles.confirmButton, confirming && styles.confirmButtonDisabled]}
@@ -389,6 +398,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.light.text,
     lineHeight: 20,
+  },
+  checkoutErrorCard: {
+    backgroundColor: "#FCE8E6",
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  checkoutErrorText: {
+    color: "#8B1E1E",
+    fontSize: 13,
+    lineHeight: 19,
   },
   confirmButton: {
     backgroundColor: Colors.light.button,
