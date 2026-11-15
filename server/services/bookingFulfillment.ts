@@ -5,6 +5,7 @@ import {
 } from "./practitionerWalletLedger";
 import { dispatchUserNotification } from "./notificationDispatch";
 import { fetchCommissionRate } from "./platformSettings";
+import { ensureBookingMeetLink } from "./googleMeet";
 
 export type BookingDraft = {
   practitionerId: string;
@@ -64,6 +65,7 @@ export async function fulfillBookingPayment(params: {
       .eq("id", pending.booking_id)
       .maybeSingle();
     if (existing) {
+      await ensureBookingMeetLink(supabase, existing.id as string);
       return {
         ok: true,
         bookingId: existing.id as string,
@@ -97,6 +99,7 @@ export async function fulfillBookingPayment(params: {
     .maybeSingle();
 
   if (slotDup) {
+    await ensureBookingMeetLink(supabase, slotDup.id as string);
     return {
       ok: true,
       bookingId: slotDup.id as string,
@@ -112,6 +115,7 @@ export async function fulfillBookingPayment(params: {
     .maybeSingle();
 
   if (dup) {
+    await ensureBookingMeetLink(supabase, dup.id as string);
     return {
       ok: true,
       bookingId: dup.id as string,
@@ -187,6 +191,8 @@ export async function fulfillBookingPayment(params: {
       booking_id: created.bookingId,
     })
     .eq("razorpay_order_id", razorpayOrderId);
+
+  await ensureBookingMeetLink(supabase, created.bookingId);
 
   return {
     ok: true,
