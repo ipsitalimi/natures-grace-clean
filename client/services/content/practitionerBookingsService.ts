@@ -113,6 +113,7 @@ export function toPractitionerSession(row: DbBookingRow): PractitionerSession {
     notes: row.notes ?? undefined,
     amount: Number(row.amount),
     paymentStatus: row.payment_status,
+    meetingLink: row.meeting_link ?? undefined,
   };
 }
 
@@ -131,6 +132,7 @@ export function toUserSessionHistory(
     price: Number(row.amount).toLocaleString("en-IN"),
     time: row.session_time,
     paymentStatus: row.payment_status,
+    meetingLink: row.meeting_link ?? undefined,
   };
 }
 
