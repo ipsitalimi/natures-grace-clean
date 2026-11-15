@@ -94,8 +94,6 @@ export default function SessionSummaryScreen() {
     );
   }
 
-  const displayDateLabel = `${selectedDate.dayName}, ${selectedDate.dayNum} ${selectedDate.monthName}`;
-
   const handleConfirmBooking = async () => {
     if (confirming) return;
     setConfirming(true);
