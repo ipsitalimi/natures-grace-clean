@@ -202,7 +202,7 @@ export default function BookSessionScreen() {
 
   useEffect(() => {
     setSelectedTimeIndex(null);
-  }, [selectedDateIndex]);
+  }, [selectedDateIndex, selectedDurationIndex]);
 
   const bookableDates = useMemo(() => {
     if (!selectedAvailability) return dates.map((_, i) => i);
