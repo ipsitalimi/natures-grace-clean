@@ -12,19 +12,35 @@ export type PractitionerPricingRule = {
 
 export const SUPPORTED_SESSION_DURATIONS = [15, 20, 30, 45, 60] as const;
 
+function describeSupabaseError(error: {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+}): string {
+  return [
+    error.message || "Unknown database error",
+    error.code ? `(code ${error.code})` : "",
+    error.details || "",
+    error.hint ? `Hint: ${error.hint}` : "",
+  ].filter(Boolean).join(" ");
+}
+
 export async function fetchPractitionerPricingRules(
   practitionerId: string
 ): Promise<PractitionerPricingRule[]> {
   const supabase = getSupabase();
-  if (!supabase) return [];
+  if (!supabase) throw new Error("Supabase is not configured in this app build.");
+
   const { data, error } = await supabase
     .from("practitioner_pricing_rules")
     .select("*")
     .eq("practitioner_id", practitionerId)
     .order("duration_minutes");
+
   if (error) {
-    console.error("[practitionerPricing] fetch:", error.message);
-    return [];
+    console.error("[practitionerPricing] fetch:", error);
+    throw new Error(`Could not load practitioner pricing: ${describeSupabaseError(error)}`);
   }
   return (data ?? []).map((row: any) => ({
     ...row,
@@ -47,9 +63,9 @@ export async function savePractitionerPricingRule(input: {
   enabled: boolean;
   minPrice: number;
   maxPrice: number;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true; rule: PractitionerPricingRule } | { ok: false; error: string }> {
   const supabase = getSupabase();
-  if (!supabase) return { ok: false, error: "Supabase is not configured." };
+  if (!supabase) return { ok: false, error: "Supabase is not configured in this app build." };
   if (!SUPPORTED_SESSION_DURATIONS.includes(input.durationMinutes as any)) {
     return { ok: false, error: "Unsupported session duration." };
   }
@@ -57,16 +73,46 @@ export async function savePractitionerPricingRule(input: {
     || input.minPrice < 0 || input.maxPrice > 10000 || input.minPrice > input.maxPrice) {
     return { ok: false, error: "Enter whole-rupee prices between ₹0 and ₹10,000, with minimum no greater than maximum." };
   }
-  const { error } = await supabase.from("practitioner_pricing_rules").upsert({
-    practitioner_id: input.practitionerId,
-    duration_minutes: input.durationMinutes,
-    is_enabled: input.enabled,
-    min_price: input.minPrice,
-    max_price: input.maxPrice,
-  }, { onConflict: "practitioner_id,duration_minutes" });
+
+  const { data, error } = await supabase
+    .from("practitioner_pricing_rules")
+    .upsert({
+      practitioner_id: input.practitionerId,
+      duration_minutes: input.durationMinutes,
+      is_enabled: input.enabled,
+      min_price: input.minPrice,
+      max_price: input.maxPrice,
+    }, { onConflict: "practitioner_id,duration_minutes" })
+    .select("id, practitioner_id, duration_minutes, is_enabled, min_price, max_price")
+    .single();
+
   if (error) {
-    console.error("[practitionerPricing] save:", error.message);
-    return { ok: false, error: error.message };
+    console.error("[practitionerPricing] save:", error);
+    return { ok: false, error: describeSupabaseError(error) };
   }
-  return { ok: true };
+  if (!data) {
+    return {
+      ok: false,
+      error: "The database did not return a saved pricing rule. Check that this admin account has the Admin role and that the app is connected to the intended Supabase project.",
+    };
+  }
+
+  const rule: PractitionerPricingRule = {
+    ...data,
+    min_price: Number(data.min_price),
+    max_price: Number(data.max_price),
+  };
+  if (
+    rule.practitioner_id !== input.practitionerId ||
+    rule.duration_minutes !== input.durationMinutes ||
+    rule.is_enabled !== input.enabled ||
+    rule.min_price !== input.minPrice ||
+    rule.max_price !== input.maxPrice
+  ) {
+    return {
+      ok: false,
+      error: "The database returned a pricing rule that does not match the values entered. Please reload and try again.",
+    };
+  }
+  return { ok: true, rule };
 }
