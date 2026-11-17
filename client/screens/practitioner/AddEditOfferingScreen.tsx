@@ -34,7 +34,16 @@ const DEFAULT_START = "9:00 AM";
 const DEFAULT_END = "5:00 PM";
 
 type TimingMode = "same" | "custom";
-interface TimeSlot { start: string; end: string; }
+interface TimeSlot { start: string; end: string; additional?: { start: string; end: string }[]; }
+
+function validateTimeWindows(windows: TimeSlot[]): boolean {
+  const toMinutes = (value: string) => {
+    const index = TIME_OPTIONS.indexOf(value);
+    return index < 0 ? -1 : index * 60 + 6 * 60;
+  };
+  const sorted = windows.map((w) => ({ start: toMinutes(w.start), end: toMinutes(w.end) })).sort((a, b) => a.start - b.start);
+  return sorted.every((w, i) => w.start >= 0 && w.end > w.start && (i === 0 || w.start >= sorted[i - 1].end));
+}
 
 function TypeIcon({ size = 18 }: { size?: number }) {
   return (
@@ -311,7 +320,19 @@ function TimingSection({
 
       {timingMode === "same" ? (
         <View style={timStyles.sameBlock}>
-          <TimeRangePicker value={globalTiming} onChange={onChangeGlobalTiming} />
+          <TimeRangePicker value={globalTiming} onChange={(v) => onChangeGlobalTiming({ ...v, additional: globalTiming.additional })} />
+          {(globalTiming.additional ?? []).map((window, index) => (
+            <View key={`global-window-${index}`} style={timStyles.dateCard}>
+              <View style={timStyles.dateLabelRow}>
+                <ThemedText style={timStyles.dateCardLabel}>Additional window {index + 1}</ThemedText>
+                <Pressable onPress={() => onChangeGlobalTiming({ ...globalTiming, additional: (globalTiming.additional ?? []).filter((_, i) => i !== index) })}>
+                  <Feather name="trash-2" size={16} color="#8B3A3A" />
+                </Pressable>
+              </View>
+              <TimeRangePicker value={window} compact onChange={(v) => onChangeGlobalTiming({ ...globalTiming, additional: (globalTiming.additional ?? []).map((w, i) => i === index ? v : w) })} />
+            </View>
+          ))}
+          {(globalTiming.additional ?? []).length < 1 ? <Pressable style={timStyles.addWindow} onPress={() => onChangeGlobalTiming({ ...globalTiming, additional: [...(globalTiming.additional ?? []), { start: "4:00 PM", end: "8:00 PM" }] })}><Feather name="plus" size={15} color={Colors.light.accent} /><ThemedText style={timStyles.addWindowText}>Add another time window</ThemedText></Pressable> : null}
           <View style={timStyles.applyNote}>
             <Feather name="check-circle" size={13} color="#4A7C59" />
             <ThemedText style={timStyles.applyNoteText}>
@@ -338,11 +359,17 @@ function TimingSection({
                     {timing.start} – {timing.end}
                   </ThemedText>
                 </View>
-                <TimeRangePicker
-                  value={timing}
-                  onChange={(v) => onChangeDateTiming(date, v)}
-                  compact
-                />
+                <TimeRangePicker value={timing} onChange={(v) => onChangeDateTiming(date, { ...v, additional: timing.additional })} compact />
+                {(timing.additional ?? []).map((window, index) => (
+                  <View key={`${date}-window-${index}`} style={timStyles.dateCard}>
+                    <View style={timStyles.dateLabelRow}>
+                      <ThemedText style={timStyles.dateCardLabel}>Additional window {index + 1}</ThemedText>
+                      <Pressable onPress={() => onChangeDateTiming(date, { ...timing, additional: (timing.additional ?? []).filter((_, i) => i !== index) })}><Feather name="trash-2" size={16} color="#8B3A3A" /></Pressable>
+                    </View>
+                    <TimeRangePicker value={window} compact onChange={(v) => onChangeDateTiming(date, { ...timing, additional: (timing.additional ?? []).map((w, i) => i === index ? v : w) })} />
+                  </View>
+                ))}
+                {(timing.additional ?? []).length < 1 ? <Pressable style={timStyles.addWindow} onPress={() => onChangeDateTiming(date, { ...timing, additional: [...(timing.additional ?? []), { start: "4:00 PM", end: "8:00 PM" }] })}><Feather name="plus" size={15} color={Colors.light.accent} /><ThemedText style={timStyles.addWindowText}>Add another time window</ThemedText></Pressable> : null}
               </View>
             );
           })}
@@ -434,6 +461,8 @@ const timStyles = StyleSheet.create({
     color: Colors.light.textMuted,
     flex: 1,
   },
+  addWindow: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8, paddingHorizontal: 4 },
+  addWindowText: { fontSize: 13, fontFamily: "Nunito_700Bold", color: Colors.light.accent },
   dateCard: {
     backgroundColor: Colors.light.cardBackground,
     borderRadius: BorderRadius.sm,
@@ -830,12 +859,14 @@ export default function AddEditOfferingScreen() {
     setDateTimings((prev) => ({ ...prev, [date]: v }));
   };
 
-  const canSave = selectedType !== "" && selectedDuration !== null && !!selectedPricingRule && price >= minPrice && price <= maxPrice;
+  const windowsValid = selectedDates.every((date) => validateTimeWindows([dateTimings[date] ?? globalTiming, ...((dateTimings[date] ?? globalTiming).additional ?? [])])) && validateTimeWindows([globalTiming, ...(globalTiming.additional ?? [])]);
+  const canSave = selectedType !== "" && selectedDuration !== null && !!selectedPricingRule && price >= minPrice && price <= maxPrice && windowsValid;
 
   const handleSave = async () => {
     if (!canSave || saving) { if (!selectedPricingRule) setSaveError("This duration is not enabled or priced by the administrator."); return; }
     setSaving(true);
     setSaveError("");
+    if (!windowsValid) { setSaveError("Time windows must be valid and cannot overlap. Please adjust them."); setSaving(false); return; }
     const offering: SessionOffering = {
       id: existingOffering?.id ?? `off-${Date.now()}`,
       sessionType: selectedType,
