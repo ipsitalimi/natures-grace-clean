@@ -118,8 +118,8 @@ export type OfferingAvailabilityInput = {
   alwaysAvailable: boolean;
   selectedDates: string[];
   timingMode: "same" | "custom";
-  globalTiming: { start: string; end: string };
-  dateTimings: Record<string, { start: string; end: string }>;
+  globalTiming: { start: string; end: string; additional?: { start: string; end: string }[] };
+  dateTimings: Record<string, { start: string; end: string; additional?: { start: string; end: string }[] }>;
 };
 
 export type OfferingAvailabilityState = OfferingAvailabilityInput;
