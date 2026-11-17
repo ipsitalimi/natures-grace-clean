@@ -13,16 +13,16 @@ import { useAuth } from "@/context/AuthContext";
 import { fetchAvailabilityForOffering } from "@/services/content/practitionerAvailabilityService";
 import { fetchPractitionerProfileDetailsResult } from "@/services/content/practitionerId";
 import { peekLastPractitionerProvisionError } from "@/services/content/practitionerId";
+import { fetchMyPractitionerPricingRules, type PractitionerPricingRule } from "@/services/content/practitionerPricingService";
 
 const DURATION_OPTIONS = [
   { minutes: 15, label: "15 mins" },
+  { minutes: 20, label: "20 mins" },
   { minutes: 30, label: "30 mins" },
   { minutes: 45, label: "45 mins" },
   { minutes: 60, label: "60 mins" },
 ];
 
-const MIN_PRICE = 500;
-const MAX_PRICE = 2500;
 const PRICE_STEP = 100;
 
 const TIME_OPTIONS = [
@@ -726,7 +726,9 @@ export default function AddEditOfferingScreen() {
 
   const [selectedType, setSelectedType] = useState<string>(existingOffering?.sessionType ?? "");
   const [selectedDuration, setSelectedDuration] = useState<number | null>(existingOffering?.duration ?? null);
-  const [price, setPrice] = useState<number>(existingOffering?.price ?? 1000);
+  const [price, setPrice] = useState<number>(existingOffering?.price ?? 0);
+  const [pricingRules, setPricingRules] = useState<PractitionerPricingRule[]>([]);
+  const [pricingLoading, setPricingLoading] = useState(true);
   const [notes, setNotes] = useState<string>(existingOffering?.notes ?? "");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -767,6 +769,23 @@ export default function AddEditOfferingScreen() {
   }, [profile?.id]);
 
   const sessionTypeOptions = approvedSessionTypes;
+
+  useEffect(() => {
+    let cancelled = false;
+    setPricingLoading(true);
+    fetchMyPractitionerPricingRules(profile?.id).then((rules) => {
+      if (!cancelled) setPricingRules(rules);
+    }).finally(() => {
+      if (!cancelled) setPricingLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [profile?.id]);
+
+  const selectedPricingRule = pricingRules.find(
+    (rule) => rule.duration_minutes === selectedDuration && rule.is_enabled
+  );
+  const minPrice = selectedPricingRule ? selectedPricingRule.min_price : 0;
+  const maxPrice = selectedPricingRule ? selectedPricingRule.max_price : 0;
 
   useEffect(() => {
     if (selectedType && sessionTypeOptions.includes(selectedType)) return;
@@ -811,10 +830,10 @@ export default function AddEditOfferingScreen() {
     setDateTimings((prev) => ({ ...prev, [date]: v }));
   };
 
-  const canSave = selectedType !== "" && selectedDuration !== null;
+  const canSave = selectedType !== "" && selectedDuration !== null && !!selectedPricingRule && price >= minPrice && price <= maxPrice;
 
   const handleSave = async () => {
-    if (!canSave || saving) return;
+    if (!canSave || saving) { if (!selectedPricingRule) setSaveError("This duration is not enabled or priced by the administrator."); return; }
     setSaving(true);
     setSaveError("");
     const offering: SessionOffering = {
@@ -845,8 +864,8 @@ export default function AddEditOfferingScreen() {
     setTimeout(() => navigation.goBack(), 1200);
   };
 
-  const incrementPrice = () => setPrice((p) => Math.min(p + PRICE_STEP, MAX_PRICE));
-  const decrementPrice = () => setPrice((p) => Math.max(p - PRICE_STEP, MIN_PRICE));
+  const incrementPrice = () => setPrice((p) => Math.min(p + PRICE_STEP, maxPrice));
+  const decrementPrice = () => setPrice((p) => Math.max(p - PRICE_STEP, minPrice));
 
   return (
     <KeyboardFormLayout
@@ -897,14 +916,20 @@ export default function AddEditOfferingScreen() {
             <ThemedText style={styles.sectionTitle}>Duration</ThemedText>
           </View>
           <ThemedText style={styles.sectionSubtitle}>
-            How long is this session?
+            Choose a duration enabled by the Nature's Grace administrator.
           </ThemedText>
+          {pricingLoading ? <ThemedText style={styles.sectionSubtitle}>Loading approved durations…</ThemedText> : null}
           <View style={styles.durationGrid}>
             {DURATION_OPTIONS.map((option) => (
               <Pressable
                 key={option.minutes}
                 style={[styles.durationOption, selectedDuration === option.minutes && styles.durationOptionSelected]}
-                onPress={() => setSelectedDuration(option.minutes)}
+                onPress={() => {
+                  setSelectedDuration(option.minutes);
+                  const rule = pricingRules.find((item) => item.duration_minutes === option.minutes && item.is_enabled);
+                  if (rule) setPrice((current) => Math.min(Math.max(current || rule.min_price, rule.min_price), rule.max_price));
+                }}
+                disabled={!pricingRules.some((rule) => rule.duration_minutes === option.minutes && rule.is_enabled)}
                 testID={`duration-${option.minutes}`}
               >
                 <ThemedText style={[styles.durationText, selectedDuration === option.minutes && styles.durationTextSelected]}>
@@ -953,45 +978,48 @@ export default function AddEditOfferingScreen() {
             <PriceIcon />
             <ThemedText style={styles.sectionTitle}>Price</ThemedText>
           </View>
-          <ThemedText style={styles.sectionSubtitle}>
-            Set your session price (&#8377;500 - &#8377;2,500)
-          </ThemedText>
-          <View style={styles.priceCard}>
-            <Pressable
-              style={[styles.stepperBtn, price <= MIN_PRICE && styles.stepperBtnDisabled]}
-              onPress={decrementPrice}
-              disabled={price <= MIN_PRICE}
-              testID="button-price-minus"
-            >
-              <Feather name="minus" size={20} color={price <= MIN_PRICE ? Colors.light.textMuted : Colors.light.accent} />
-            </Pressable>
-            <View style={styles.priceDisplay}>
-              <ThemedText style={styles.priceSymbol}>&#8377;</ThemedText>
-              <ThemedText
-                style={styles.priceValue}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-              >
-                {price.toLocaleString()}
+          {!selectedDuration ? (
+            <ThemedText style={styles.sectionSubtitle}>Select an enabled duration to see its permitted price range.</ThemedText>
+          ) : !selectedPricingRule ? (
+            <ThemedText style={styles.sectionSubtitle}>This duration has not been enabled by the administrator. Choose another duration or contact the admin.</ThemedText>
+          ) : (
+            <>
+              <ThemedText style={styles.sectionSubtitle}>
+                Choose any whole-rupee price from ₹{minPrice.toLocaleString()} to ₹{maxPrice.toLocaleString()}.
               </ThemedText>
-            </View>
-            <Pressable
-              style={[styles.stepperBtn, price >= MAX_PRICE && styles.stepperBtnDisabled]}
-              onPress={incrementPrice}
-              disabled={price >= MAX_PRICE}
-              testID="button-price-plus"
-            >
-              <Feather name="plus" size={20} color={price >= MAX_PRICE ? Colors.light.textMuted : Colors.light.accent} />
-            </Pressable>
-          </View>
-          <View style={styles.priceRange}>
-            <ThemedText style={styles.priceRangeText}>&#8377;500</ThemedText>
-            <View style={styles.priceFill}>
-              <View style={[styles.priceBar, { width: `${((price - MIN_PRICE) / (MAX_PRICE - MIN_PRICE)) * 100}%` }]} />
-            </View>
-            <ThemedText style={styles.priceRangeText}>&#8377;2,500</ThemedText>
-          </View>
+              <View style={styles.priceCard}>
+                <Pressable
+                  style={[styles.stepperBtn, price <= minPrice && styles.stepperBtnDisabled]}
+                  onPress={decrementPrice}
+                  disabled={price <= minPrice}
+                  testID="button-price-minus"
+                >
+                  <Feather name="minus" size={20} color={price <= minPrice ? Colors.light.textMuted : Colors.light.accent} />
+                </Pressable>
+                <View style={styles.priceDisplay}>
+                  <ThemedText style={styles.priceSymbol}>&#8377;</ThemedText>
+                  <ThemedText style={styles.priceValue} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                    {price.toLocaleString()}
+                  </ThemedText>
+                </View>
+                <Pressable
+                  style={[styles.stepperBtn, price >= maxPrice && styles.stepperBtnDisabled]}
+                  onPress={incrementPrice}
+                  disabled={price >= maxPrice}
+                  testID="button-price-plus"
+                >
+                  <Feather name="plus" size={20} color={price >= maxPrice ? Colors.light.textMuted : Colors.light.accent} />
+                </Pressable>
+              </View>
+              <View style={styles.priceRange}>
+                <ThemedText style={styles.priceRangeText}>₹{minPrice.toLocaleString()}</ThemedText>
+                <View style={styles.priceFill}>
+                  <View style={[styles.priceBar, { width: maxPrice > minPrice ? `${Math.max(0, Math.min(100, ((price - minPrice) / (maxPrice - minPrice)) * 100))}%` : "100%" }]} />
+                </View>
+                <ThemedText style={styles.priceRangeText}>₹{maxPrice.toLocaleString()}</ThemedText>
+              </View>
+            </>
+          )}
         </View>
 
         <View style={styles.section}>
