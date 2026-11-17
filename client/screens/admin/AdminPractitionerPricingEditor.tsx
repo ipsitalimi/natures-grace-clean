@@ -63,35 +63,60 @@ export default function AdminPractitionerPricingEditor({
     if (!practitioner || saving) return;
     setSaving(true);
     setError("");
-    for (const duration of SUPPORTED_SESSION_DURATIONS) {
-      const draft = drafts[duration];
-      const min = Number(draft?.min);
-      const max = Number(draft?.max);
-      if (!draft || draft.min.trim() === "" || draft.max.trim() === ""
-        || !Number.isInteger(min) || !Number.isInteger(max)
-        || min < 0 || max > 10000 || min > max) {
-        setError(`Check the minimum and maximum for ${LABELS[duration]}. Use whole-rupee values from ₹0 to ₹10,000.`);
-        setSaving(false);
-        return;
+    try {
+      for (const duration of SUPPORTED_SESSION_DURATIONS) {
+        const draft = drafts[duration];
+        const min = Number(draft?.min);
+        const max = Number(draft?.max);
+        if (!draft || draft.min.trim() === "" || draft.max.trim() === ""
+          || !Number.isInteger(min) || !Number.isInteger(max)
+          || min < 0 || max > 10000 || min > max) {
+          setError(`Check the minimum and maximum for ${LABELS[duration]}. Use whole-rupee values from ₹0 to ₹10,000.`);
+          return;
+        }
       }
-    }
-    for (const duration of SUPPORTED_SESSION_DURATIONS) {
-      const draft = drafts[duration];
-      const result = await savePractitionerPricingRule({
-        practitionerId: practitioner.id,
-        durationMinutes: duration,
-        enabled: draft.enabled,
-        minPrice: Number(draft.min),
-        maxPrice: Number(draft.max),
+
+      for (const duration of SUPPORTED_SESSION_DURATIONS) {
+        const draft = drafts[duration];
+        const result = await savePractitionerPricingRule({
+          practitionerId: practitioner.id,
+          durationMinutes: duration,
+          enabled: draft.enabled,
+          minPrice: Number(draft.min),
+          maxPrice: Number(draft.max),
+        });
+        if (!result.ok) {
+          setError(`Could not save ${LABELS[duration]}: ${result.error}`);
+          return;
+        }
+      }
+
+      // Read the rules back from Supabase before closing. This prevents the
+      // admin UI from implying that pricing was saved when the write did not
+      // land in the same project/table the practitioner app reads.
+      const savedRules = await fetchPractitionerPricingRules(practitioner.id);
+      const missingOrDifferent = SUPPORTED_SESSION_DURATIONS.find((duration) => {
+        const draft = drafts[duration];
+        const saved = savedRules.find((rule) => rule.duration_minutes === duration);
+        return !saved ||
+          saved.is_enabled !== draft.enabled ||
+          saved.min_price !== Number(draft.min) ||
+          saved.max_price !== Number(draft.max);
       });
-      if (!result.ok) {
-        setError(`${LABELS[duration]}: ${result.error}`);
-        setSaving(false);
+      if (missingOrDifferent !== undefined) {
+        setError(
+          `Supabase did not confirm the saved ${LABELS[missingOrDifferent]} rule. Keep this window open and check the admin account's permissions and app environment.`
+        );
         return;
       }
+
+      onClose();
+    } catch (err) {
+      console.error("[AdminPractitionerPricingEditor] save failed:", err);
+      setError(err instanceof Error ? err.message : "Could not save pricing. Please try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    onClose();
   };
 
   return (
