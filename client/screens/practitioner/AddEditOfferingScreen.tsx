@@ -758,6 +758,7 @@ export default function AddEditOfferingScreen() {
   const [price, setPrice] = useState<number>(existingOffering?.price ?? 0);
   const [pricingRules, setPricingRules] = useState<PractitionerPricingRule[]>([]);
   const [pricingLoading, setPricingLoading] = useState(true);
+  const [pricingLoadError, setPricingLoadError] = useState("");
   const [notes, setNotes] = useState<string>(existingOffering?.notes ?? "");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -806,6 +807,7 @@ export default function AddEditOfferingScreen() {
     useCallback(() => {
       let cancelled = false;
       setPricingLoading(true);
+      setPricingLoadError("");
       setPricingRules([]);
       fetchMyPractitionerPricingRules(profile?.id)
         .then((rules) => {
@@ -813,7 +815,10 @@ export default function AddEditOfferingScreen() {
         })
         .catch((error) => {
           console.error("[AddEditOffering] Could not refresh practitioner pricing:", error);
-          if (!cancelled) setPricingRules([]);
+          if (!cancelled) {
+            setPricingRules([]);
+            setPricingLoadError(error instanceof Error ? error.message : "Could not load pricing rules.");
+          }
         })
         .finally(() => {
           if (!cancelled) setPricingLoading(false);
@@ -983,7 +988,14 @@ export default function AddEditOfferingScreen() {
               </Pressable>
             ))}
           </View>
-          {!pricingLoading && !pricingRules.some((rule) => rule.is_enabled) ? (
+          {!pricingLoading && pricingLoadError ? (
+            <View style={styles.durationWarning} testID="duration-pricing-load-error">
+              <Feather name="alert-circle" size={15} color="#8B5E20" />
+              <ThemedText style={styles.durationWarningText}>
+                Could not load your admin pricing settings: {pricingLoadError}
+              </ThemedText>
+            </View>
+          ) : !pricingLoading && !pricingRules.some((rule) => rule.is_enabled) ? (
             <View style={styles.durationWarning} testID="duration-admin-warning">
               <Feather name="alert-circle" size={15} color="#8B5E20" />
               <ThemedText style={styles.durationWarningText}>
