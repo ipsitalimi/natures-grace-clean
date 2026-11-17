@@ -6,7 +6,7 @@ import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { Practitioner } from "@/data/practitioners";
-import { formatInr } from "@/lib/formatCurrency";
+import AdminPractitionerPricingEditor from "@/screens/admin/AdminPractitionerPricingEditor";
 
 type ApprovalStatus = "Approved" | "Pending" | "Rejected";
 
@@ -23,7 +23,7 @@ function PractitionerCard({
   onReject,
   onToggleVerification,
   onEditBio,
-  onEditPrice,
+  onEditPricing,
 }: {
   practitioner: Practitioner;
   state: PractitionerState;
@@ -32,7 +32,7 @@ function PractitionerCard({
   onReject: () => void;
   onToggleVerification: () => void;
   onEditBio: () => void;
-  onEditPrice: () => void;
+  onEditPricing: () => void;
 }) {
   const getApprovalBadgeColor = (status: ApprovalStatus) => {
     switch (status) {
@@ -72,10 +72,9 @@ function PractitionerCard({
             <Feather name="edit-2" size={13} color={Colors.light.accent} />
             <ThemedText style={styles.editBioText}>Edit / publish bio</ThemedText>
           </Pressable>
-          <ThemedText style={styles.practitionerPrice}>{formatInr(practitioner.pricePerSession)}/-</ThemedText>
-          <Pressable style={styles.editBioButton} onPress={onEditPrice} testID={`button-edit-price-${practitioner.id}`}>
-            <Feather name="edit-2" size={13} color={Colors.light.accent} />
-            <ThemedText style={styles.editBioText}>Set session price</ThemedText>
+          <Pressable style={styles.editBioButton} onPress={onEditPricing} testID={`button-edit-pricing-${practitioner.id}`}>
+            <Feather name="sliders" size={13} color={Colors.light.accent} />
+            <ThemedText style={styles.editBioText}>Edit session pricing</ThemedText>
           </Pressable>
           
           <View style={styles.credentialSection}>
@@ -145,27 +144,13 @@ export default function AdminPractitionersScreen({
   onAddPractitioner: () => void;
   onBackToDashboard: () => void;
 }) {
-  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio, updatePractitionerPrice } = useDataContext();
+  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio } = useDataContext();
   const { logActivity } = usePlatformConfig();
   const [bioTarget, setBioTarget] = useState<Practitioner | null>(null);
   const [bioDraft, setBioDraft] = useState("");
   const [bioBusy, setBioBusy] = useState(false);
   const [bioError, setBioError] = useState("");
-  const [priceTarget, setPriceTarget] = useState<Practitioner | null>(null);
-  const [priceDraft, setPriceDraft] = useState("");
-  const [priceBusy, setPriceBusy] = useState(false);
-  const [priceError, setPriceError] = useState("");
-  const savePrice = async () => {
-    if (!priceTarget) return;
-    const value = Number(priceDraft);
-    if (!Number.isInteger(value) || value < 0) { setPriceError("Enter a non-negative whole-number price in INR."); return; }
-    setPriceBusy(true); setPriceError("");
-    const ok = await updatePractitionerPrice(priceTarget.id, value);
-    setPriceBusy(false);
-    if (!ok) { setPriceError("Could not save price. Check admin permissions and ensure the pricing migration is applied."); return; }
-    logActivity(`Practitioner price updated for ${priceTarget.name}`, "user");
-    setPriceTarget(null);
-  };
+  const [pricingTarget, setPricingTarget] = useState<Practitioner | null>(null);
   const saveBio = async () => {
     if (!bioTarget) return;
     if (bioDraft.trim().length > 600) { setBioError("Keep the public bio under 600 characters (about 4–5 lines)."); return; }
@@ -268,11 +253,7 @@ export default function AdminPractitionersScreen({
             setBioDraft(practitioner.bio ?? "");
             setBioError("");
           }}
-          onEditPrice={() => {
-            setPriceTarget(practitioner);
-            setPriceDraft(String(practitioner.pricePerSession ?? 0));
-            setPriceError("");
-          }}
+          onEditPricing={() => setPricingTarget(practitioner)}
         />
       ))
       )}
@@ -310,34 +291,8 @@ export default function AdminPractitionersScreen({
         </View>
       </Modal>
 
-      <Modal visible={priceTarget !== null} transparent animationType="fade" onRequestClose={() => setPriceTarget(null)}>
-        <View style={styles.bioModalOverlay}>
-          <View style={styles.bioModalCard}>
-            <ThemedText style={styles.bioModalTitle}>Set practitioner session price</ThemedText>
-            <ThemedText style={styles.bioModalHint}>
-              Pricing is managed by Admin and remains independent of service booking prices.
-            </ThemedText>
-            <TextInput
-              style={styles.bioInput}
-              value={priceDraft}
-              onChangeText={setPriceDraft}
-              keyboardType="numeric"
-              placeholder="Session price in INR"
-              placeholderTextColor={Colors.light.textMuted}
-              testID="input-admin-practitioner-price"
-            />
-            {priceError ? <ThemedText style={styles.bioError}>{priceError}</ThemedText> : null}
-            <View style={styles.bioActions}>
-              <Pressable onPress={() => setPriceTarget(null)} disabled={priceBusy}>
-                <ThemedText style={styles.bioCancel}>Cancel</ThemedText>
-              </Pressable>
-              <Pressable style={styles.bioSave} onPress={() => void savePrice()} disabled={priceBusy}>
-                {priceBusy ? <ActivityIndicator color="#FFFFFF" size="small" /> : <ThemedText style={styles.bioSaveText}>Save price</ThemedText>}
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+
+      <AdminPractitionerPricingEditor visible={pricingTarget !== null} practitioner={pricingTarget} onClose={() => setPricingTarget(null)} />
     </>
   );
 }

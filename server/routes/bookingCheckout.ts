@@ -6,7 +6,6 @@ import {
 } from "../services/razorpayCheckout";
 import { requireSupabaseAdmin } from "../lib/supabaseAdmin";
 import { requireBearerUser } from "../middleware/auth";
-import { calculateSessionPrice } from "../services/practitionerWalletLedger";
 import {
   fulfillBookingPayment,
   savePendingBookingCheckout,
@@ -47,6 +46,21 @@ async function validateBookingAmount(
     }
 
     const expected = Number((offering as { price: number }).price);
+    const { data: pricingRule, error: pricingRuleError } = await supabase
+      .from("practitioner_pricing_rules")
+      .select("is_enabled, min_price, max_price")
+      .eq("practitioner_id", practitionerId)
+      .eq("duration_minutes", durationMinutes)
+      .maybeSingle();
+
+    if (pricingRuleError || !pricingRule || !pricingRule.is_enabled) {
+      return { ok: false, error: "This session duration is not currently enabled by the administrator" };
+    }
+    const minPrice = Number(pricingRule.min_price);
+    const maxPrice = Number(pricingRule.max_price);
+    if (expected < minPrice || expected > maxPrice) {
+      return { ok: false, error: "This offering's price is outside the administrator's current permitted range" };
+    }
     if (Math.abs(expected - amountInr) > 0.01) {
       return { ok: false, error: "Booking amount does not match offering price" };
     }
@@ -63,16 +77,26 @@ async function validateBookingAmount(
     return { ok: false, error: "Practitioner not found" };
   }
 
-  const expected = calculateSessionPrice(
-    Number(practitioner.price_per_session),
-    durationMinutes
-  );
+  const { data: pricingRule, error: pricingRuleError } = await supabase
+    .from("practitioner_pricing_rules")
+    .select("is_enabled, min_price, max_price")
+    .eq("practitioner_id", practitionerId)
+    .eq("duration_minutes", durationMinutes)
+    .maybeSingle();
 
-  if (Math.abs(expected - amountInr) > 0.01) {
-    return { ok: false, error: "Booking amount does not match practitioner pricing" };
+  if (pricingRuleError || !pricingRule || !pricingRule.is_enabled) {
+    return { ok: false, error: "This session duration is not currently enabled by the administrator" };
   }
 
-  return { ok: true, amountInr: expected };
+  const minPrice = Number(pricingRule.min_price);
+  const maxPrice = Number(pricingRule.max_price);
+  if (amountInr < minPrice || amountInr > maxPrice) {
+    return { ok: false, error: "Booking amount is outside the administrator's permitted price range" };
+  }
+
+  // Legacy bookings without an offering ID remain supported, but their amount
+  // must still fall within the current admin-controlled range.
+  return { ok: true, amountInr };
 }
 
 /** POST /api/bookings/checkout/create-order */

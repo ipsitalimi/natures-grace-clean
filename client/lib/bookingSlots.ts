@@ -20,7 +20,7 @@ function formatTime12h(totalMinutes: number): string {
   return `${hours12}:${minutes.toString().padStart(2, "0")} ${meridiem}`;
 }
 
-function slotsBetween(start: string, end: string, stepMinutes = 60): string[] {
+function slotsBetween(start: string, end: string, stepMinutes = 60, durationMinutes = 0): string[] {
   const startMin = parseTime12h(start);
   const endMin = parseTime12h(end);
   if (startMin === null || endMin === null || endMin <= startMin) {
@@ -28,7 +28,7 @@ function slotsBetween(start: string, end: string, stepMinutes = 60): string[] {
   }
 
   const slots: string[] = [];
-  for (let t = startMin; t < endMin; t += stepMinutes) {
+  for (let t = startMin; t + durationMinutes <= endMin; t += stepMinutes) {
     slots.push(formatTime12h(t));
   }
   return slots;
@@ -63,22 +63,23 @@ export function getBookingDates(maxDays: number): {
 
 export function getTimeSlotsForDate(
   isoDate: string,
-  availability: OfferingAvailabilityState
+  availability: OfferingAvailabilityState,
+  durationMinutes = 0
 ): string[] {
-  if (availability.alwaysAvailable) {
-    return slotsBetween(availability.globalTiming.start, availability.globalTiming.end);
-  }
-
-  if (!availability.selectedDates.includes(isoDate)) {
+  if (!availability.alwaysAvailable && !availability.selectedDates.includes(isoDate)) {
     return [];
   }
 
-  if (availability.timingMode === "custom" && availability.dateTimings[isoDate]) {
-    const timing = availability.dateTimings[isoDate];
-    return slotsBetween(timing.start, timing.end);
-  }
+  const timing = !availability.alwaysAvailable &&
+    availability.timingMode === "custom" &&
+    availability.dateTimings[isoDate]
+      ? availability.dateTimings[isoDate]
+      : availability.globalTiming;
 
-  return slotsBetween(availability.globalTiming.start, availability.globalTiming.end);
+  const windows = [timing, ...(timing.additional ?? [])];
+  return [...new Set(windows.flatMap((window) =>
+    slotsBetween(window.start, window.end, 60, durationMinutes)
+  ))].sort((a, b) => (parseTime12h(a) ?? 0) - (parseTime12h(b) ?? 0));
 }
 
 export function isDateBookable(isoDate: string, availability: OfferingAvailabilityState): boolean {

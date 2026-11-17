@@ -88,6 +88,23 @@ export async function upsertOffering(
     console.error("[practitionerOfferings] upsert: practitioner profile not provisioned");
     return null;
   }
+  const { data: pricingRule, error: pricingError } = await supabase
+    .from("practitioner_pricing_rules")
+    .select("is_enabled, min_price, max_price")
+    .eq("practitioner_id", practitionerId)
+    .eq("duration_minutes", offering.duration)
+    .maybeSingle();
+  if (pricingError || !pricingRule || !pricingRule.is_enabled) {
+    console.error("[practitionerOfferings] duration is not enabled by admin:", pricingError?.message);
+    return null;
+  }
+  const minPrice = Number(pricingRule.min_price);
+  const maxPrice = Number(pricingRule.max_price);
+  if (!Number.isInteger(offering.price) || offering.price < minPrice || offering.price > maxPrice) {
+    console.error(`[practitionerOfferings] price must be between ${minPrice} and ${maxPrice}`);
+    return null;
+  }
+
   const payload = {
     practitioner_id: practitionerId,
     session_type: offering.sessionType,
