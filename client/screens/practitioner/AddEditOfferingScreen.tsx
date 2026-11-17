@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, StyleSheet, TextInput, Pressable, Switch } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
 
@@ -799,16 +799,30 @@ export default function AddEditOfferingScreen() {
 
   const sessionTypeOptions = approvedSessionTypes;
 
-  useEffect(() => {
-    let cancelled = false;
-    setPricingLoading(true);
-    fetchMyPractitionerPricingRules(profile?.id).then((rules) => {
-      if (!cancelled) setPricingRules(rules);
-    }).finally(() => {
-      if (!cancelled) setPricingLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [profile?.id]);
+  // React Navigation keeps stack screens mounted when they lose focus. Refresh
+  // pricing whenever this screen becomes active so admin changes are picked up
+  // without requiring the practitioner to sign out or restart the app.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setPricingLoading(true);
+      setPricingRules([]);
+      fetchMyPractitionerPricingRules(profile?.id)
+        .then((rules) => {
+          if (!cancelled) setPricingRules(rules);
+        })
+        .catch((error) => {
+          console.error("[AddEditOffering] Could not refresh practitioner pricing:", error);
+          if (!cancelled) setPricingRules([]);
+        })
+        .finally(() => {
+          if (!cancelled) setPricingLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [profile?.id])
+  );
 
   const selectedPricingRule = pricingRules.find(
     (rule) => rule.duration_minutes === selectedDuration && rule.is_enabled
@@ -969,6 +983,18 @@ export default function AddEditOfferingScreen() {
               </Pressable>
             ))}
           </View>
+          {!pricingLoading && !pricingRules.some((rule) => rule.is_enabled) ? (
+            <View style={styles.durationWarning} testID="duration-admin-warning">
+              <Feather name="alert-circle" size={15} color="#8B5E20" />
+              <ThemedText style={styles.durationWarningText}>
+                You can add or edit a session offering only after the admin enables a session duration and sets its price range. Please contact the admin.
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText style={styles.durationHint}>
+              Durations that have not been enabled and priced by the admin cannot be selected.
+            </ThemedText>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -1194,6 +1220,31 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
   },
   durationTextSelected: { color: "#FFFFFF" },
+  durationWarning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: "#FFF6E8",
+    borderWidth: 1,
+    borderColor: "#E8D3AE",
+  },
+  durationWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Nunito_400Regular",
+    color: "#76521F",
+  },
+  durationHint: {
+    marginTop: Spacing.sm,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
   priceCard: {
     flexDirection: "row",
     alignItems: "center",
