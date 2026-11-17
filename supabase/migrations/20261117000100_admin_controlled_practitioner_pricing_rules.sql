@@ -89,6 +89,12 @@ BEGIN
     RAISE EXCEPTION 'You can only manage offerings for your own approved practitioner profile';
   END IF;
 
+  -- Practitioners must always be able to unpublish an offering, even after
+  -- the administrator disables its duration.
+  IF NEW.is_active = FALSE THEN
+    RETURN NEW;
+  END IF;
+
   SELECT * INTO v_rule
   FROM public.practitioner_pricing_rules r
   WHERE r.practitioner_id = NEW.practitioner_id
