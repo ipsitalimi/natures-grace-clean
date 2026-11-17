@@ -53,7 +53,9 @@ export async function fetchMyPractitionerPricingRules(
   profileId?: string | null
 ): Promise<PractitionerPricingRule[]> {
   const practitionerId = await resolvePractitionerId(profileId);
-  if (!practitionerId) return [];
+  if (!practitionerId) {
+    throw new Error("No practitioner profile was found for this account in the connected Supabase project. Check that this app build uses the same project as the admin panel.");
+  }
   return fetchPractitionerPricingRules(practitionerId);
 }
 
