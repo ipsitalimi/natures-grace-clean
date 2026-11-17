@@ -47,6 +47,21 @@ async function validateBookingAmount(
     }
 
     const expected = Number((offering as { price: number }).price);
+    const { data: pricingRule, error: pricingRuleError } = await supabase
+      .from("practitioner_pricing_rules")
+      .select("is_enabled, min_price, max_price")
+      .eq("practitioner_id", practitionerId)
+      .eq("duration_minutes", durationMinutes)
+      .maybeSingle();
+
+    if (pricingRuleError || !pricingRule || !pricingRule.is_enabled) {
+      return { ok: false, error: "This session duration is not currently enabled by the administrator" };
+    }
+    const minPrice = Number(pricingRule.min_price);
+    const maxPrice = Number(pricingRule.max_price);
+    if (expected < minPrice || expected > maxPrice) {
+      return { ok: false, error: "This offering's price is outside the administrator's current permitted range" };
+    }
     if (Math.abs(expected - amountInr) > 0.01) {
       return { ok: false, error: "Booking amount does not match offering price" };
     }
