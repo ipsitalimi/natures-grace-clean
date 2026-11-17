@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, StyleSheet, TextInput, Pressable, Switch } from "react-native";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
 
@@ -799,16 +799,30 @@ export default function AddEditOfferingScreen() {
 
   const sessionTypeOptions = approvedSessionTypes;
 
-  useEffect(() => {
-    let cancelled = false;
-    setPricingLoading(true);
-    fetchMyPractitionerPricingRules(profile?.id).then((rules) => {
-      if (!cancelled) setPricingRules(rules);
-    }).finally(() => {
-      if (!cancelled) setPricingLoading(false);
-    });
-    return () => { cancelled = true; };
-  }, [profile?.id]);
+  // React Navigation keeps stack screens mounted when they lose focus. Refresh
+  // pricing whenever this screen becomes active so admin changes are picked up
+  // without requiring the practitioner to sign out or restart the app.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setPricingLoading(true);
+      setPricingRules([]);
+      fetchMyPractitionerPricingRules(profile?.id)
+        .then((rules) => {
+          if (!cancelled) setPricingRules(rules);
+        })
+        .catch((error) => {
+          console.error("[AddEditOffering] Could not refresh practitioner pricing:", error);
+          if (!cancelled) setPricingRules([]);
+        })
+        .finally(() => {
+          if (!cancelled) setPricingLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [profile?.id])
+  );
 
   const selectedPricingRule = pricingRules.find(
     (rule) => rule.duration_minutes === selectedDuration && rule.is_enabled
