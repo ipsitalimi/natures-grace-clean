@@ -51,6 +51,7 @@ export async function fetchAvailabilityForOffering(
       globalTiming: {
         start: global?.start_time ?? "9:00 AM",
         end: global?.end_time ?? "5:00 PM",
+        additional: rows.filter((r) => !r.specific_date && r.is_available && r.id !== global?.id).map((r) => ({ start: r.start_time, end: r.end_time })),
       },
       dateTimings: {},
     };
@@ -58,12 +59,12 @@ export async function fetchAvailabilityForOffering(
 
   const dated = rows.filter((r) => r.specific_date && r.is_available);
   const timingMode = (dated[0]?.timing_mode as "same" | "custom") ?? "same";
-  const selectedDates = dated.map((r) => r.specific_date as string);
-  const dateTimings: Record<string, { start: string; end: string }> = {};
-  for (const r of dated) {
-    if (r.specific_date) {
-      dateTimings[r.specific_date] = { start: r.start_time, end: r.end_time };
-    }
+  const selectedDates = [...new Set(dated.map((r) => r.specific_date as string))];
+  const dateTimings: Record<string, { start: string; end: string; additional?: { start: string; end: string }[] }> = {};
+  for (const date of selectedDates) {
+    const dateRows = dated.filter((r) => r.specific_date === date);
+    const [first, ...rest] = dateRows;
+    if (first) dateTimings[date] = { start: first.start_time, end: first.end_time, additional: rest.map((r) => ({ start: r.start_time, end: r.end_time })) };
   }
 
   const first = dated[0];
@@ -74,6 +75,7 @@ export async function fetchAvailabilityForOffering(
     globalTiming: {
       start: first?.start_time ?? "9:00 AM",
       end: first?.end_time ?? "5:00 PM",
+      additional: dated.filter((r) => r.specific_date === first?.specific_date && r.id !== first?.id).map((r) => ({ start: r.start_time, end: r.end_time })),
     },
     dateTimings,
   };
@@ -106,24 +108,25 @@ export async function saveAvailabilityForOffering(
       metadata: { alwaysAvailable: true },
     });
     if (insertError) throw new Error("Could not save availability: " + insertError.message);
+    const extraRows = (input.globalTiming.additional ?? []).map((slot) => ({
+      practitioner_id: practitionerId, offering_id: offeringId, start_time: slot.start,
+      end_time: slot.end, is_available: true, timing_mode: input.timingMode, metadata: { alwaysAvailable: true },
+    }));
+    if (extraRows.length) {
+      const { error } = await supabase.from("practitioner_availability").insert(extraRows);
+      if (error) throw new Error("Could not save additional availability: " + error.message);
+    }
     return;
   }
 
-  const rows = input.selectedDates.map((dateKey) => {
-    const slot =
-      input.timingMode === "custom" && input.dateTimings[dateKey]
-        ? input.dateTimings[dateKey]
-        : input.globalTiming;
-    return {
-      practitioner_id: practitionerId,
-      offering_id: offeringId,
-      specific_date: dateKey,
-      start_time: slot.start,
-      end_time: slot.end,
-      is_available: true,
-      timing_mode: input.timingMode,
-      metadata: {},
-    };
+  const rows = input.selectedDates.flatMap((dateKey) => {
+    const slot = input.timingMode === "custom" && input.dateTimings[dateKey]
+      ? input.dateTimings[dateKey] : input.globalTiming;
+    return [slot, ...(slot.additional ?? [])].map((window) => ({
+      practitioner_id: practitionerId, offering_id: offeringId, specific_date: dateKey,
+      start_time: window.start, end_time: window.end, is_available: true,
+      timing_mode: input.timingMode, metadata: {},
+    }));
   });
 
   if (rows.length) {
