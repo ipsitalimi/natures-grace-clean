@@ -969,6 +969,18 @@ export default function AddEditOfferingScreen() {
               </Pressable>
             ))}
           </View>
+          {!pricingLoading && !pricingRules.some((rule) => rule.is_enabled) ? (
+            <View style={styles.durationWarning} testID="duration-admin-warning">
+              <Feather name="alert-circle" size={15} color="#8B5E20" />
+              <ThemedText style={styles.durationWarningText}>
+                You can add or edit a session offering only after the admin enables a session duration and sets its price range. Please contact the admin.
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText style={styles.durationHint}>
+              Durations that have not been enabled and priced by the admin cannot be selected.
+            </ThemedText>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -1194,6 +1206,31 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
   },
   durationTextSelected: { color: "#FFFFFF" },
+  durationWarning: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: Spacing.sm,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: "#FFF6E8",
+    borderWidth: 1,
+    borderColor: "#E8D3AE",
+  },
+  durationWarningText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: "Nunito_400Regular",
+    color: "#76521F",
+  },
+  durationHint: {
+    marginTop: Spacing.sm,
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Nunito_400Regular",
+    color: Colors.light.textMuted,
+  },
   priceCard: {
     flexDirection: "row",
     alignItems: "center",
