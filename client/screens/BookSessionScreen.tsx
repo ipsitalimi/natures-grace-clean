@@ -171,8 +171,9 @@ export default function BookSessionScreen() {
   const selectedDate = selectedDateIndex !== null ? dates[selectedDateIndex] : null;
   const timeSlots = useMemo(() => {
     if (!selectedDate || !selectedAvailability) return [];
-    return getTimeSlotsForDate(selectedDate.isoDate, selectedAvailability);
-  }, [selectedDate, selectedAvailability]);
+    const duration = selectedDurationIndex !== null ? durationOptions[selectedDurationIndex]?.minutes ?? 0 : 0;
+    return getTimeSlotsForDate(selectedDate.isoDate, selectedAvailability, duration);
+  }, [selectedDate, selectedAvailability, selectedDurationIndex, durationOptions]);
 
   useEffect(() => {
     let cancelled = false;
