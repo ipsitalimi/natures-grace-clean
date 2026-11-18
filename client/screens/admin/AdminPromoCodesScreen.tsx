@@ -181,7 +181,7 @@ export default function AdminPromoCodesScreen({ onBackToDashboard }: { onBackToD
         <Pressable style={styles.backButton} onPress={onBackToDashboard} testID="button-back-dashboard">
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Promo Codes</ThemedText>
+        
       </View>
 
       {!isSupabaseConfigured() ? (

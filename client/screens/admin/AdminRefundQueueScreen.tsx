@@ -87,7 +87,7 @@ export default function AdminRefundQueueScreen({
         <Pressable style={styles.backButton} onPress={onBackToDashboard}>
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Refund Requests</ThemedText>
+        
       </View>
 
       {loading ? (

@@ -175,6 +175,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [mode, setMode] = useState("Online");
+  const [venue, setVenue] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [saved, setSaved] = useState(false);
@@ -182,6 +183,8 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const [activeMembersLoading, setActiveMembersLoading] = useState(() => isSupabaseConfigured());
   const [activeMembersError, setActiveMembersError] = useState<string | null>(null);
   const openFlagged = flaggedItems.filter((f) => !f.resolved);
+  const activeEvents = events.filter((event) => event.status !== "Ended" && event.isVisible !== false);
+  const archivedEvents = events.filter((event) => event.status === "Ended" || event.isVisible === false);
 
   useEffect(() => {
     let cancelled = false;
@@ -223,6 +226,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     setDate("");
     setTime("");
     setMode("Online");
+    setVenue("");
     setPrice("");
     setDescription("");
     setEditingEventId(null);
@@ -239,6 +243,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     setDate(event.date);
     setTime(event.time);
     setMode(event.mode);
+    setVenue(event.venue ?? "");
     setPrice(extractPriceInput(event));
     setDescription(event.description);
     setShowForm(true);
@@ -268,6 +273,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
       date: date.trim(),
       time: time.trim(),
       mode,
+      venue: venue.trim(),
       pricing: price.trim() ? [{ label: "Entry Fee", amount: price.trim() }] : [],
       price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
     };
@@ -325,7 +331,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const handleHideEvent = async (eventId: string) => {
     const event = events.find((item) => item.id === eventId);
     if (!event) return;
-    const nextVisible = event.isVisible === false;
+    const nextVisible = event.status === "Ended" || event.isVisible === false;
     const updated = await setEventVisibility(eventId, nextVisible);
     if (!updated) {
       Alert.alert("Could not update event", "Check your connection and admin permissions, then try again.");
@@ -335,19 +341,41 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   };
 
   const handleDeleteEvent = (eventId: string) => {
-    Alert.alert("Archive event", "Hide this event from customers and mark it ended? The event and its registration history will be retained.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Archive", style: "destructive", onPress: () => {
-        void (async () => {
-          const deleted = await deleteEvent(eventId);
-          if (!deleted) {
-            Alert.alert("Could not delete event", "Check your connection and admin permissions, then try again.");
-            return;
-          }
-          logActivity(`Event ${eventId} deleted`, "event");
-        })();
-      }},
-    ]);
+    const event = events.find((item) => item.id === eventId);
+    if (!event) return;
+
+    Alert.alert(
+      "Delete event?",
+      "Events without registrations will be permanently deleted. Events with registration history will be archived so attendee records remain safe.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              const result = await deleteEvent(eventId);
+              if (!result) {
+                Alert.alert(
+                  "Could not delete event",
+                  "The event was not changed. Check your connection and admin permissions, then try again."
+                );
+                return;
+              }
+              if (result === "deleted") {
+                logActivity(`Event ${eventId} permanently deleted`, "event");
+                return;
+              }
+              logActivity(`Event ${eventId} archived because it has registrations`, "event");
+              Alert.alert(
+                "Event archived",
+                "This event has registration history, so it was removed from active events and placed in Archived Events. Its attendee records were preserved."
+              );
+            })();
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -361,13 +389,13 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
         <Pressable style={styles.backButton} onPress={onBackToDashboard} testID="button-back-dashboard">
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Community Management</ThemedText>
+        
       </View>
 
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Feather name="calendar" size={16} color={Colors.light.accent} />
-          <ThemedText style={styles.statValue} testID="text-active-events">{events.length}</ThemedText>
+          <ThemedText style={styles.statValue} testID="text-active-events">{activeEvents.length}</ThemedText>
           <ThemedText style={styles.statLabel}>Active Events</ThemedText>
         </View>
         <View style={styles.statCard}>
@@ -400,7 +428,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
       ) : null}
 
       <View style={styles.subHeaderRow}>
-        <ThemedText style={styles.subSectionTitle}>Events ({events.length})</ThemedText>
+        <ThemedText style={styles.subSectionTitle}>Events ({activeEvents.length})</ThemedText>
         <Pressable style={styles.addButton} onPress={openCreateForm} testID="button-create-event">
           <Feather name="plus" size={16} color="#FFFFFF" />
           <ThemedText style={styles.addButtonText}>Create Event</ThemedText>
@@ -414,7 +442,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
         <ThemedText style={styles.errorText}>{registrationsError}</ThemedText>
       ) : null}
 
-      {events.map((event) => (
+      {activeEvents.map((event) => (
         <EventCard
           key={event.id}
           event={event}
@@ -434,6 +462,34 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
           onDelete={() => handleDeleteEvent(event.id)}
         />
       ))}
+
+      {archivedEvents.length > 0 ? (
+        <>
+          <ThemedText style={styles.subSectionTitle}>Archived Events ({archivedEvents.length})</ThemedText>
+          {archivedEvents.map((event) => (
+            <View key={event.id} style={styles.card} testID={`card-archived-event-${event.id}`}>
+              <View style={styles.cardHeader}>
+                <ThemedText style={styles.cardTitle} numberOfLines={1}>{event.title}</ThemedText>
+                <View style={[styles.badge, getStatusBadgeStyle("Ended")]}>
+                  <ThemedText style={styles.badgeText}>Archived</ThemedText>
+                </View>
+              </View>
+              <ThemedText style={styles.cardDate}>{event.date}</ThemedText>
+              <View style={styles.cardRow}>
+                <ThemedText style={styles.cardPrice}>{event.price}</ThemedText>
+                <Pressable
+                  style={styles.addButton}
+                  onPress={() => void handleHideEvent(event.id)}
+                  testID={`button-restore-event-${event.id}`}
+                >
+                  <Feather name="rotate-ccw" size={14} color="#FFFFFF" />
+                  <ThemedText style={styles.addButtonText}>Restore</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </>
+      ) : null}
 
       <ThemedText style={styles.subSectionTitle}>
         Flagged Content ({moderationLoading ? "…" : openFlagged.length})
@@ -591,7 +647,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
               </Pressable>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <ThemedText style={styles.inputLabel}>Title *</ThemedText>
               <TextInput
                 style={styles.input}
@@ -651,6 +707,17 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
                   <ThemedText style={[styles.modeButtonText, mode === "In Person" ? styles.modeButtonTextActive : null]}>In Person</ThemedText>
                 </Pressable>
               </View>
+
+              <ThemedText style={styles.inputLabel}>{mode === "In Person" ? "Venue" : "Platform / meeting link"}</ThemedText>
+              <TextInput
+                style={styles.input}
+                value={venue}
+                onChangeText={setVenue}
+                placeholder={mode === "In Person" ? "Enter venue name and address" : "Enter platform name or meeting link"}
+                placeholderTextColor={Colors.light.textSecondary}
+                autoCapitalize="sentences"
+                testID="input-event-venue"
+              />
 
               <ThemedText style={styles.inputLabel}>Ticket price in INR (leave empty for Free)</ThemedText>
               <TextInput

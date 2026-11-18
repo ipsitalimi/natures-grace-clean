@@ -177,7 +177,7 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
         <Pressable style={styles.backButton} onPress={onBackToDashboard} testID="button-back-dashboard">
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Settings</ThemedText>
+        
       </View>
 
       <ThemedText style={styles.subSectionTitle}>General</ThemedText>

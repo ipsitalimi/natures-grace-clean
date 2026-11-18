@@ -27,7 +27,7 @@ export default function AdminAuditLogScreen({
         <Pressable style={styles.backButton} onPress={onBackToDashboard}>
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Audit Log</ThemedText>
+        
       </View>
 
       <ThemedText style={styles.hint}>

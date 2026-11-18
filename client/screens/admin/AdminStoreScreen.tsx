@@ -232,7 +232,7 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
         <Pressable style={styles.backButton} onPress={onBackToDashboard} testID="button-back-dashboard">
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Store ({allProducts.length})</ThemedText>
+        
         <Pressable style={styles.addButton} onPress={handleAddNew} testID="button-add-product">
           <Feather name="plus" size={16} color="#FFFFFF" />
           <ThemedText style={styles.addButtonText}>Add Product</ThemedText>

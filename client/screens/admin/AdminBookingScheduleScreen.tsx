@@ -53,7 +53,7 @@ export default function AdminBookingScheduleScreen({ onBackToDashboard }: { onBa
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Pressable style={styles.back} onPress={onBackToDashboard}><Feather name="arrow-left" size={17} color={Colors.light.accent} /></Pressable>
-        <ThemedText style={styles.title}>Session Scheduling</ThemedText>
+        
       </View>
       <ThemedText style={styles.helper}>Admin-managed date, time and HTTPS meeting link. Date format: YYYY-MM-DD; time: 24-hour HH:MM.</ThemedText>
       {loading ? <ActivityIndicator color={Colors.light.accent} style={{ marginTop: 32 }} /> : error ? <ThemedText style={styles.error}>{error}</ThemedText> : sessions.length === 0 ? <ThemedText style={styles.empty}>No upcoming bookings found.</ThemedText> : sessions.map((s) => {

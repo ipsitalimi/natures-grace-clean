@@ -49,18 +49,59 @@ export async function insertEvent(event: Omit<CommunityEvent, "dbId">): Promise<
   return eventRowToCommunityEvent(data as DbEventRow);
 }
 
-/** Archive/hide an event while retaining the event and attendee records. */
-export async function deleteEventByDbId(dbId: string): Promise<boolean> {
+/**
+ * Permanently delete events that have no registration history.
+ * Events with registrations are archived so attendee/payment history is preserved.
+ */
+export type EventDeleteResult = "deleted" | "archived" | false;
+
+export async function deleteEventByDbId(dbId: string): Promise<EventDeleteResult> {
   const supabase = getSupabase();
   if (!supabase) return false;
+
+  const { count, error: countError } = await supabase
+    .from("event_registrations")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", dbId);
+
+  if (countError) {
+    console.error("[eventsService] registration count before delete:", countError.message);
+    return false;
+  }
+
+  const archiveEvent = async (): Promise<EventDeleteResult> => {
+    const { data, error } = await supabase
+      .from("events")
+      .update({ is_visible: false, status: "Ended" })
+      .eq("id", dbId)
+      .select("id")
+      .maybeSingle();
+    if (error) console.error("[eventsService] archive:", error.message);
+    return !error && data?.id ? "archived" : false;
+  };
+
+  if ((count ?? 0) > 0) {
+    return archiveEvent();
+  }
+
   const { data, error } = await supabase
     .from("events")
-    .update({ is_visible: false, status: "Ended" })
+    .delete()
     .eq("id", dbId)
     .select("id")
     .maybeSingle();
-  if (error) console.error("[eventsService] archive:", error.message);
-  return !error && Boolean(data?.id);
+
+  if (!error && data?.id) return "deleted";
+
+  // A registration may have been created after the count query. The FK
+  // restriction is the final safeguard; archive instead of losing history.
+  if (error?.code === "23503") {
+    console.warn("[eventsService] Event gained registration history during delete; archiving instead.");
+    return archiveEvent();
+  }
+
+  if (error) console.error("[eventsService] delete:", error.message);
+  return false;
 }
 
 export async function updateEventVisibility(dbId: string, isVisible: boolean): Promise<boolean> {
@@ -87,6 +128,7 @@ export type EventUpdatePatch = Partial<
     | "date"
     | "time"
     | "mode"
+    | "venue"
     | "price"
     | "pricing"
     | "whatToExpect"

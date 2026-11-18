@@ -79,7 +79,7 @@ export default function AdminLegalScreen({ onBackToDashboard }: { onBackToDashbo
         <Pressable style={styles.backBtn} onPress={onBackToDashboard} testID="admin-legal-back">
           <Feather name="arrow-left" size={20} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.headerTitle}>Legal Management</ThemedText>
+        
       </View>
 
       <ThemedText style={styles.intro}>
