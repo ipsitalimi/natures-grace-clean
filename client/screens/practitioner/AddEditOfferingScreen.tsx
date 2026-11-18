@@ -5,7 +5,7 @@ import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
 
 import { ThemedText } from "@/components/ThemedText";
-import { BackHeader, BelowHeaderTitle, KeyboardFormLayout } from "@/components/layout";
+import { TitleHeader, KeyboardFormLayout } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { SessionOffering } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
@@ -922,10 +922,7 @@ export default function AddEditOfferingScreen() {
       footerInset={30}
       header={
         <>
-          <BackHeader showNotifications={false} />
-          <BelowHeaderTitle>
-            {isEdit ? "Edit Offering" : "Add Session Offering"}
-          </BelowHeaderTitle>
+          <TitleHeader title={isEdit ? "Edit Offering" : "Add Session Offering"} showNotifications={false} />
         </>
       }
     >
