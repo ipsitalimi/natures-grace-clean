@@ -164,8 +164,7 @@ export default function PractitionerProfileScreen() {
       footerInset={30}
       header={
         <>
-          <BackHeader showNotifications={false} />
-          <BelowHeaderTitle>My Profile</BelowHeaderTitle>
+          <TitleHeader title="My Profile" showNotifications={false} />
         </>
       }
     >
