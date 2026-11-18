@@ -14,6 +14,7 @@ import { useDataContext } from "@/context/DataContext";
 import { useFavorites } from "@/context/FavoritesContext";
 import { useReviews } from "@/context/ReviewsContext";
 import { fetchOfferingsForPractitioner } from "@/services/content/practitionerOfferingsService";
+import type { SessionOffering } from "@/data/practitionerBookings";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import VerifiedBadge, { isVerifiedPractitioner } from "@/components/VerifiedBadge";
 import TrustIndicators from "@/components/TrustIndicators";
@@ -70,6 +71,7 @@ export default function PractitionerProfileScreen() {
   const [liveRating, setLiveRating] = useState<number | null>(null);
   const [liveReviewCount, setLiveReviewCount] = useState<number | null>(null);
   const [hasOfferings, setHasOfferings] = useState<boolean | null>(null);
+  const [offerings, setOfferings] = useState<SessionOffering[]>([]);
   const practitioner = practitionerCategories.flatMap((c) => c.practitioners).find((p) => p.id === practitionerId);
 
   if (!practitioner) {
@@ -103,7 +105,10 @@ export default function PractitionerProfileScreen() {
     }
     let cancelled = false;
     fetchOfferingsForPractitioner(practitionerId).then((rows) => {
-      if (!cancelled) setHasOfferings(rows.length > 0);
+      if (!cancelled) {
+        setOfferings(rows);
+        setHasOfferings(rows.length > 0);
+      }
     });
     return () => {
       cancelled = true;
@@ -243,20 +248,18 @@ export default function PractitionerProfileScreen() {
         <View style={styles.sessionCard}>
           <ThemedText style={styles.sessionCardTitle}>Session Details</ThemedText>
           
-          <View style={styles.sessionRow}>
-            <ThemedText style={styles.sessionLabel}>Type</ThemedText>
-            <ThemedText style={styles.sessionValue}>One-on-One Session</ThemedText>
-          </View>
-          
-          <View style={styles.sessionRow}>
-            <ThemedText style={styles.sessionLabel}>Duration</ThemedText>
-            <ThemedText style={styles.sessionValue}>60 minutes</ThemedText>
-          </View>
-          
-          <View style={styles.sessionRow}>
-            <ThemedText style={styles.sessionLabel}>Price</ThemedText>
-            <ThemedText style={styles.sessionPrice}>₹{practitioner.pricePerSession}</ThemedText>
-          </View>
+          {offerings.map((offering) => (
+            <View key={offering.id} style={styles.sessionOfferingRow}>
+              <View style={styles.sessionOfferingInfo}>
+                <ThemedText style={styles.sessionValue}>{offering.sessionType || "One-on-One Session"}</ThemedText>
+                <ThemedText style={styles.sessionLabel}>{offering.duration} minutes</ThemedText>
+              </View>
+              <ThemedText style={styles.sessionPrice}>₹{offering.price.toLocaleString("en-IN")}</ThemedText>
+            </View>
+          ))}
+          {hasOfferings === false ? (
+            <ThemedText style={styles.unavailableHint}>No active session offerings are available yet.</ThemedText>
+          ) : null}
 
           <Pressable
             style={[styles.bookButton, hasOfferings === false && styles.bookButtonMuted]}
@@ -404,11 +407,16 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     marginBottom: Spacing.md,
   },
-  sessionRow: {
+  sessionOfferingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+    gap: Spacing.md,
+  },
+  sessionOfferingInfo: {
+    flex: 1,
+    minWidth: 0,
   },
   sessionLabel: {
     fontSize: 14,
