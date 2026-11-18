@@ -19,10 +19,7 @@ export default function BelowHeaderTitle({ children, style, testID }: BelowHeade
     <View style={[styles.wrap, style]} testID={testID}>
       <ThemedText
         style={styles.title}
-        numberOfLines={2}
-        adjustsFontSizeToFit
-        minimumFontScale={0.8}
-        maxFontSizeMultiplier={1.3}
+        maxFontSizeMultiplier={1.2}
         testID={testID ? `${testID}-text` : "below-header-title"}
       >
         {children}
