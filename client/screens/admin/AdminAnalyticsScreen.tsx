@@ -30,7 +30,7 @@ export default function AdminAnalyticsScreen({ onBackToDashboard }: { onBackToDa
         <Pressable style={styles.backButton} onPress={onBackToDashboard} testID="button-back-dashboard">
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Analytics</ThemedText>
+        
       </View>
 
       <View style={styles.emptyCard}>
