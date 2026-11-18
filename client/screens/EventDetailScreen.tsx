@@ -116,7 +116,7 @@ export default function EventDetailScreen() {
   // Keep any price mentioned in the event note in sync with the current admin-set fee.
   const currentEventPrice = event.pricing?.[0]?.amount;
   const displayedBottomNote = event.bottomNote?.replace(
-    /₹\\s*[\\d,]+(?:\\.\\d{1,2})?/g,
+    /₹\s*[\d,]+(?:\.\d{1,2})?/g,
     currentEventPrice ? formatInr(Number(currentEventPrice) || 0) : event.price
   );
 
