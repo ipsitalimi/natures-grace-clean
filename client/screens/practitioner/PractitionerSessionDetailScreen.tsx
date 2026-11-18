@@ -135,7 +135,7 @@ export default function PractitionerSessionDetailScreen() {
 
           <View style={styles.notesSection}>
             <ThemedText style={styles.notesLabel}>Session notes</ThemedText>
-            {session.status === "Upcoming" && session.paymentStatus === "Paid" && session.meetingLink ? (
+            {session.status === "Upcoming" && session.meetingLink ? (
           <Pressable
             style={styles.introChatButton}
             onPress={() => void Linking.openURL(session.meetingLink!)}
