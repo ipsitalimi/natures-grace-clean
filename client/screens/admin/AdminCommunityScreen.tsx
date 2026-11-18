@@ -647,7 +647,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
               </Pressable>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <ThemedText style={styles.inputLabel}>Title *</ThemedText>
               <TextInput
                 style={styles.input}
