@@ -44,6 +44,7 @@ export const DEFAULT_HOME_CONTENT: HomeContent = {
   affirmations: [],
   breathingMessage: "Take a deep breath. You are here now.",
   welcomeName: "",
+  adminPhotoUrl: "",
   globalBanner: {
     enabled: false,
     message: "",
