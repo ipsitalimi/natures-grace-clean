@@ -128,6 +128,7 @@ export async function fetchWalletSnapshot(commissionRate = 10): Promise<SellerWa
     .from("wallet_transactions")
     .select("*")
     .eq("wallet_id", wallet.id)
+    .neq("category", "earning_release")
     .order("created_at", { ascending: false })
     .limit(50);
 
