@@ -238,7 +238,7 @@ export default function SessionDetailScreen() {
           <DetailRow label="Price" value={`\u20B9${session.price}`} />
         </View>
 
-        {session.status === "Upcoming" && session.paymentStatus === "Paid" && session.meetingLink ? (
+        {session.status === "Upcoming" && session.meetingLink ? (
           <Pressable
             style={styles.refundCard}
             onPress={() => void Linking.openURL(session.meetingLink!)}
