@@ -45,7 +45,7 @@ export default function ScreenHeader({
 }: ScreenHeaderProps) {
   const navigation = useNavigation();
   const { width: windowWidth } = useWindowDimensions();
-  const headerSideWidth = windowWidth < 360 ? 56 : Layout.headerSideWidth;
+  const headerSideWidth = Math.min(72, Math.max(48, Math.round(windowWidth * 0.16)));
   const { headerPaddingTop, headerPaddingTopCompact, gutter } = useLayoutInsets();
   const unreadCount = useUnreadNotificationCount();
   const compact = variant === "compact";
@@ -86,10 +86,7 @@ export default function ScreenHeader({
       return (
         <ThemedText
           style={styles.headerTitle}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.65}
-          maxFontSizeMultiplier={1.25}
+          maxFontSizeMultiplier={1.2}
           testID="header-inline-title"
         >
           {title}
@@ -170,6 +167,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     minHeight: Layout.headerRowHeight,
+    paddingVertical: LayoutSpacing.xs,
   },
   side: {
     width: Layout.headerSideWidth,
