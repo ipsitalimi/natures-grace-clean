@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } from "react-native";
+import React from "react";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -42,33 +42,11 @@ function TransactionRow({ txn }: { txn: PractitionerWalletTransaction }) {
 
 export default function PractitionerWalletScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(24);
-  const { snapshot, requestPayout, loading, loadError, refresh } = usePractitionerContext();
+  const { snapshot, loading, loadError, refresh } = usePractitionerContext();
   const { session } = useAuth();
-  const [withdrawing, setWithdrawing] = useState(false);
-
   const bankLinked = isBankAccountLinked(snapshot.bankAccountLabel);
 
-  const handleWithdraw = async () => {
-    if (!bankLinked) {
-      Alert.alert("Bank details required", BANK_NOT_LINKED_NOTICE);
-      return;
-    }
-    if (snapshot.availableBalance <= 0) {
-      Alert.alert("No balance", "There is no available balance to withdraw yet.");
-      return;
-    }
-    setWithdrawing(true);
-    const result = await requestPayout();
-    setWithdrawing(false);
-    if (result.error) {
-      Alert.alert("Withdrawal", result.error);
-      return;
-    }
-    const body =
-      result.message ??
-      "Your withdrawal request was received. The Nature's Grace team processes requests manually within 3–7 business days.";
-    Alert.alert("Withdrawal requested", body);
-  };
+
 
   return (
     <View style={styles.container}>
@@ -121,17 +99,7 @@ export default function PractitionerWalletScreen() {
           >
             {formatInr(snapshot.availableBalance)}
           </ThemedText>
-          <Pressable
-            style={[styles.withdrawBtn, !bankLinked && styles.withdrawBtnDisabled]}
-            testID="button-withdraw"
-            onPress={handleWithdraw}
-            disabled={withdrawing || !bankLinked}
-          >
-            <Feather name="arrow-up-right" size={16} color="#FFFFFF" />
-            <ThemedText style={styles.withdrawBtnText}>
-              {bankLinked ? "Request withdrawal" : "Bank details required"}
-            </ThemedText>
-          </Pressable>
+
         </View>
 
         <View style={styles.summaryRow}>
