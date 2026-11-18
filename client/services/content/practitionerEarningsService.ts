@@ -114,6 +114,7 @@ export async function fetchWalletSnapshot(
     .from("practitioner_wallet_transactions")
     .select("*")
     .eq("wallet_id", wallet.id)
+    .neq("category", "earning_release")
     .order("created_at", { ascending: false })
     .limit(50);
 
