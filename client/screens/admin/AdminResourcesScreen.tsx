@@ -9,13 +9,14 @@ import { ResourceItem } from "@/data/mockResources";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import * as resourceEnrollmentsService from "@/services/content/resourceEnrollmentsService";
 
-type ResourceType = "Article" | "Practice" | "Audio Session" | "Course";
+type ResourceType = "Article" | "Practice" | "Audio Session" | "Course" | "Video Resource";
 
 const typeIcons: Record<ResourceType, keyof typeof Feather.glyphMap> = {
   "Article": "file-text",
   "Practice": "activity",
   "Audio Session": "headphones",
   "Course": "book-open",
+  "Video Resource": "video",
 };
 
 function sectionFromType(type: ResourceType): string {
@@ -24,6 +25,7 @@ function sectionFromType(type: ResourceType): string {
     case "Audio Session": return "Audio Sessions";
     case "Practice": return "Practices";
     case "Course": return "Courses";
+    case "Video Resource": return "Video Resources";
   }
 }
 
@@ -33,6 +35,7 @@ function actionFromType(type: ResourceType): string {
     case "Audio Session": return "Play";
     case "Practice": return "Start";
     case "Course": return "Express interest";
+    case "Video Resource": return "Watch video";
   }
 }
 
@@ -181,6 +184,13 @@ function CourseResourceRow({
               placeholder="Course title"
               placeholderTextColor={Colors.light.textSecondary}
             />
+            {selectedType === "Video Resource" ? (
+              <>
+                <ThemedText style={styles.inputLabel}>Video URL *</ThemedText>
+                <TextInput style={styles.input} value={formUrl} onChangeText={setFormUrl} placeholder="https://youtube.com/watch?v=..." placeholderTextColor={Colors.light.textSecondary} autoCapitalize="none" keyboardType="url" testID="input-resource-url" />
+              </>
+            ) : null}
+
             <ThemedText style={styles.inputLabel}>Content / Description</ThemedText>
             <TextInput
               style={[styles.input, styles.textArea]}
@@ -285,6 +295,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
   const [formLocations, setFormLocations] = useState("");
   const [formCertificate, setFormCertificate] = useState("");
   const [formPrice, setFormPrice] = useState("");
+  const [formUrl, setFormUrl] = useState("");
   const [saved, setSaved] = useState(false);
   const [courseInterests, setCourseInterests] = useState<resourceEnrollmentsService.AdminCourseInterest[]>([]);
   const [courseInterestsLoading, setCourseInterestsLoading] = useState(() => isSupabaseConfigured());
@@ -351,6 +362,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
   const audioSessions = resources.filter((r) => r.section === "Audio Sessions");
   const practices = resources.filter((r) => r.section === "Practices");
   const courses = resources.filter((r) => r.section === "Courses");
+  const videoResources = resources.filter((r) => r.section === "Video Resources");
 
   const publishedCount = resources.filter((r) => isPublished(r)).length;
   const unpublishedCount = resources.length - publishedCount;
@@ -365,11 +377,16 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
     setFormLocations("");
     setFormCertificate("");
     setFormPrice("");
+    setFormUrl("");
     setSaved(false);
   };
 
   const handleSave = async () => {
     if (!formTitle.trim() || !selectedType) return;
+    if (selectedType === "Video Resource" && !/^https?:\/\//i.test(formUrl.trim())) {
+      Alert.alert("Video URL required", "Enter a valid link beginning with https:// or http://.");
+      return;
+    }
     const created = await addResource({
       title: formTitle.trim(),
       description: formContent.trim().substring(0, 100) || `${formTitle.trim()} - a wellness resource.`,
@@ -382,6 +399,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
       schedule: selectedType === "Course" ? formSchedule.trim() || undefined : undefined,
       locations: selectedType === "Course" ? formLocations.trim() || undefined : undefined,
       certificateNote: selectedType === "Course" ? formCertificate.trim() || undefined : undefined,
+      url: selectedType === "Video Resource" ? formUrl.trim() || undefined : undefined,
     });
     if (!created) {
       Alert.alert("Could not save resource", "Check your connection and admin permissions, then try again.");
@@ -474,7 +492,15 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
           </ThemedText>
         </Pressable>
         <Pressable
-          style={[styles.actionButton, selectedType === "Course" ? styles.actionButtonActive : null]}
+          style={[styles.actionButton, selectedType === "Video Resource" ? styles.actionButtonActive : null]}
+          onPress={() => handleTypeSelect("Video Resource")}
+          testID="button-add-video-resource"
+        >
+          <Feather name="video" size={16} color={selectedType === "Video Resource" ? "#FFFFFF" : Colors.light.accent} />
+          <ThemedText style={[styles.actionButtonText, selectedType === "Video Resource" ? styles.actionButtonTextActive : null]}>Add Video</ThemedText>
+        </Pressable>
+        <Pressable
+          style={[styles.actionButton, selectedType === "Course" ? styles.actionButtonActive : null]
           onPress={() => handleTypeSelect("Course")}
           testID="button-add-course"
         >
@@ -625,6 +651,11 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
             })
           }
         />
+      ))}
+
+      <ThemedText style={styles.subSectionTitle}>Video Resources ({videoResources.length})</ThemedText>
+      {videoResources.map((resource) => (
+        <ResourceRow key={resource.id} resource={resource} onDelete={() => handleDeleteResource(resource.id, resource.title)} isPublished={isPublished(resource)} onTogglePublish={() => togglePublish(resource.id)} />
       ))}
 
       <ThemedText style={styles.subSectionTitle}>Articles ({articles.length})</ThemedText>
