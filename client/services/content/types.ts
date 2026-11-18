@@ -200,6 +200,7 @@ export function resourceRowToItem(row: DbResourceRow): ResourceItem {
     locations: typeof meta.locations === "string" ? meta.locations : undefined,
     certificateNote:
       typeof meta.certificateNote === "string" ? meta.certificateNote : undefined,
+    url: typeof meta.url === "string" ? meta.url : undefined,
   };
 }
 
