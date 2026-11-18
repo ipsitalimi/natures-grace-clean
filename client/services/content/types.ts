@@ -132,6 +132,7 @@ export function eventRowToCommunityEvent(row: DbEventRow): CommunityEvent {
     date: row.event_date,
     time: row.event_time,
     mode: row.mode,
+    venue: typeof meta.venue === "string" ? meta.venue : "",
     pricing,
     whatToExpect,
     ctaText: (meta.ctaText as string) ?? "Join Event",
@@ -157,6 +158,7 @@ export function communityEventToRow(
     is_visible: event.isVisible !== false,
     metadata: {
       legacy_id: event.id,
+      venue: event.venue ?? "",
       pricing: event.pricing,
       whatToExpect: event.whatToExpect,
       ctaText: event.ctaText,
