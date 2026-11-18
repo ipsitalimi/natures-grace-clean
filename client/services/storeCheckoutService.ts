@@ -190,6 +190,26 @@ export async function runStoreCheckoutPayment(params: {
   });
 }
 
+async function createFreeBooking(params: {
+  booking: BookingCheckoutDraft;
+  accessToken: string;
+}): Promise<BookingCheckoutResult> {
+  const baseUrl = tryGetApiBaseUrl();
+  if (!baseUrl) return { error: "Booking requires EXPO_PUBLIC_API_URL to be configured." };
+  try {
+    const res = await fetch(`${baseUrl}/api/bookings/free`, {
+      method: "POST",
+      headers: authJsonHeaders(params.accessToken),
+      body: JSON.stringify({ ...params.booking, amountInr: 0 }),
+    });
+    const payload = await res.json() as BookingCheckoutResult & { error?: string };
+    if (!res.ok) return { error: payload.error ?? `Server error (${res.status})` };
+    return payload;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Could not confirm free booking" };
+  }
+}
+
 export type BookingCheckoutResult = {
   paymentId?: string;
   bookingId?: string;
@@ -208,6 +228,16 @@ export async function runBookingCheckoutPayment(params: {
   customerName?: string;
   customerEmail?: string;
 }): Promise<BookingCheckoutResult> {
+  if (params.amountInr === 0) {
+    if (!params.booking.offeringId) {
+      return { error: "A configured free session offering is required for a free booking." };
+    }
+    return createFreeBooking({
+      booking: { ...params.booking, amountInr: 0 },
+      accessToken: params.accessToken,
+    });
+  }
+
   const receipt = buildBookingReceipt({
     userId: params.userId ?? "session",
     practitionerId: params.practitionerId,
