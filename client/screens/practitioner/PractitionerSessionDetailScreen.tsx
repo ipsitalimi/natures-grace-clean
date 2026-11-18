@@ -4,7 +4,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { BackHeader, BelowHeaderTitle } from "@/components/layout";
+import { TitleHeader } from "@/components/layout";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { usePractitionerContext } from "@/context/PractitionerContext";
@@ -69,8 +69,7 @@ export default function PractitionerSessionDetailScreen() {
   if (!session) {
     return (
       <View style={styles.container}>
-        <BackHeader showNotifications={false} />
-        <BelowHeaderTitle>Session Details</BelowHeaderTitle>
+        <TitleHeader title="Session Details" showNotifications={false} />
         <View style={styles.notFound}>
           <ThemedText style={styles.emptyText}>Session not found</ThemedText>
           <Pressable style={styles.backLink} onPress={() => navigation.goBack()}>
