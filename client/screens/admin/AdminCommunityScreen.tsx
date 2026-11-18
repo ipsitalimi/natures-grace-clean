@@ -175,6 +175,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [mode, setMode] = useState("Online");
+  const [venue, setVenue] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [saved, setSaved] = useState(false);
@@ -225,6 +226,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     setDate("");
     setTime("");
     setMode("Online");
+    setVenue("");
     setPrice("");
     setDescription("");
     setEditingEventId(null);
@@ -241,6 +243,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     setDate(event.date);
     setTime(event.time);
     setMode(event.mode);
+    setVenue(event.venue ?? "");
     setPrice(extractPriceInput(event));
     setDescription(event.description);
     setShowForm(true);
@@ -270,6 +273,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
       date: date.trim(),
       time: time.trim(),
       mode,
+      venue: venue.trim(),
       pricing: price.trim() ? [{ label: "Entry Fee", amount: price.trim() }] : [],
       price: price.trim() ? formatInr(Number(price.trim()) || 0) : "Free",
     };
@@ -703,6 +707,17 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
                   <ThemedText style={[styles.modeButtonText, mode === "In Person" ? styles.modeButtonTextActive : null]}>In Person</ThemedText>
                 </Pressable>
               </View>
+
+              <ThemedText style={styles.inputLabel}>{mode === "In Person" ? "Venue" : "Platform / meeting link"}</ThemedText>
+              <TextInput
+                style={styles.input}
+                value={venue}
+                onChangeText={setVenue}
+                placeholder={mode === "In Person" ? "Enter venue name and address" : "Enter platform name or meeting link"}
+                placeholderTextColor={Colors.light.textSecondary}
+                autoCapitalize="sentences"
+                testID="input-event-venue"
+              />
 
               <ThemedText style={styles.inputLabel}>Ticket price in INR (leave empty for Free)</ThemedText>
               <TextInput
