@@ -101,31 +101,42 @@ export async function registerForEvent(
   if (!supabase) return null;
 
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.user || !session.access_token) return null;
+
+  const { getApiBaseUrl } = await import("@/lib/apiBase");
+  const { authJsonHeaders } = await import("@/lib/apiAuth");
+  const response = await fetch(`${getApiBaseUrl()}/api/events/register-free`, {
+    method: "POST",
+    headers: authJsonHeaders(session.access_token),
+    body: JSON.stringify({
+      eventId: input.eventDbId,
+      attendeeName: input.attendeeName.trim(),
+      attendeeEmail: input.attendeeEmail.trim(),
+      attendeePhone: input.attendeePhone.trim(),
+      message: input.message?.trim() ?? "",
+    }),
+  });
+
+  const result = (await response.json()) as { registrationId?: string; error?: string };
+  if (!response.ok || !result.registrationId) {
+    if (response.status === 409) {
+      throw new Error(result.error ?? "You are already registered for this event.");
+    }
+    throw new Error(result.error ?? "Registration could not be saved. Please try again.");
+  }
 
   const { data, error } = await supabase
     .from("event_registrations")
-    .insert({
-      event_id: input.eventDbId,
-      user_id: user.id,
-      attendee_name: input.attendeeName.trim(),
-      attendee_email: input.attendeeEmail.trim(),
-      attendee_phone: input.attendeePhone.trim(),
-      message: input.message?.trim() ?? "",
-      status: "Registered",
-      payment_status: "None",
-    })
-    .select()
+    .select("*")
+    .eq("id", result.registrationId)
+    .eq("user_id", session.user.id)
     .single();
 
-  if (error) {
-    if (error.code === "23505") {
-      throw new Error("You are already registered for this event.");
-    }
-    console.error("[eventRegistrationsService] register:", error.message);
-    return null;
+  if (error || !data) {
+    console.error("[eventRegistrationsService] fetch confirmed registration:", error?.message);
+    throw new Error("Registration was confirmed, but could not be refreshed. Please reopen your registrations.");
   }
 
   return mapRow(data as DbEventRegistrationRow);
