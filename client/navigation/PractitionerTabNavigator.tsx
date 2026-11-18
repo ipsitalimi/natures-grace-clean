@@ -116,8 +116,8 @@ export default function PractitionerTabNavigator() {
           borderTopWidth: 1,
           borderTopColor: Colors.light.brownLight,
           elevation: 0,
-          height: 56 + bottomPadding,
-          paddingTop: 6,
+          height: 62 + bottomPadding,
+          paddingTop: 8,
           paddingBottom: bottomPadding,
         },
         tabBarItemStyle: {
@@ -128,7 +128,8 @@ export default function PractitionerTabNavigator() {
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: "500",
-          marginTop: 2,
+          marginTop: 4,
+          paddingBottom: 2,
         },
         tabBarIconStyle: {
           marginBottom: 0,
