@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useCallback } from "react";
 import { View, StyleSheet, Pressable, Linking, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
@@ -118,6 +118,9 @@ export default function ResourcesScreen() {
   const isRoleTab = isSellerTab || isPractitionerTab;
   const titleInHeader = !isRoleTab || isSellerTab;
   const { resources, dataLoading, dataError, refreshContent } = useDataContext();
+  useFocusEffect(useCallback(() => {
+    void refreshContent({ silent: true });
+  }, [refreshContent]));
   const { settings } = usePlatformConfig();
   const { isEnrolledForResource, enrollmentsLoading, enrollmentsError } = useResourceEnrollments();
   const publishedResources = resources.filter((r) => r.published !== false);
