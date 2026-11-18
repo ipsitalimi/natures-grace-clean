@@ -43,7 +43,7 @@ interface DataContextType {
   events: CommunityEvent[];
   addEvent: (event: Omit<CommunityEvent, "id" | "dbId">) => Promise<boolean>;
   updateEvent: (id: string, patch: eventsService.EventUpdatePatch) => Promise<boolean>;
-  deleteEvent: (id: string) => Promise<boolean>;
+  deleteEvent: (id: string) => Promise<eventsService.EventDeleteResult>;
   setEventVisibility: (id: string, visible: boolean) => Promise<boolean>;
 
   discussions: Discussion[];
@@ -344,16 +344,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, [events]);
 
-  const deleteEvent = useCallback(async (id: string): Promise<boolean> => {
+  const deleteEvent = useCallback(async (id: string): Promise<eventsService.EventDeleteResult> => {
     if (!isSupabaseConfigured()) return false;
     const target = events.find((e) => e.id === id);
     if (!target?.dbId) return false;
-    const deleted = await eventsService.deleteEventByDbId(target.dbId);
-    if (!deleted) return false;
-    setEvents((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, status: "Ended", isVisible: false } : e))
-    );
-    return true;
+
+    const result = await eventsService.deleteEventByDbId(target.dbId);
+    if (result === "deleted") {
+      setEvents((prev) => prev.filter((e) => e.id !== id));
+      return result;
+    }
+    if (result === "archived") {
+      setEvents((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, status: "Ended", isVisible: false } : e))
+      );
+      return result;
+    }
+    return false;
   }, [events]);
 
   const setEventVisibility = useCallback(
