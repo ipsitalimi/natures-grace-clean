@@ -116,7 +116,8 @@ export default function ResourcesScreen() {
   const isSellerTab = useIsSellerTabContext();
   const isPractitionerTab = useIsPractitionerTabContext();
   const isRoleTab = isSellerTab || isPractitionerTab;
-  const titleInHeader = !isRoleTab || isSellerTab;
+  // Keep the catalogue title in the shared top header for every role.
+  const titleInHeader = true;
   const { resources, dataLoading, dataError, refreshContent } = useDataContext();
   useFocusEffect(useCallback(() => {
     void refreshContent({ silent: true });
