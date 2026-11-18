@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { View, ScrollView, StyleSheet, Pressable, Alert, ActivityIndicator } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, ActivityIndicator } from "react-native";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
@@ -41,6 +41,9 @@ export default function SessionOfferingsScreen() {
   const isFocused = useIsFocused();
 
   const { offerings, deleteOffering, refresh, loading } = usePractitionerContext();
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,26 +51,28 @@ export default function SessionOfferingsScreen() {
   }, [isFocused, refresh]);
 
   const handleDelete = (id: string) => {
-    Alert.alert(
-      "Delete offering",
-      "Remove this session offering? Existing bookings are not affected.",
-      [
-        { text: "Keep", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const removed = await deleteOffering(id);
-            if (!removed) {
-              Alert.alert("Could not delete offering", "The offering was not removed. Please check your practitioner access and try again.");
-              return;
-            }
-            setDeleteConfirm(id);
-            setTimeout(() => setDeleteConfirm(null), 2000);
-          },
-        },
-      ]
-    );
+    setDeleteError(null);
+    setPendingDeleteId(id);
+  };
+
+  const confirmDelete = async (id: string) => {
+    if (deletingId) return;
+    setDeletingId(id);
+    setDeleteError(null);
+    try {
+      const removed = await deleteOffering(id);
+      if (!removed) {
+        setDeleteError("Could not remove this offering. Check your practitioner access and try again.");
+        return;
+      }
+      setPendingDeleteId(null);
+      setDeleteConfirm(id);
+    } catch (error) {
+      console.error("[SessionOfferings] delete failed:", error);
+      setDeleteError("Could not remove this offering. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -135,6 +140,9 @@ export default function SessionOfferingsScreen() {
                   <Pressable
                     style={styles.deleteIconBtn}
                     onPress={() => handleDelete(offering.id)}
+                    hitSlop={10}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete ${offering.sessionType} offering`}
                     testID={`button-delete-${offering.id}`}
                   >
                     <Feather name="trash-2" size={15} color="#8B3A3A" />
@@ -162,9 +170,46 @@ export default function SessionOfferingsScreen() {
                   {offering.notes}
                 </ThemedText>
               ) : null}
+
+              {pendingDeleteId === offering.id ? (
+                <View style={styles.deleteConfirmRow} testID={`delete-confirm-${offering.id}`}>
+                  <ThemedText style={styles.deleteConfirmText}>
+                    Remove this offering? Existing bookings will not be affected.
+                  </ThemedText>
+                  <View style={styles.deleteConfirmActions}>
+                    <Pressable
+                      style={styles.keepButton}
+                      onPress={() => setPendingDeleteId(null)}
+                      accessibilityRole="button"
+                      testID={`button-keep-${offering.id}`}
+                    >
+                      <ThemedText style={styles.keepButtonText}>Keep</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={styles.confirmDeleteButton}
+                      onPress={() => confirmDelete(offering.id)}
+                      disabled={deletingId === offering.id}
+                      accessibilityRole="button"
+                      testID={`button-confirm-delete-${offering.id}`}
+                    >
+                      {deletingId === offering.id ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <ThemedText style={styles.confirmDeleteButtonText}>Delete</ThemedText>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
             </View>
           );
         })}
+
+        {deleteError ? (
+          <View style={styles.deleteErrorBanner}>
+            <ThemedText style={styles.deleteErrorText}>{deleteError}</ThemedText>
+          </View>
+        ) : null}
 
         {deleteConfirm ? (
           <View style={styles.deleteBanner}>
@@ -324,6 +369,62 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
     lineHeight: 18,
+  },
+  deleteConfirmRow: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "rgba(1, 50, 32, 0.16)",
+    gap: Spacing.sm,
+  },
+  deleteConfirmText: {
+    fontSize: 13,
+    color: Colors.light.text,
+    lineHeight: 18,
+  },
+  deleteConfirmActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: Spacing.sm,
+  },
+  keepButton: {
+    minWidth: 64,
+    minHeight: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: BorderRadius.xs,
+    backgroundColor: "rgba(1, 50, 32, 0.08)",
+    paddingHorizontal: Spacing.md,
+  },
+  keepButtonText: {
+    color: Colors.light.text,
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+  },
+  confirmDeleteButton: {
+    minWidth: 76,
+    minHeight: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: BorderRadius.xs,
+    backgroundColor: "#8B3A3A",
+    paddingHorizontal: Spacing.md,
+  },
+  confirmDeleteButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontFamily: "Nunito_700Bold",
+  },
+  deleteErrorBanner: {
+    backgroundColor: "rgba(139, 58, 58, 0.08)",
+    borderRadius: BorderRadius.xs,
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  deleteErrorText: {
+    color: "#8B3A3A",
+    fontSize: 13,
   },
   deleteBanner: {
     flexDirection: "row",
