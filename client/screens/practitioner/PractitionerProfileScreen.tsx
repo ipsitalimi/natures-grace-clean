@@ -83,6 +83,8 @@ export default function PractitionerProfileScreen() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
       quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
@@ -186,7 +188,7 @@ export default function PractitionerProfileScreen() {
           {uploadingPhoto ? (
             <ActivityIndicator color={Colors.light.accent} style={styles.photoSpinner} />
           ) : null}
-          <ThemedText style={styles.photoLabel}>Tap to change photo</ThemedText>
+          <ThemedText style={styles.photoLabel}>Tap to change photo · Square crop (1:1)</ThemedText>
         </Pressable>
 
         <View style={styles.nameCard}>
