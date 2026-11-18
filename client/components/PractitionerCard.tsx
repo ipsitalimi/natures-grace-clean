@@ -42,7 +42,7 @@ export default function PractitionerCard({ practitioner, onPress }: Practitioner
           <ThemedText style={styles.rating}>{practitioner.rating.toFixed(1)}</ThemedText>
           <ThemedText style={styles.reviewCount}>({practitioner.reviewCount})</ThemedText>
         </View>
-        <ThemedText style={styles.price}>₹{practitioner.pricePerSession}/session</ThemedText>
+        <ThemedText style={styles.price}>View session options</ThemedText>
       </View>
       <View style={styles.chevronContainer}>
         <Feather name="chevron-right" size={20} color={Colors.light.textSecondary} />
