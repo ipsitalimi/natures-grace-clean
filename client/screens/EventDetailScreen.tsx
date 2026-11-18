@@ -174,6 +174,24 @@ export default function EventDetailScreen() {
               <ThemedText style={styles.infoValue}>{event.mode}</ThemedText>
             </View>
           </View>
+          <View style={styles.infoDivider} />
+          <View style={styles.infoRow}>
+            <Feather
+              name={event.mode === "Online" ? "video" : "map-pin"}
+              size={20}
+              color={Colors.light.accent}
+            />
+            <View style={styles.infoContent}>
+              <ThemedText style={styles.infoLabel}>
+                {event.mode === "Online" ? "Platform / Meeting Link" : "Venue"}
+              </ThemedText>
+              <ThemedText style={styles.infoValue}>
+                {event.venue?.trim() || (event.mode === "Online"
+                  ? "Details will be shared with registered attendees"
+                  : "Venue to be announced")}
+              </ThemedText>
+            </View>
+          </View>
         </View>
 
         <View style={styles.registrationBanner}>
