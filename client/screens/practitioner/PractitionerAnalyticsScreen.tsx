@@ -88,7 +88,7 @@ export default function PractitionerAnalyticsScreen() {
           </Pressable>
         }
       />
-      <BelowHeaderTitle>Analytics</BelowHeaderTitle>
+
 
       <ScrollView
         showsVerticalScrollIndicator={false}
