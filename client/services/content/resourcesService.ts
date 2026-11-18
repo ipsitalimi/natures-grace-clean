@@ -26,6 +26,7 @@ export async function insertResource(
   if (resource.schedule) metadata.schedule = resource.schedule;
   if (resource.locations) metadata.locations = resource.locations;
   if (resource.certificateNote) metadata.certificateNote = resource.certificateNote;
+  if (resource.url) metadata.url = resource.url;
 
   const { data, error } = await supabase
     .from("resources")
@@ -51,7 +52,7 @@ export async function insertResource(
 }
 
 export type ResourceUpdatePatch = Partial<
-  Pick<ResourceItem, "title" | "description" | "body" | "price" | "instructorName" | "schedule" | "locations" | "certificateNote">
+  Pick<ResourceItem, "title" | "description" | "body" | "price" | "instructorName" | "schedule" | "locations" | "certificateNote" | "url">
 >;
 
 export async function updateResource(
@@ -78,7 +79,7 @@ export async function updateResource(
   if (patch.body !== undefined) dbPatch.body = patch.body;
   if (patch.price !== undefined) dbPatch.price_label = patch.price || null;
 
-  const metaKeys = ["instructorName", "schedule", "locations", "certificateNote"] as const;
+  const metaKeys = ["instructorName", "schedule", "locations", "certificateNote", "url"] as const;
   const hasMetaChange = metaKeys.some((k) => patch[k] !== undefined);
   if (hasMetaChange) {
     const currentMeta = ((existing as { metadata?: Record<string, unknown> }).metadata ??
@@ -95,6 +96,9 @@ export async function updateResource(
     }
     if (patch.certificateNote !== undefined) {
       nextMeta.certificateNote = patch.certificateNote.trim() || null;
+    }
+    if (patch.url !== undefined) {
+      nextMeta.url = patch.url.trim() || null;
     }
     dbPatch.metadata = nextMeta;
   }
