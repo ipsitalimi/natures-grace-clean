@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   sessionImageWrap: {
-    height: 88,
+    height: 148,
     backgroundColor: Colors.light.backgroundSecondary,
     borderRadius: 10,
     marginVertical: 6,
