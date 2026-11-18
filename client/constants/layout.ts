@@ -57,9 +57,9 @@ export const TitleAntiClipStyle: TextStyle = Platform.select({
 
 /** Serif title rendered inline with header icons (same baseline row). */
 export const HeaderInlineTitleStyle: TextStyle = {
-  fontSize: 28,
+  fontSize: 24,
   // Slightly taller than fontSize so descenders/diacritics aren't clipped on Android.
-  lineHeight: 36,
+  lineHeight: 30,
   fontWeight: "600",
   fontFamily: Fonts?.serif ?? "serif",
   letterSpacing: 0.3,
