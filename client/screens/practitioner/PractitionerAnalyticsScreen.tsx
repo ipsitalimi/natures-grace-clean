@@ -8,7 +8,7 @@ import {
 } from "react-native";
 
 import { ThemedText } from "@/components/ThemedText";
-import { BackHeader, BelowHeaderTitle } from "@/components/layout";
+import { TitleHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr, formatInrCompact } from "@/lib/formatCurrency";
@@ -75,7 +75,8 @@ export default function PractitionerAnalyticsScreen() {
 
   return (
     <View style={styles.container}>
-      <BackHeader
+      <TitleHeader
+        title="Analytics"
         showNotifications={false}
         rightAction={
           <Pressable
