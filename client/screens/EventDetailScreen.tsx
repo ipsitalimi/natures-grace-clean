@@ -113,6 +113,13 @@ export default function EventDetailScreen() {
   const registrationNote = eventRegistrationNote(event.pricing);
   const eventAcceptingRegistrations = event.status === "Active" && event.isVisible !== false;
 
+  // Keep any price mentioned in the event note in sync with the current admin-set fee.
+  const currentEventPrice = event.pricing?.[0]?.amount;
+  const displayedBottomNote = event.bottomNote?.replace(
+    /₹\\s*[\\d,]+(?:\\.\\d{1,2})?/g,
+    currentEventPrice ? formatInr(Number(currentEventPrice) || 0) : event.price
+  );
+
   return (
     <View style={styles.container}>
       <BackHeader
@@ -256,8 +263,8 @@ export default function EventDetailScreen() {
           {registrationsLoading && !registered ? (
             <ThemedText style={styles.bottomNote}>Checking registration…</ThemedText>
           ) : null}
-          {event.bottomNote ? (
-            <ThemedText style={styles.bottomNote}>{event.bottomNote}</ThemedText>
+          {displayedBottomNote ? (
+            <ThemedText style={styles.bottomNote}>{displayedBottomNote}</ThemedText>
           ) : null}
         </View>
       </ScrollView>
