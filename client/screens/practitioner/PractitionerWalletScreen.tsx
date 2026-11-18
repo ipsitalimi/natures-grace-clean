@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, Pressable, Alert, ActivityIndicator } fro
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { BackHeader, BelowHeaderTitle } from "@/components/layout";
+import { TitleHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { PractitionerWalletTransaction } from "@/data/practitionerBookings";
 import { usePractitionerContext } from "@/context/PractitionerContext";
@@ -72,8 +72,7 @@ export default function PractitionerWalletScreen() {
 
   return (
     <View style={styles.container}>
-      <BackHeader showNotifications={false} />
-      <BelowHeaderTitle>Wallet & Earnings</BelowHeaderTitle>
+      <TitleHeader title="Wallet & Earnings" showNotifications={false} />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
