@@ -92,6 +92,8 @@ export default function AddEditProductListingScreen() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
       quality: 0.85,
     });
     if (result.canceled || !result.assets[0]) return;
@@ -312,7 +314,7 @@ export default function AddEditProductListingScreen() {
                   <Rect x="3" y="3" width="18" height="18" rx="3" stroke={Colors.light.textMuted} strokeWidth="1.5" />
                   <Path d="M12 8V16M8 12H16" stroke={Colors.light.textMuted} strokeWidth="1.5" strokeLinecap="round" />
                 </Svg>
-                <ThemedText style={styles.uploaderText}>Tap to upload image</ThemedText>
+                <ThemedText style={styles.uploaderText}>Tap to upload image · Square crop (1:1)</ThemedText>
               </>
             )}
           </Pressable>
