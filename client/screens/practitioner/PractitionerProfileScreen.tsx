@@ -13,7 +13,7 @@ import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 
 import { ThemedText } from "@/components/ThemedText";
-import { BackHeader, BelowHeaderTitle, KeyboardFormLayout } from "@/components/layout";
+import { TitleHeader, KeyboardFormLayout } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { uploadPractitionerPhoto, type LocalFile } from "@/lib/storageUpload";
 import { useAuth } from "@/context/AuthContext";
@@ -150,8 +150,7 @@ export default function PractitionerProfileScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <BackHeader showNotifications={false} />
-        <BelowHeaderTitle>My Profile</BelowHeaderTitle>
+        <TitleHeader title="My Profile" showNotifications={false} />
         <View style={styles.centered}>
           <ActivityIndicator color={Colors.light.accent} />
           <ThemedText style={styles.loadingText}>Loading profile…</ThemedText>
