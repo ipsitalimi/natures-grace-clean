@@ -16,10 +16,7 @@ export default function PageTitle({ children, muted, style, testID }: PageTitleP
   return (
     <ThemedText
       style={[styles.title, muted && styles.muted, style]}
-      numberOfLines={2}
-      adjustsFontSizeToFit
-      minimumFontScale={0.8}
-      maxFontSizeMultiplier={1.3}
+      maxFontSizeMultiplier={1.2}
       testID={testID ?? "page-title"}
     >
       {children}
