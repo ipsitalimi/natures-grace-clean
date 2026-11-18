@@ -11,6 +11,7 @@ import VerifiedBadge, { isVerifiedPractitioner } from "@/components/VerifiedBadg
 interface PractitionerCardProps {
   practitioner: Practitioner;
   onPress: () => void;
+  priceLabel?: string;
 }
 
 function StarFilled({ size = 12, color = "#E5A93B" }: { size?: number; color?: string }) {
@@ -21,7 +22,7 @@ function StarFilled({ size = 12, color = "#E5A93B" }: { size?: number; color?: s
   );
 }
 
-export default function PractitionerCard({ practitioner, onPress }: PractitionerCardProps) {
+export default function PractitionerCard({ practitioner, onPress, priceLabel = "View session options" }: PractitionerCardProps) {
   return (
     <Pressable style={styles.card} onPress={onPress}>
       <Image
@@ -42,7 +43,7 @@ export default function PractitionerCard({ practitioner, onPress }: Practitioner
           <ThemedText style={styles.rating}>{practitioner.rating.toFixed(1)}</ThemedText>
           <ThemedText style={styles.reviewCount}>({practitioner.reviewCount})</ThemedText>
         </View>
-        <ThemedText style={styles.price}>₹{practitioner.pricePerSession}/session</ThemedText>
+        <ThemedText style={styles.price}>{priceLabel}</ThemedText>
       </View>
       <View style={styles.chevronContainer}>
         <Feather name="chevron-right" size={20} color={Colors.light.textSecondary} />
