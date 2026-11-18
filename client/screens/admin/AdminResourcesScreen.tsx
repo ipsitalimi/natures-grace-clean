@@ -184,13 +184,6 @@ function CourseResourceRow({
               placeholder="Course title"
               placeholderTextColor={Colors.light.textSecondary}
             />
-            {selectedType === "Video Resource" ? (
-              <>
-                <ThemedText style={styles.inputLabel}>Video URL *</ThemedText>
-                <TextInput style={styles.input} value={formUrl} onChangeText={setFormUrl} placeholder="https://youtube.com/watch?v=..." placeholderTextColor={Colors.light.textSecondary} autoCapitalize="none" keyboardType="url" testID="input-resource-url" />
-              </>
-            ) : null}
-
             <ThemedText style={styles.inputLabel}>Content / Description</ThemedText>
             <TextInput
               style={[styles.input, styles.textArea]}
@@ -500,7 +493,7 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
           <ThemedText style={[styles.actionButtonText, selectedType === "Video Resource" ? styles.actionButtonTextActive : null]}>Add Video</ThemedText>
         </Pressable>
         <Pressable
-          style={[styles.actionButton, selectedType === "Course" ? styles.actionButtonActive : null]
+          style={[styles.actionButton, selectedType === "Course" ? styles.actionButtonActive : null]}
           onPress={() => handleTypeSelect("Course")}
           testID="button-add-course"
         >
@@ -592,6 +585,13 @@ export default function AdminResourcesScreen({ onBackToDashboard }: { onBackToDa
                   placeholderTextColor={Colors.light.textSecondary}
                   testID="input-course-certificate"
                 />
+              </>
+            ) : null}
+
+            {selectedType === "Video Resource" ? (
+              <>
+                <ThemedText style={styles.inputLabel}>Video URL *</ThemedText>
+                <TextInput style={styles.input} value={formUrl} onChangeText={setFormUrl} placeholder="https://youtube.com/watch?v=..." placeholderTextColor={Colors.light.textSecondary} autoCapitalize="none" keyboardType="url" testID="input-resource-url" />
               </>
             ) : null}
 
