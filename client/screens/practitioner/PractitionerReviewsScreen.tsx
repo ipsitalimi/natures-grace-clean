@@ -4,7 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { BackHeader, BelowHeaderTitle } from "@/components/layout";
+import { TitleHeader } from "@/components/layout";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { LayoutSpacing } from "@/constants/layout";
@@ -122,8 +122,7 @@ export default function PractitionerReviewsScreen() {
 
   return (
     <View style={styles.container}>
-      <BackHeader showNotifications={false} />
-      <BelowHeaderTitle>Client Reviews</BelowHeaderTitle>
+      <TitleHeader title="Client Reviews" showNotifications={false} />
 
       <KeyboardAwareScrollViewCompat
         style={styles.scroll}
