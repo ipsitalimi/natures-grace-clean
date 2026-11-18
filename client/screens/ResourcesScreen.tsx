@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { View, StyleSheet, Pressable, Linking, ActivityIndicator } from "react-native";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
@@ -110,7 +110,7 @@ function SkeletonCard() {
 }
 
 export default function ResourcesScreen() {
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
   const { openDrawerForRole } = useDrawer();
   const isSellerTab = useIsSellerTabContext();
@@ -155,7 +155,7 @@ export default function ResourcesScreen() {
             }
           : undefined
       }
-      footerInset={isSellerTab ? tabBarHeight : 0}
+      footerInset={isSellerTab ? insets.bottom + 64 : 0}
       scrollable={!dataLoading}
     >
       {dataLoading ? (
