@@ -58,7 +58,7 @@ export default function AdminFeaturedScreen({
         <Pressable style={styles.backButton} onPress={onBackToDashboard}>
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
-        <ThemedText style={styles.sectionTitle}>Featured & Homepage</ThemedText>
+        
       </View>
 
       <ThemedText style={styles.subTitle}>Global banner</ThemedText>
