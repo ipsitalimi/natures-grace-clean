@@ -4,7 +4,7 @@ import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
-import { BackHeader, BelowHeaderTitle } from "@/components/layout";
+import { TitleHeader } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { LayoutSpacing } from "@/constants/layout";
 import type { SessionOffering } from "@/data/practitionerBookings";
@@ -77,8 +77,7 @@ export default function SessionOfferingsScreen() {
 
   return (
     <View style={styles.container}>
-      <BackHeader showNotifications={false} />
-      <BelowHeaderTitle>Session Offerings</BelowHeaderTitle>
+      <TitleHeader title="Session Offerings" showNotifications={false} />
 
       <ScrollView
         style={styles.scrollView}
