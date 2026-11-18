@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Image } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
 
@@ -7,6 +7,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { BackHeader, BelowHeaderTitle } from "@/components/layout";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
 
 const expertiseItems = [
   { icon: "sun", label: "Reiki Grandmaster & Advanced Su-Jok Therapist" },
@@ -39,6 +40,7 @@ function LotusDecor({ size = 48, color = Colors.light.accent }: { size?: number;
 
 export default function KnowYourAdminScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(32);
+  const { homeContent } = usePlatformConfig();
 
   return (
     <View style={styles.container}>
@@ -54,7 +56,11 @@ export default function KnowYourAdminScreen() {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarCircle}>
-              <LotusDecor size={48} color={Colors.light.accent} />
+              {homeContent.adminPhotoUrl ? (
+                <Image source={{ uri: homeContent.adminPhotoUrl }} style={styles.avatarImage} />
+              ) : (
+                <LotusDecor size={48} color={Colors.light.accent} />
+              )}
             </View>
           </View>
           <ThemedText style={styles.name}>Dr. Neelam Parwani</ThemedText>
@@ -153,6 +159,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 2,
     borderColor: Colors.light.accent,
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 44,
   },
   name: {
     fontSize: 22,
