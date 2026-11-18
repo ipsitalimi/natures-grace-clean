@@ -57,7 +57,7 @@ function ToggleRow({
 export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
   const navigation = useNavigation();
   const { settings, updateSettings, persistConfigNow, homeContent, updateHomeContent } = usePlatformConfig();
-  const { profile, session } = useAuth();
+  const { profile } = useAuth();
   const [adminPhotoUploading, setAdminPhotoUploading] = useState(false);
   const [adminPhotoError, setAdminPhotoError] = useState<string | null>(null);
   const {
