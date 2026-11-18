@@ -95,6 +95,7 @@ export interface HomeContent {
   affirmations: string[];
   breathingMessage: string;
   welcomeName: string;
+  adminPhotoUrl?: string;
   globalBanner: {
     enabled: boolean;
     message: string;
