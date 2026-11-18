@@ -1,10 +1,13 @@
 import React, { useState } from "react";
-import { View, ScrollView, StyleSheet, Pressable, TextInput, ActivityIndicator } from "react-native";
+import { View, ScrollView, StyleSheet, Pressable, TextInput, ActivityIndicator, Image } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { useAuth } from "@/context/AuthContext";
+import { uploadKnowYourAdminPhoto } from "@/lib/storageUpload";
 import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
 
 function ToggleRow({
@@ -54,6 +57,9 @@ function ToggleRow({
 export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDashboard: () => void }) {
   const navigation = useNavigation();
   const { settings, updateSettings, persistConfigNow, homeContent, updateHomeContent } = usePlatformConfig();
+  const { profile, session } = useAuth();
+  const [adminPhotoUploading, setAdminPhotoUploading] = useState(false);
+  const [adminPhotoError, setAdminPhotoError] = useState<string | null>(null);
   const {
     loading: brandLoading,
     error: brandError,
@@ -95,6 +101,37 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
   const [platformFeePercent, setPlatformFeePercent] = useState(String(settings.platformFeePercent));
   const [platformGstEnabled, setPlatformGstEnabled] = useState(settings.platformGstEnabled);
   const [platformGstPercent, setPlatformGstPercent] = useState(String(settings.platformGstPercent));
+
+  const handleAdminPhotoChange = async () => {
+    if (profile?.role !== "Admin" || !profile.id || adminPhotoUploading) return;
+    setAdminPhotoError(null);
+    const picked = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (picked.canceled || !picked.assets?.[0]) return;
+
+    setAdminPhotoUploading(true);
+    try {
+      const asset = picked.assets[0];
+      const result = await uploadKnowYourAdminPhoto(profile.id, {
+        uri: asset.uri,
+        name: asset.fileName || `admin-photo-${Date.now()}.jpg`,
+        mimeType: asset.mimeType || "image/jpeg",
+      });
+      if (!result.url) {
+        setAdminPhotoError(result.error || "Could not upload the photo.");
+        return;
+      }
+      updateHomeContent({ adminPhotoUrl: `${result.url}?v=${Date.now()}` });
+    } catch (error) {
+      setAdminPhotoError(error instanceof Error ? error.message : "Could not update the photo.");
+    } finally {
+      setAdminPhotoUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (saving) return;
@@ -183,6 +220,37 @@ export default function AdminSettingsScreen({ onBackToDashboard }: { onBackToDas
           onToggle={() => updateSettings({ maintenanceMode: !maintenanceMode })}
           testID="toggle-maintenance-mode"
         />
+      </View>
+
+      <ThemedText style={styles.subSectionTitle}>Know Your Admin</ThemedText>
+      <View style={styles.settingsCard}>
+        <View style={styles.adminPhotoRow}>
+          {homeContent.adminPhotoUrl ? (
+            <Image source={{ uri: homeContent.adminPhotoUrl }} style={styles.adminPhotoPreview} />
+          ) : (
+            <View style={[styles.adminPhotoPreview, styles.adminPhotoPlaceholder]}>
+              <Feather name="user" size={30} color={Colors.light.accent} />
+            </View>
+          )}
+          <View style={styles.adminPhotoCopy}>
+            <ThemedText style={styles.inputLabel}>Admin profile photo</ThemedText>
+            <ThemedText style={styles.plannedHint}>This photo appears on the customer panel's Know Your Admin page. Choose a square image for the best fit.</ThemedText>
+          </View>
+        </View>
+        <Pressable
+          style={[styles.outlinedButton, styles.adminPhotoButton]}
+          onPress={() => void handleAdminPhotoChange()}
+          disabled={profile?.role !== "Admin" || adminPhotoUploading}
+          testID="button-change-admin-photo"
+        >
+          {adminPhotoUploading ? (
+            <ActivityIndicator size="small" color={Colors.light.accent} />
+          ) : (
+            <Feather name="camera" size={16} color={Colors.light.accent} />
+          )}
+          <ThemedText style={styles.outlinedButtonText}>{adminPhotoUploading ? "Uploading…" : homeContent.adminPhotoUrl ? "Change Photo" : "Upload Photo"}</ThemedText>
+        </Pressable>
+        {adminPhotoError ? <ThemedText style={styles.errorText}>{adminPhotoError}</ThemedText> : null}
       </View>
 
       <ThemedText style={styles.subSectionTitle}>Notifications</ThemedText>
@@ -490,6 +558,30 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_400Regular",
     color: "#8B3A3A",
     marginBottom: Spacing.sm,
+  },
+  adminPhotoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  adminPhotoPreview: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 2,
+    borderColor: Colors.light.accent,
+    backgroundColor: Colors.light.backgroundRoot,
+  },
+  adminPhotoPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminPhotoCopy: {
+    flex: 1,
+  },
+  adminPhotoButton: {
+    alignSelf: "flex-start",
   },
   toggleRow: {
     flexDirection: "row",
