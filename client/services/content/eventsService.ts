@@ -128,6 +128,7 @@ export type EventUpdatePatch = Partial<
     | "date"
     | "time"
     | "mode"
+    | "venue"
     | "price"
     | "pricing"
     | "whatToExpect"
