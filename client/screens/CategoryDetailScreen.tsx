@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -13,6 +13,8 @@ import { useDataContext } from "@/context/DataContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { getCategoryById } from "@/data/practitioners";
 import { practitionerMatchesSubcategory } from "@/lib/practitionerSpecialties";
+import { fetchOfferingsForPractitioner } from "@/services/content/practitionerOfferingsService";
+import type { SessionOffering } from "@/data/practitionerBookings";
 
 type RootStackParamList = {
   CategoryDetail: { categoryId: string; subcategoryName?: string };
@@ -29,6 +31,7 @@ export default function CategoryDetailScreen() {
   const { categoryId, subcategoryName } = route.params;
 
   const { practitionerCategories, practitionersLoading } = useDataContext();
+  const [offeringsByPractitioner, setOfferingsByPractitioner] = useState<Record<string, SessionOffering[]>>({});
   const { filterApprovedPractitioners } = usePlatformConfig();
   const category =
     practitionerCategories.find((c) => c.id === categoryId) ?? getCategoryById(categoryId);
@@ -39,6 +42,21 @@ export default function CategoryDetailScreen() {
   const pageTitle = subcategoryName ?? category?.name ?? "Wellness";
   const pageSubtitle = subcategoryName ? category?.name : category?.subtitle;
 
+  const filtered = useMemo(() => !category ? [] : (subcategoryName
+    ? approvedPractitioners.filter((p) => practitionerMatchesSubcategory(p, category.name, subcategoryName))
+    : approvedPractitioners), [category, subcategoryName, practitionerCategories, filterApprovedPractitioners]);
+  const practitionerIdsKey = filtered.map((p) => p.id).join(",");
+
+  useEffect(() => {
+    let cancelled = false;
+    const ids = practitionerIdsKey ? practitionerIdsKey.split(",") : [];
+    Promise.all(ids.map(async (id) => [id, await fetchOfferingsForPractitioner(id)] as const))
+      .then((entries) => {
+        if (!cancelled) setOfferingsByPractitioner(Object.fromEntries(entries));
+      });
+    return () => { cancelled = true; };
+  }, [practitionerIdsKey]);
+
   if (!category) {
     return (
       <PageLayout title="Wellness" titleInHeader header="title" footerInset={tabBarHeight}>
@@ -46,12 +64,6 @@ export default function CategoryDetailScreen() {
       </PageLayout>
     );
   }
-
-  const filtered = subcategoryName
-    ? approvedPractitioners.filter((p) =>
-        practitionerMatchesSubcategory(p, category.name, subcategoryName)
-      )
-    : approvedPractitioners;
 
   return (
     <PageLayout
@@ -87,6 +99,13 @@ export default function CategoryDetailScreen() {
           <PractitionerCard
             key={practitioner.id}
             practitioner={practitioner}
+            priceLabel={(() => {
+              const offers = offeringsByPractitioner[practitioner.id] ?? [];
+              if (!offers.length) return "View session options";
+              const lowest = [...offers].sort((a, b) => a.price - b.price || a.duration - b.duration)[0];
+              const durationLabel = lowest.duration === 60 ? "60 min" : `${lowest.duration} min`;
+              return offers.length > 1 ? `From ₹${lowest.price.toLocaleString("en-IN")} · ${durationLabel}` : `₹${lowest.price.toLocaleString("en-IN")} · ${durationLabel}`;
+            })()}
             onPress={() =>
               navigation.navigate("PractitionerProfile", { practitionerId: practitioner.id })
             }
