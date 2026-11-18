@@ -123,6 +123,9 @@ export default function ResourcesScreen() {
   const publishedResources = resources.filter((r) => r.published !== false);
 
   const courses = publishedResources.filter((r) => r.section === "Courses");
+  const articles = publishedResources.filter((r) => r.section === "Articles");
+  const practices = publishedResources.filter((r) => r.section === "Practices");
+  const audioSessions = publishedResources.filter((r) => r.section === "Audio Sessions");
   const videos = publishedResources.filter((r) => r.section === "Video Resources");
   const youtubeChannelUrl = settings.youtubeChannelUrl?.trim() ?? "";
 
@@ -203,6 +206,42 @@ export default function ResourcesScreen() {
             <Feather name="play-circle" size={18} color={Colors.light.brownLight} />
             <View style={styles.dividerLine} />
           </View>
+
+          {articles.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Feather name="file-text" size={18} color={Colors.light.accent} />
+                <ThemedText style={styles.sectionTitle}>Articles</ThemedText>
+              </View>
+              {articles.map((resource) => (
+                <CourseCard key={resource.id} resource={resource} isEnrolled={false} onPress={() => openResource(resource.id)} />
+              ))}
+            </View>
+          ) : null}
+
+          {practices.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Feather name="activity" size={18} color={Colors.light.accent} />
+                <ThemedText style={styles.sectionTitle}>Practices</ThemedText>
+              </View>
+              {practices.map((resource) => (
+                <CourseCard key={resource.id} resource={resource} isEnrolled={false} onPress={() => openResource(resource.id)} />
+              ))}
+            </View>
+          ) : null}
+
+          {audioSessions.length > 0 ? (
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Feather name="headphones" size={18} color={Colors.light.accent} />
+                <ThemedText style={styles.sectionTitle}>Audio Sessions</ThemedText>
+              </View>
+              {audioSessions.map((resource) => (
+                <CourseCard key={resource.id} resource={resource} isEnrolled={false} onPress={() => openResource(resource.id)} />
+              ))}
+            </View>
+          ) : null}
 
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
