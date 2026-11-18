@@ -57,7 +57,11 @@ export default function SessionOfferingsScreen() {
           text: "Delete",
           style: "destructive",
           onPress: async () => {
-            await deleteOffering(id);
+            const removed = await deleteOffering(id);
+            if (!removed) {
+              Alert.alert("Could not delete offering", "The offering was not removed. Please check your practitioner access and try again.");
+              return;
+            }
             setDeleteConfirm(id);
             setTimeout(() => setDeleteConfirm(null), 2000);
           },
