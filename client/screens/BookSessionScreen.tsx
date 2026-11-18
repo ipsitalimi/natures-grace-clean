@@ -156,7 +156,7 @@ export default function BookSessionScreen() {
   const durationOptions = useMemo(() => {
     if (offerings.length === 0) return DEFAULT_DURATION_OPTIONS;
     const unique = [...new Map(offerings.map((o) => [o.duration, o])).values()];
-    return unique.map((o) => ({ minutes: o.duration, label: `${o.duration} mins` }));
+    return unique.map((o) => ({ minutes: o.duration, label: `${o.duration} mins · ₹${o.price.toLocaleString("en-IN")}` }));
   }, [offerings]);
 
   const selectedOffering = useMemo(() => {
