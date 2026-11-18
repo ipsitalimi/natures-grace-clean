@@ -327,7 +327,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const handleHideEvent = async (eventId: string) => {
     const event = events.find((item) => item.id === eventId);
     if (!event) return;
-    const nextVisible = event.isVisible === false;
+    const nextVisible = event.status === "Ended" || event.isVisible === false;
     const updated = await setEventVisibility(eventId, nextVisible);
     if (!updated) {
       Alert.alert("Could not update event", "Check your connection and admin permissions, then try again.");
