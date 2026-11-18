@@ -4,7 +4,7 @@
     "slug": "natures-grace",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/images/natures-grace-logo.png",
     "scheme": "natures-grace",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -15,7 +15,7 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#F3F6F1",
-        "foregroundImage": "./assets/icon.png"
+        "foregroundImage": "./assets/images/natures-grace-logo.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
