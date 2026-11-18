@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { View, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator } from "react-native";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { useFocusEffect, useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -25,7 +25,10 @@ export default function ResourceDetailScreen() {
   const [favoriteBusy, setFavoriteBusy] = useState(false);
   const [enrollBusy, setEnrollBusy] = useState(false);
   const [enrollError, setEnrollError] = useState<string | null>(null);
-  const { resources } = useDataContext();
+  const { resources, refreshContent } = useDataContext();
+  useFocusEffect(useCallback(() => {
+    void refreshContent({ silent: true });
+  }, [refreshContent]));
   const { session } = useAuth();
   const { isFavorite, toggleFavorite } = useFavorites();
   const {
