@@ -122,9 +122,10 @@ export function eventRowToCommunityEvent(row: DbEventRow): CommunityEvent {
         ? [{ label: "Entry Fee", amount: String(legacyPrice) }]
         : [];
   const whatToExpect = (meta.whatToExpect as string[]) ?? [];
-  const legacyId = (meta.legacy_id as string) || row.id;
+  // The database primary key is the canonical navigation identity. Client-generated
+  // legacy IDs can collide after app reloads, causing different events to open the same detail.
   return {
-    id: legacyId,
+    id: row.id,
     dbId: row.id,
     title: row.title,
     description: row.description,
