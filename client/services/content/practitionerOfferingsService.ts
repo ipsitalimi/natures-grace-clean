@@ -168,13 +168,19 @@ export async function deleteOffering(offeringId: string): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("practitioner_offerings")
     .update({ is_active: false })
-    .eq("id", offeringId);
+    .eq("id", offeringId)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[practitionerOfferings] delete:", error.message);
+    return false;
+  }
+  if (!data) {
+    console.error("[practitionerOfferings] delete: no row was updated; check ownership and RLS policies");
     return false;
   }
   return true;
