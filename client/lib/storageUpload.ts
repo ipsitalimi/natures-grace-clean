@@ -65,6 +65,28 @@ export async function uploadProfileAvatar(
   }
 }
 
+export async function uploadKnowYourAdminPhoto(
+  adminUserId: string,
+  file: LocalFile
+): Promise<{ url?: string; error?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: "Supabase not configured" };
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const path = `${adminUserId}/know-your-admin.${ext}`;
+
+  try {
+    const bytes = await readFileBytes(file.uri);
+    const { error } = await supabase.storage
+      .from("product-images")
+      .upload(path, bytes, { contentType: file.mimeType, upsert: true });
+    if (error) return { error: error.message };
+    const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+    return { url: data.publicUrl };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Photo upload failed" };
+  }
+}
+
 export async function uploadPractitionerPhoto(
   userId: string,
   file: LocalFile
