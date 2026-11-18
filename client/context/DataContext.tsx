@@ -25,6 +25,8 @@ export interface CommunityEvent {
   date: string;
   time: string;
   mode: string;
+  /** Physical venue or online platform/meeting link */
+  venue?: string;
   pricing: { label: string; amount: string }[];
   whatToExpect: string[];
   ctaText: string;
