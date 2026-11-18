@@ -82,8 +82,7 @@ export default function PractitionerSessionDetailScreen() {
 
   return (
     <View style={styles.container}>
-      <BackHeader showNotifications={false} />
-      <BelowHeaderTitle>Session Details</BelowHeaderTitle>
+      <TitleHeader title="Session Details" showNotifications={false} />
 
       <KeyboardAwareScrollViewCompat
         style={styles.scrollView}
