@@ -114,7 +114,7 @@ export async function fetchPractitionerReviews(
       rating: number;
       body: string;
       created_at: string;
-      seller_reply?: string;
+      practitioner_reply?: string | null;
     };
     return {
       id: r.id,
@@ -127,7 +127,7 @@ export async function fetchPractitionerReviews(
         month: "short",
         year: "numeric",
       }),
-      providerReply: r.seller_reply?.trim() || undefined,
+      providerReply: r.practitioner_reply?.trim() || undefined,
     };
   });
 }
