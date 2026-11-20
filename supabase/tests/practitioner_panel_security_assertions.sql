@@ -239,8 +239,8 @@ BEGIN
     WHERE schemaname = 'public'
       AND tablename = 'practitioner_offerings'
       AND policyname = 'practitioner_offerings_write_practitioner'
-      AND qual ILIKE '%approval_status%'
-      AND with_check ILIKE '%approval_status%'
+      AND qual ILIKE '%current_practitioner_id%'
+      AND with_check ILIKE '%current_practitioner_id%'
   ) OR NOT EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public'
@@ -248,8 +248,9 @@ BEGIN
       AND policyname = 'practitioner_availability_write_practitioner'
       AND qual ILIKE '%approval_status%'
       AND with_check ILIKE '%approval_status%'
-  ) THEN
-    RAISE EXCEPTION 'FAIL: unapproved practitioners can still edit offerings or availability';
+  ) OR position('v_approval_status' IN pg_get_functiondef('public.guard_practitioner_offering_pricing()'::regprocedure)) = 0
+    OR position('v_practitioner_active' IN pg_get_functiondef('public.guard_practitioner_offering_pricing()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: practitioner offering/availability write guards are incomplete';
   END IF;
 
   IF NOT EXISTS (
