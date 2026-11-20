@@ -111,8 +111,11 @@ BEGIN
     RAISE EXCEPTION 'invalid_practitioner_booking_transition' USING ERRCODE = '42501';
   END IF;
 
-  IF NEW.booking_status = 'Completed' THEN
-    NEW.completed_at := COALESCE(NEW.completed_at, now());
+  IF NEW.booking_status = 'Completed' AND OLD.booking_status IS DISTINCT FROM 'Completed' THEN
+    IF OLD.payment_status NOT IN ('Paid','Free') THEN
+      RAISE EXCEPTION 'booking_not_eligible_for_completion' USING ERRCODE = '42501';
+    END IF;
+    NEW.completed_at := now();
   ELSIF NEW.completed_at IS DISTINCT FROM OLD.completed_at THEN
     RAISE EXCEPTION 'completed_at_is_system_controlled' USING ERRCODE = '42501';
   END IF;
@@ -182,6 +185,7 @@ CREATE POLICY "reviews_update_practitioner_reply"
   ON public.reviews FOR UPDATE TO authenticated
   USING (
     target_type IN ('practitioner','event')
+    AND status = 'Approved'
     AND practitioner_id = public.current_practitioner_id()
   )
   WITH CHECK (
