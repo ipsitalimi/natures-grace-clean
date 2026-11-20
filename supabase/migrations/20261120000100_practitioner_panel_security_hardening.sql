@@ -199,6 +199,68 @@ CREATE POLICY "practitioners_select"
   ON public.practitioners FOR SELECT TO authenticated
   USING (is_active IS TRUE AND approval_status = 'Approved');
 
+-- An owned practitioner row remains readable when availability is off, but
+-- only approved practitioners may create/edit public offerings or availability.
+DROP POLICY IF EXISTS "practitioner_availability_write_practitioner" ON public.practitioner_availability;
+CREATE POLICY "practitioner_availability_write_practitioner"
+  ON public.practitioner_availability FOR ALL TO authenticated
+  USING (
+    practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = practitioner_availability.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
+  )
+  WITH CHECK (
+    practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = practitioner_availability.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
+  );
+
+DROP POLICY IF EXISTS "practitioner_offerings_write_practitioner" ON public.practitioner_offerings;
+CREATE POLICY "practitioner_offerings_write_practitioner"
+  ON public.practitioner_offerings FOR ALL TO authenticated
+  USING (
+    practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = practitioner_offerings.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
+  )
+  WITH CHECK (
+    practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = practitioner_offerings.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
+  );
+
+DROP POLICY IF EXISTS "practitioner_bookings_update_practitioner" ON public.practitioner_bookings;
+CREATE POLICY "practitioner_bookings_update_practitioner"
+  ON public.practitioner_bookings FOR UPDATE TO authenticated
+  USING (
+    practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = practitioner_bookings.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
+  )
+  WITH CHECK (
+    practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = practitioner_bookings.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
+  );
+
 -- Admin-created practitioner profiles must use the same truthful rating default.
 CREATE OR REPLACE FUNCTION public.admin_provision_user_role(
   p_user_id uuid,
