@@ -199,6 +199,42 @@ CREATE POLICY "practitioners_select"
   ON public.practitioners FOR SELECT TO authenticated
   USING (is_active IS TRUE AND approval_status = 'Approved');
 
+-- Public availability and offerings must belong to an active, approved
+-- practitioner. Owners and admins retain their own operational read access.
+DROP POLICY IF EXISTS "practitioner_availability_select_scoped" ON public.practitioner_availability;
+CREATE POLICY "practitioner_availability_select_scoped"
+  ON public.practitioner_availability FOR SELECT TO authenticated
+  USING (
+    is_admin()
+    OR practitioner_id = public.current_practitioner_id()
+    OR (
+      is_available IS TRUE
+      AND EXISTS (
+        SELECT 1 FROM public.practitioners p
+        WHERE p.id = practitioner_availability.practitioner_id
+          AND p.is_active IS TRUE
+          AND p.approval_status = 'Approved'
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "practitioner_offerings_select_scoped" ON public.practitioner_offerings;
+CREATE POLICY "practitioner_offerings_select_scoped"
+  ON public.practitioner_offerings FOR SELECT TO authenticated
+  USING (
+    is_admin()
+    OR practitioner_id = public.current_practitioner_id()
+    OR (
+      is_active IS TRUE
+      AND EXISTS (
+        SELECT 1 FROM public.practitioners p
+        WHERE p.id = practitioner_offerings.practitioner_id
+          AND p.is_active IS TRUE
+          AND p.approval_status = 'Approved'
+      )
+    )
+  );
+
 -- An owned practitioner row remains readable when availability is off, but
 -- only approved practitioners may create/edit public offerings or availability.
 DROP POLICY IF EXISTS "practitioner_availability_write_practitioner" ON public.practitioner_availability;
