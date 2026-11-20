@@ -381,6 +381,7 @@ export async function getPractitionerReviewStats(
     .from("reviews")
     .select("rating")
     .eq("practitioner_id", practitionerId)
+    .in("target_type", ["practitioner", "event"])
     .eq("status", "Approved");
 
   if (error) {
