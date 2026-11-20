@@ -209,7 +209,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
 DECLARE
   v_seller_id uuid;
   v_practitioner_id uuid;
