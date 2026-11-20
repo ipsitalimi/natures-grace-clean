@@ -347,7 +347,8 @@ BEGIN
       AND tgname = 'reviews_before_insert_guard'
       AND NOT tgisinternal
   ) OR position('NEW.status := ''Pending''' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0
-    OR position('NEW.practitioner_reply := ''''' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0 THEN
+    OR position('NEW.practitioner_reply :=' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0
+    OR position('NEW.seller_reply :=' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0 THEN
     RAISE EXCEPTION 'FAIL: customer review inserts can self-approve or pre-populate replies';
   END IF;
 
