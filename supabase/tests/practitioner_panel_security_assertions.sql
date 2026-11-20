@@ -120,6 +120,32 @@ BEGIN
     RAISE EXCEPTION 'FAIL: backend-managed bank account holder field is missing';
   END IF;
 
+  IF has_function_privilege('anon', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: manual admin payout status RPC privileges are incorrect';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: manual payout queue RPC privileges are incorrect';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_payouts'
+      AND column_name = 'processed_by'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_payouts'
+      AND column_name = 'rejection_reason'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner payout audit fields are missing';
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
