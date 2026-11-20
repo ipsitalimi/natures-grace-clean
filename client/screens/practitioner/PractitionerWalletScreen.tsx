@@ -14,7 +14,7 @@ import { updatePractitionerBankDetails } from "@/services/walletLedgerApi";
 import { formatInr, formatInrSigned } from "@/lib/formatCurrency";
 import {
   BANK_NOT_LINKED_NOTICE,
-  isPractitionerBankAccountLinked,
+  isBankAccountLinked,
   MANUAL_PAYOUT_NOTICE,
 } from "@/lib/payoutDisclosure";
 
@@ -44,7 +44,7 @@ export default function PractitionerWalletScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(24);
   const { snapshot, loading, loadError, refresh } = usePractitionerContext();
   const { session } = useAuth();
-  const bankLinked = isPractitionerBankAccountLinked(snapshot.bankAccountLabel);
+  const bankLinked = isBankAccountLinked(snapshot.bankAccountLabel);
 
 
 
@@ -79,7 +79,6 @@ export default function PractitionerWalletScreen() {
         <BankDetailsCard
           bankAccountLabel={snapshot.bankAccountLabel}
           bankAccountHolder={snapshot.bankAccountHolder}
-          isPractitionerAccount
           onSave={async (input) => {
             if (!session?.access_token) {
               return { error: "Sign in to save bank details." };
