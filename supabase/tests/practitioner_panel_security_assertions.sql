@@ -56,6 +56,44 @@ BEGIN
     RAISE EXCEPTION 'FAIL: trusted backend wallet write privileges are missing';
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.column_privileges
+    WHERE table_schema = 'public'
+      AND table_name IN (
+        'practitioner_wallets',
+        'practitioner_wallet_transactions',
+        'practitioner_payouts',
+        'practitioner_session_history'
+      )
+      AND grantee IN ('anon','authenticated')
+      AND privilege_type IN ('INSERT','UPDATE')
+  ) THEN
+    RAISE EXCEPTION 'FAIL: column-level financial/history write grants remain';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.column_privileges
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_bookings'
+      AND grantee IN ('anon','authenticated')
+      AND privilege_type = 'INSERT'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: direct booking insert column grants remain';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.column_privileges
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_booking_intro_messages'
+      AND grantee = 'authenticated'
+      AND privilege_type = 'UPDATE'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: authenticated clients can edit intro-chat messages';
+  END IF;
+
   IF has_table_privilege('authenticated', 'public.practitioner_bookings', 'INSERT')
      OR NOT has_table_privilege('authenticated', 'public.practitioner_bookings', 'UPDATE')
      OR NOT has_table_privilege('service_role', 'public.practitioner_bookings', 'INSERT') THEN
