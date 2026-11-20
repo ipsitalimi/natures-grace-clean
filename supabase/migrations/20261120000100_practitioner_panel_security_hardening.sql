@@ -58,6 +58,12 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  -- A nested, trusted database trigger may update the aggregate rating/count.
+  -- Direct authenticated UPDATEs execute at trigger depth 1 and remain blocked.
+  IF pg_trigger_depth() > 1 THEN
+    RETURN NEW;
+  END IF;
+
   IF auth.role() = 'service_role' OR public.is_admin() THEN
     RETURN NEW;
   END IF;
@@ -321,6 +327,73 @@ CREATE TRIGGER reviews_before_update_guard
   EXECUTE FUNCTION public.reviews_before_update_guard();
 
 REVOKE ALL ON FUNCTION public.reviews_before_update_guard() FROM PUBLIC, anon, authenticated;
+
+-- Rating and review_count are system aggregates, not client-editable profile fields.
+-- Keep them correct on review approval, deletion, or rating changes.
+CREATE OR REPLACE FUNCTION public.sync_practitioner_review_aggregate_from_reviews()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+  v_practitioner_id uuid;
+  v_rating numeric;
+  v_count integer;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_practitioner_id := OLD.practitioner_id;
+  ELSE
+    v_practitioner_id := NEW.practitioner_id;
+  END IF;
+
+  IF v_practitioner_id IS NOT NULL THEN
+    SELECT COALESCE(AVG(r.rating), 0), COUNT(*)::integer
+      INTO v_rating, v_count
+      FROM public.reviews r
+     WHERE r.practitioner_id = v_practitioner_id
+       AND r.target_type IN ('practitioner','event')
+       AND r.status = 'Approved';
+
+    UPDATE public.practitioners
+       SET rating = ROUND(v_rating, 1),
+           review_count = v_count,
+           updated_at = now()
+     WHERE id = v_practitioner_id;
+  END IF;
+
+  IF TG_OP = 'UPDATE'
+     AND OLD.practitioner_id IS DISTINCT FROM NEW.practitioner_id
+     AND OLD.practitioner_id IS NOT NULL THEN
+    SELECT COALESCE(AVG(r.rating), 0), COUNT(*)::integer
+      INTO v_rating, v_count
+      FROM public.reviews r
+     WHERE r.practitioner_id = OLD.practitioner_id
+       AND r.target_type IN ('practitioner','event')
+       AND r.status = 'Approved';
+
+    UPDATE public.practitioners
+       SET rating = ROUND(v_rating, 1),
+           review_count = v_count,
+           updated_at = now()
+     WHERE id = OLD.practitioner_id;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS reviews_practitioner_rating_aggregate ON public.reviews;
+CREATE TRIGGER reviews_practitioner_rating_aggregate
+  AFTER INSERT OR DELETE OR UPDATE OF rating, status, practitioner_id, target_type
+  ON public.reviews
+  FOR EACH ROW
+  EXECUTE FUNCTION public.sync_practitioner_review_aggregate_from_reviews();
+
+REVOKE ALL ON FUNCTION public.sync_practitioner_review_aggregate_from_reviews() FROM PUBLIC, anon, authenticated;
 
 -- Explicitly keep helper callable by signed-in RLS checks only.
 REVOKE ALL ON FUNCTION public.is_admin() FROM anon;
