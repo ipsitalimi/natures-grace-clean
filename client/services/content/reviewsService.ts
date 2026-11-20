@@ -497,13 +497,6 @@ export async function deleteMyReview(reviewId: string): Promise<boolean> {
   } = await supabase.auth.getUser();
   if (!user) return false;
 
-  const { data: row } = await supabase
-    .from("reviews")
-    .select("practitioner_id, status")
-    .eq("id", reviewId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
   const { error } = await supabase
     .from("reviews")
     .delete()
@@ -524,16 +517,6 @@ export async function updateReviewStatus(
 ): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-
-  const { data: row, error: fetchError } = await supabase
-    .from("reviews")
-    .select("practitioner_id")
-    .eq("id", id)
-    .maybeSingle();
-  if (fetchError || !row) {
-    console.error("[reviewsService] update status fetch:", fetchError?.message ?? "Review not found");
-    return false;
-  }
 
   const { data: updated, error } = await supabase
     .from("reviews")
