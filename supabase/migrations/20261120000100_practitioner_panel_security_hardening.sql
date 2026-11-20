@@ -199,6 +199,91 @@ CREATE POLICY "practitioners_select"
   ON public.practitioners FOR SELECT TO authenticated
   USING (is_active IS TRUE AND approval_status = 'Approved');
 
+-- Admin-created practitioner profiles must use the same truthful rating default.
+CREATE OR REPLACE FUNCTION public.admin_provision_user_role(
+  p_user_id uuid,
+  p_role text,
+  p_admin_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+  v_seller_id uuid;
+  v_practitioner_id uuid;
+BEGIN
+  IF NOT public.is_admin() OR p_admin_id IS DISTINCT FROM auth.uid() THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'forbidden');
+  END IF;
+
+  IF p_role NOT IN ('User', 'Seller', 'Practitioner', 'Admin') THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'invalid_role');
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = p_user_id) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'user_not_found');
+  END IF;
+
+  IF p_role = 'Seller' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.sellers WHERE profile_id = p_user_id) THEN
+      INSERT INTO public.sellers (
+        profile_id, store_name, description, philosophy, storefront_settings, is_active, is_verified
+      ) VALUES (
+        p_user_id,
+        COALESCE((SELECT full_name FROM public.profiles WHERE id = p_user_id), 'Store'),
+        '', '', jsonb_build_object('onboarding_complete', false), true, false
+      )
+      RETURNING id INTO v_seller_id;
+    ELSE
+      SELECT id INTO v_seller_id FROM public.sellers WHERE profile_id = p_user_id;
+    END IF;
+
+    IF v_seller_id IS NOT NULL THEN
+      INSERT INTO public.seller_wallets (seller_id)
+      SELECT v_seller_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.seller_wallets sw WHERE sw.seller_id = v_seller_id
+      );
+    END IF;
+  ELSIF p_role = 'Practitioner' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.practitioners WHERE profile_id = p_user_id) THEN
+      INSERT INTO public.practitioners (
+        profile_id, name, category, subcategory, bio, experience, certifications,
+        rating, review_count, price_per_session, approval_status, is_verified, featured, is_active
+      )
+      SELECT
+        p_user_id,
+        COALESCE(full_name, 'Practitioner'),
+        'Healings', '', '', '1+ years', '{}'::text[],
+        0, 0, 1000, 'Approved', false, false, true
+      FROM public.profiles WHERE id = p_user_id
+      RETURNING id INTO v_practitioner_id;
+    ELSE
+      SELECT id INTO v_practitioner_id FROM public.practitioners WHERE profile_id = p_user_id;
+    END IF;
+
+    IF v_practitioner_id IS NOT NULL THEN
+      INSERT INTO public.practitioner_wallets (practitioner_id)
+      SELECT v_practitioner_id
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.practitioner_wallets pw WHERE pw.practitioner_id = v_practitioner_id
+      );
+    END IF;
+  END IF;
+
+  UPDATE public.profiles
+     SET role = p_role, updated_at = now()
+   WHERE id = p_user_id;
+
+  RETURN jsonb_build_object('ok', true, 'role', p_role);
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'provision_failed');
+END;
+$;
+
 -- Correct the misleading 5-star default: a practitioner with no approved
 -- reviews must have rating 0 and review_count 0, not a fabricated five-star score.
 ALTER TABLE public.practitioners
