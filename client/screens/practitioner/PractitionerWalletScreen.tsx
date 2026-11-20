@@ -14,7 +14,7 @@ import { updatePractitionerBankDetails } from "@/services/walletLedgerApi";
 import { formatInr, formatInrSigned } from "@/lib/formatCurrency";
 import {
   BANK_NOT_LINKED_NOTICE,
-  isBankAccountLinked,
+  isPractitionerBankAccountLinked,
   MANUAL_PAYOUT_NOTICE,
 } from "@/lib/payoutDisclosure";
 
@@ -44,7 +44,10 @@ export default function PractitionerWalletScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(24);
   const { snapshot, loading, loadError, refresh } = usePractitionerContext();
   const { session } = useAuth();
-  const bankLinked = isBankAccountLinked(snapshot.bankAccountLabel);
+  const bankLinked = isPractitionerBankAccountLinked(
+    snapshot.bankAccountLabel,
+    snapshot.bankAccountHolder
+  );
 
 
 
