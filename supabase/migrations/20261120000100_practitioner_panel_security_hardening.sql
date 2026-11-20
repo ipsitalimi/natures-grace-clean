@@ -39,7 +39,13 @@ REVOKE INSERT, UPDATE, DELETE ON public.practitioner_payouts FROM anon, authenti
 -- Wallet creation is performed by approval/backend flows, never by a practitioner RPC.
 REVOKE ALL ON FUNCTION public.ensure_practitioner_wallet(numeric) FROM PUBLIC, anon, authenticated;
 
--- 3) Practitioner session history is immutable to practitioners; completion writes it
+-- 3) Booking creation is server-only. Paid checkout and free bookings already
+-- use authenticated Railway endpoints backed by service_role; direct client inserts
+-- would allow fake Pending/Confirmed bookings and slot reservation abuse.
+DROP POLICY IF EXISTS "practitioner_bookings_insert_buyer" ON public.practitioner_bookings;
+REVOKE INSERT ON public.practitioner_bookings FROM anon, authenticated;
+
+-- Practitioner session history is immutable to app clients; completion writes it
 -- atomically through the booking trigger below.
 DROP POLICY IF EXISTS "practitioner_session_history_write_practitioner" ON public.practitioner_session_history;
 REVOKE INSERT, UPDATE, DELETE ON public.practitioner_session_history FROM anon, authenticated;
