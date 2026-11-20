@@ -212,7 +212,7 @@ REVOKE INSERT, UPDATE, DELETE ON public.practitioner_session_history FROM anon, 
 -- an availability flag is accidentally enabled by a privileged workflow.
 DROP POLICY IF EXISTS "practitioners_select" ON public.practitioners;
 CREATE POLICY "practitioners_select"
-  ON public.practitioners FOR SELECT TO authenticated
+  ON public.practitioners FOR SELECT TO anon, authenticated
   USING (is_active IS TRUE AND approval_status = 'Approved');
 
 -- 4) Protect every admin-controlled practitioner field at the database boundary.
