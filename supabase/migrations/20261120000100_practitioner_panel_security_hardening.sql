@@ -149,6 +149,10 @@ GRANT EXECUTE ON FUNCTION public.ensure_practitioner_profile() TO authenticated;
 REVOKE ALL ON FUNCTION public.guard_practitioner_offering_pricing() FROM PUBLIC, anon, authenticated;
 
 -- 2) Wallets are readable by their owner but never directly writable by app clients.
+-- Persist the account-holder label supplied by the practitioner through the backend.
+ALTER TABLE public.practitioner_wallets
+  ADD COLUMN IF NOT EXISTS bank_account_holder text;
+
 DROP POLICY IF EXISTS "practitioner_wallets_insert_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_update_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_write_practitioner" ON public.practitioner_wallets;
