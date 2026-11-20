@@ -43,12 +43,12 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF NOT has_table_privilege('anon', 'public.practitioners', 'SELECT')
-     OR NOT has_table_privilege('anon', 'public.practitioner_offerings', 'SELECT')
-     OR NOT has_table_privilege('anon', 'public.practitioner_availability', 'SELECT')
+  IF NOT has_table_privilege('authenticated', 'public.practitioners', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.practitioner_offerings', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.practitioner_availability', 'SELECT')
      OR NOT has_table_privilege('anon', 'public.reviews', 'SELECT')
      OR NOT has_function_privilege('anon', 'public.is_admin()', 'EXECUTE') THEN
-    RAISE EXCEPTION 'FAIL: public catalog read/RLS function access was removed';
+    RAISE EXCEPTION 'FAIL: practitioner catalogue or public approved-review read access was removed';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
@@ -56,8 +56,8 @@ BEGIN
       AND tablename = 'practitioners'
       AND policyname = 'practitioners_select'
       AND cmd = 'SELECT'
-      AND 'anon' = ANY(roles)
       AND 'authenticated' = ANY(roles)
+      AND NOT ('anon' = ANY(roles))
   ) THEN
     RAISE EXCEPTION 'FAIL: public approved-practitioner discovery policy is missing';
   END IF;
