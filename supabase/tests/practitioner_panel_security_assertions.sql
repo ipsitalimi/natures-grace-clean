@@ -19,6 +19,12 @@ BEGIN
     RAISE EXCEPTION 'FAIL: trusted backend wallet write privileges are missing';
   END IF;
 
+  IF has_table_privilege('authenticated', 'public.practitioner_bookings', 'INSERT')
+     OR NOT has_table_privilege('authenticated', 'public.practitioner_bookings', 'UPDATE')
+     OR NOT has_table_privilege('service_role', 'public.practitioner_bookings', 'INSERT') THEN
+    RAISE EXCEPTION 'FAIL: booking creation/update grants are not server-owned as expected';
+  END IF;
+
   IF has_function_privilege('anon', 'public.apply_practitioner_application(uuid,jsonb)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.apply_practitioner_application(uuid,jsonb)', 'EXECUTE') THEN
     RAISE EXCEPTION 'FAIL: internal practitioner application RPC remains directly executable';
