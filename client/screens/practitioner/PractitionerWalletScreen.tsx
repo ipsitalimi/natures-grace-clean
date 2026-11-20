@@ -78,6 +78,7 @@ export default function PractitionerWalletScreen() {
 
         <BankDetailsCard
           bankAccountLabel={snapshot.bankAccountLabel}
+          bankAccountHolder={snapshot.bankAccountHolder}
           onSave={async (input) => {
             if (!session?.access_token) {
               return { error: "Sign in to save bank details." };
