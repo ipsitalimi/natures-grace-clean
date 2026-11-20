@@ -259,7 +259,7 @@ BEGIN
   NEW.updated_at := now();
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS practitioners_guard_self_update ON public.practitioners;
 CREATE TRIGGER practitioners_guard_self_update
