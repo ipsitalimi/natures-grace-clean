@@ -683,13 +683,13 @@ DECLARE
   v_now timestamptz := now();
   v_reason text := NULLIF(btrim(p_rejection_reason), '');
 BEGIN
-  IF p_payout_type NOT IN ('seller', 'practitioner')
+  IF COALESCE(p_payout_type, '') NOT IN ('seller', 'practitioner')
      OR p_payout_id IS NULL
      OR p_admin_id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'error', 'Invalid payout details');
   END IF;
 
-  IF p_status NOT IN ('Under Review', 'Processing', 'Completed', 'Rejected') THEN
+  IF COALESCE(p_status, '') NOT IN ('Under Review', 'Processing', 'Completed', 'Rejected') THEN
     RETURN jsonb_build_object('ok', false, 'error', 'Invalid status');
   END IF;
 
@@ -839,11 +839,12 @@ DECLARE
   v_bank_holder text;
   v_payout_id uuid;
 BEGIN
-  IF p_payout_type NOT IN ('seller', 'practitioner')
+  IF COALESCE(p_payout_type, '') NOT IN ('seller', 'practitioner')
      OR p_wallet_id IS NULL
      OR p_amount IS NULL
      OR p_amount <= 0
-     OR p_amount > 100000000 THEN
+     OR p_amount > 100000000
+     OR length(COALESCE(p_notes, '')) > 1000 THEN
     RETURN jsonb_build_object('ok', false, 'error', 'Invalid payout details');
   END IF;
 
