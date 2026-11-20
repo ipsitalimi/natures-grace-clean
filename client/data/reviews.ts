@@ -19,7 +19,7 @@ export interface Review {
   body: string;
   status: ReviewStatus;
   sellerReply: string;
-  practitionerReply: string;
+  practitionerReply?: string;
   createdAt: string;
 }
 
