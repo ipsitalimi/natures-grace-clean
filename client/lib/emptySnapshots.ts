@@ -27,6 +27,7 @@ export function emptyPractitionerWalletSnapshot(commissionRate = 10): Practition
     totalEarned: 0,
     commissionRate,
     bankAccountLabel: "",
+    bankAccountHolder: "",
     nextPayoutDate: "",
     transactions: [],
     payouts: [],
