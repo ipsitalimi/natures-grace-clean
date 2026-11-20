@@ -307,6 +307,7 @@ export async function fetchApprovedPractitionerReviews(
     .from("reviews")
     .select("*")
     .eq("practitioner_id", practitionerId)
+    .in("target_type", ["practitioner", "event"])
     .eq("status", "Approved")
     .order("created_at", { ascending: false })
     .limit(limit);
