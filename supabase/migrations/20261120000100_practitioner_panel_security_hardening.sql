@@ -282,7 +282,7 @@ EXCEPTION
   WHEN OTHERS THEN
     RETURN jsonb_build_object('ok', false, 'error', 'provision_failed');
 END;
-$;
+$$;
 
 -- Correct the misleading 5-star default: a practitioner with no approved
 -- reviews must have rating 0 and review_count 0, not a fabricated five-star score.
