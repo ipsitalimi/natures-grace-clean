@@ -60,7 +60,8 @@ AS $$
 BEGIN
   -- A nested, trusted database trigger may update the aggregate rating/count.
   -- Direct authenticated UPDATEs execute at trigger depth 1 and remain blocked.
-  IF pg_trigger_depth() > 1 THEN
+  IF pg_trigger_depth() > 1
+     OR current_setting('app.practitioner_application_sync', true) = 'true' THEN
     RETURN NEW;
   END IF;
 
@@ -224,6 +225,7 @@ CREATE POLICY "reviews_update_practitioner_reply"
   )
   WITH CHECK (
     target_type IN ('practitioner','event')
+    AND status = 'Approved'
     AND practitioner_id = public.current_practitioner_id()
   );
 
@@ -300,6 +302,7 @@ BEGIN
   END IF;
 
   v_is_practitioner_owner := OLD.target_type IN ('practitioner','event')
+    AND OLD.status = 'Approved'
     AND OLD.practitioner_id = public.current_practitioner_id();
 
   IF v_is_practitioner_owner THEN
