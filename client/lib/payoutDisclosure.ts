@@ -6,6 +6,13 @@ export function isBankAccountLinked(label: string | null | undefined): boolean {
   return !trimmed.toLowerCase().includes("not linked");
 }
 
+export function isPractitionerBankAccountLinked(
+  label: string | null | undefined,
+  accountHolder: string | null | undefined
+): boolean {
+  return isBankAccountLinked(label) && Boolean(accountHolder?.trim());
+}
+
 export function formatNextPayoutDate(value: string | null | undefined): string {
   const trimmed = value?.trim();
   if (!trimmed) return "Scheduled after admin review";
