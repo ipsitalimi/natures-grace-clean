@@ -15,6 +15,7 @@ export type DbPractitionerWalletRow = {
   total_earned: number;
   commission_rate: number;
   bank_account_label: string | null;
+  bank_account_holder: string | null;
   next_payout_date: string | null;
 };
 
@@ -147,6 +148,7 @@ export async function fetchWalletSnapshot(
     totalEarned: Number(wallet.total_earned),
     commissionRate: Number(wallet.commission_rate),
     bankAccountLabel: wallet.bank_account_label?.trim() || "Bank account not linked",
+    bankAccountHolder: wallet.bank_account_holder?.trim() || "",
     nextPayoutDate: wallet.next_payout_date?.trim() || "Scheduled after admin review",
     transactions,
     payouts: payoutRows.map((p) => ({
