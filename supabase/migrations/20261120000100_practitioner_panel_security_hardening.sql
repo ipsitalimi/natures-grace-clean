@@ -143,14 +143,15 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.current_practitioner_id() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.current_practitioner_id() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.current_practitioner_id() TO authenticated, service_role;
 
 -- These SECURITY DEFINER entry points are internal helpers. Their trusted
 -- callers (admin approval and self-provisioning) execute as the function owner.
 -- Do not expose them as direct PostgREST RPCs to anonymous or signed-in clients.
 REVOKE ALL ON FUNCTION public.apply_practitioner_application(uuid, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.apply_practitioner_application(uuid, jsonb) TO service_role;
 REVOKE ALL ON FUNCTION public.ensure_practitioner_profile() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.ensure_practitioner_profile() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.ensure_practitioner_profile() TO authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_practitioner_offering_pricing() FROM PUBLIC, anon, authenticated;
 
 -- 2) Wallets are readable by their owner but never directly writable by app clients.
@@ -248,6 +249,7 @@ $privileges$;
 
 -- Wallet creation is performed by approval/backend flows, never by a practitioner RPC.
 REVOKE ALL ON FUNCTION public.ensure_practitioner_wallet(numeric) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ensure_practitioner_wallet(numeric) TO service_role;
 
 -- 3) Booking creation is server-only. Paid checkout and free bookings already
 -- use authenticated Railway endpoints backed by service_role; direct client inserts
