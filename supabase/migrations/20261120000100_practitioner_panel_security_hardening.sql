@@ -3,22 +3,6 @@
 -- and must be applied only after review in the intended Supabase environment.
 
 -- 1) Practitioner identity is ownership, not public availability.
-CREATE OR REPLACE FUNCTION public.current_practitioner_id()
-RETURNS uuid
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT p.id
-  FROM public.practitioners p
-  WHERE p.profile_id = auth.uid()
-  LIMIT 1;
-$$;
-
-REVOKE ALL ON FUNCTION public.current_practitioner_id() FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.current_practitioner_id() TO authenticated, service_role;
-
 -- Harden the internal application helper itself: applicant-supplied priceRange
 -- must never set administrative pricing, and self-provisioning must use the
 -- already-approved application stored in the database.
@@ -178,14 +162,6 @@ ALTER TABLE public.practitioner_wallets
 ALTER TABLE public.practitioner_wallets
   ALTER COLUMN bank_account_label DROP DEFAULT;
 
--- The old default was a fake HDFC placeholder, not a verified payout account.
--- Clear only rows matching that exact schema default so practitioners must enter
--- their own bank details before requesting a manual payout.
-UPDATE public.practitioner_wallets
-SET bank_account_label = NULL,
-    bank_account_holder = NULL
-WHERE bank_account_label = 'HDFC Bank ···· 4821';
-
 DROP POLICY IF EXISTS "practitioner_wallets_insert_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_update_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_write_practitioner" ON public.practitioner_wallets;
@@ -196,7 +172,7 @@ REVOKE INSERT, UPDATE, DELETE ON public.practitioner_payouts FROM anon, authenti
 
 -- Table-level REVOKE does not remove column-level grants. Remove all residual
 -- anon column writes and authenticated writes from the financial/history tables.
-DO $
+DO $privileges$
 DECLARE
   v_table text;
   v_columns text;
@@ -268,7 +244,7 @@ BEGIN
     v_columns
   );
 END;
-$;
+$privileges$;
 
 -- Wallet creation is performed by approval/backend flows, never by a practitioner RPC.
 REVOKE ALL ON FUNCTION public.ensure_practitioner_wallet(numeric) FROM PUBLIC, anon, authenticated;
