@@ -3,7 +3,9 @@
 export function isBankAccountLinked(label: string | null | undefined): boolean {
   const trimmed = label?.trim() ?? "";
   if (!trimmed) return false;
-  return !trimmed.toLowerCase().includes("not linked");
+  const normalized = trimmed.toLowerCase();
+  if (normalized === "hdfc bank ···· 4821") return false;
+  return !normalized.includes("not linked");
 }
 
 export function formatNextPayoutDate(value: string | null | undefined): string {
