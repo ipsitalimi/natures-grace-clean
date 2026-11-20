@@ -91,6 +91,7 @@ export async function fetchPractitionerReviews(
     .from("reviews")
     .select("*")
     .eq("status", "Approved")
+    .in("target_type", ["practitioner", "event"])
     .order("created_at", { ascending: false })
     .limit(10);
 
@@ -115,6 +116,7 @@ export async function fetchPractitionerReviews(
       body: string;
       created_at: string;
       practitioner_reply?: string | null;
+      seller_reply?: string | null;
     };
     return {
       id: r.id,
@@ -127,7 +129,7 @@ export async function fetchPractitionerReviews(
         month: "short",
         year: "numeric",
       }),
-      providerReply: r.practitioner_reply?.trim() || undefined,
+      providerReply: r.practitioner_reply?.trim() || r.seller_reply?.trim() || undefined,
     };
   });
 }
