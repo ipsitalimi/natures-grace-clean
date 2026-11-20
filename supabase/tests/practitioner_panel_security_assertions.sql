@@ -78,6 +78,13 @@ BEGIN
     RAISE EXCEPTION 'FAIL: internal practitioner application RPC remains directly executable';
   END IF;
 
+  IF has_function_privilege('anon', 'public.approve_role_application_transaction(uuid,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.approve_role_application_transaction(uuid,uuid)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.admin_provision_user_role(uuid,text,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.admin_provision_user_role(uuid,text,uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: admin role-approval RPC privileges are incorrect';
+  END IF;
+
   IF position('priceRange' IN pg_get_functiondef('public.apply_practitioner_application(uuid,jsonb)'::regprocedure)) > 0 THEN
     RAISE EXCEPTION 'FAIL: applicant form data can still set practitioner pricing';
   END IF;
