@@ -112,6 +112,22 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_payouts'
+      AND policyname = 'practitioner_payouts_select_scoped'
+      AND cmd = 'SELECT'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_wallet_transactions'
+      AND policyname = 'practitioner_wallet_txn_select_scoped'
+      AND cmd = 'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner payout or ledger read policies are missing';
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name = 'practitioner_wallets'
