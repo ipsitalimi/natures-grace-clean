@@ -178,6 +178,13 @@ REVOKE INSERT ON public.practitioner_bookings FROM anon, authenticated;
 DROP POLICY IF EXISTS "practitioner_session_history_write_practitioner" ON public.practitioner_session_history;
 REVOKE INSERT, UPDATE, DELETE ON public.practitioner_session_history FROM anon, authenticated;
 
+-- Public discovery must never expose a non-approved practitioner, even if
+-- an availability flag is accidentally enabled by a privileged workflow.
+DROP POLICY IF EXISTS "practitioners_select" ON public.practitioners;
+CREATE POLICY "practitioners_select"
+  ON public.practitioners FOR SELECT TO authenticated
+  USING (is_active IS TRUE AND approval_status = 'Approved');
+
 -- 4) Protect every admin-controlled practitioner field at the database boundary.
 CREATE OR REPLACE FUNCTION public.practitioners_guard_self_update()
 RETURNS trigger
@@ -220,6 +227,12 @@ BEGIN
        AND NEW.metadata->'onboarding_complete' IS DISTINCT FROM 'true'::jsonb
      ) THEN
     RAISE EXCEPTION 'practitioner_metadata_field_not_editable' USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.is_active IS DISTINCT FROM OLD.is_active
+     AND NEW.is_active IS TRUE
+     AND OLD.approval_status IS DISTINCT FROM 'Approved' THEN
+    RAISE EXCEPTION 'practitioner_approval_required_before_activation' USING ERRCODE = '42501';
   END IF;
 
   IF NEW.name IS NOT NULL AND char_length(NEW.name) > 120 THEN
