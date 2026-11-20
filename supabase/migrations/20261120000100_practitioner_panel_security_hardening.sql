@@ -151,12 +151,12 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
   SELECT p.id
     FROM public.practitioners p
    WHERE p.profile_id = auth.uid()
    LIMIT 1;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.current_practitioner_id() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.current_practitioner_id() TO authenticated;
