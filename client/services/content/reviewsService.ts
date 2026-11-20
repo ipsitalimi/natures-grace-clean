@@ -22,6 +22,7 @@ export type DbReviewRowFull = DbReviewRow & {
   booking_id: string | null;
   order_id: string | null;
   seller_reply: string;
+  practitioner_reply?: string | null;
   updated_at: string;
 };
 
@@ -47,6 +48,7 @@ function mapRow(row: DbReviewRowFull): Review {
     body: row.body,
     status: row.status as Review["status"],
     sellerReply: row.seller_reply ?? "",
+    practitionerReply: row.practitioner_reply ?? "",
     createdAt: row.created_at,
   };
 }
@@ -253,25 +255,45 @@ export async function saveSellerReply(
   reply: string
 ): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return false;
+  const value = reply.trim();
+  if (!supabase || !reviewId || !value || value.length > 2000) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("reviews")
-    .update({ seller_reply: reply.trim() })
-    .eq("id", reviewId);
+    .update({ seller_reply: value })
+    .eq("id", reviewId)
+    .eq("target_type", "product")
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[reviewsService] seller reply:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
 
 export async function savePractitionerReply(
   reviewId: string,
   reply: string
 ): Promise<boolean> {
-  return saveSellerReply(reviewId, reply);
+  const supabase = getSupabase();
+  const value = reply.trim();
+  if (!supabase || !reviewId || !value || value.length > 2000) return false;
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .update({ practitioner_reply: value })
+    .eq("id", reviewId)
+    .in("target_type", ["practitioner", "event"])
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[reviewsService] practitioner reply:", error.message);
+    return false;
+  }
+  return Boolean(data?.id);
 }
 
 export async function fetchApprovedPractitionerReviews(
@@ -285,6 +307,7 @@ export async function fetchApprovedPractitionerReviews(
     .from("reviews")
     .select("*")
     .eq("practitioner_id", practitionerId)
+    .in("target_type", ["practitioner", "event"])
     .eq("status", "Approved")
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -358,6 +381,7 @@ export async function getPractitionerReviewStats(
     .from("reviews")
     .select("rating")
     .eq("practitioner_id", practitionerId)
+    .in("target_type", ["practitioner", "event"])
     .eq("status", "Approved");
 
   if (error) {
@@ -372,21 +396,6 @@ export async function getPractitionerReviewStats(
   return { avgRating, reviewCount };
 }
 
-export async function syncPractitionerReviewAggregate(
-  practitionerId: string
-): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase || !practitionerId) return;
-
-  const stats = await getPractitionerReviewStats(practitionerId);
-  await supabase
-    .from("practitioners")
-    .update({
-      rating: Math.round(stats.avgRating * 10) / 10,
-      review_count: stats.reviewCount,
-    })
-    .eq("id", practitionerId);
-}
 
 function displayNameFromProfile(
   fullName: string | undefined,
@@ -488,13 +497,6 @@ export async function deleteMyReview(reviewId: string): Promise<boolean> {
   } = await supabase.auth.getUser();
   if (!user) return false;
 
-  const { data: row } = await supabase
-    .from("reviews")
-    .select("practitioner_id, status")
-    .eq("id", reviewId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
   const { error } = await supabase
     .from("reviews")
     .delete()
@@ -506,10 +508,6 @@ export async function deleteMyReview(reviewId: string): Promise<boolean> {
     return false;
   }
 
-  const practitionerId = (row as { practitioner_id?: string } | null)?.practitioner_id;
-  if (practitionerId && (row as { status?: string })?.status === "Approved") {
-    await syncPractitionerReviewAggregate(practitionerId);
-  }
   return true;
 }
 
@@ -519,16 +517,6 @@ export async function updateReviewStatus(
 ): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) return false;
-
-  const { data: row, error: fetchError } = await supabase
-    .from("reviews")
-    .select("practitioner_id")
-    .eq("id", id)
-    .maybeSingle();
-  if (fetchError || !row) {
-    console.error("[reviewsService] update status fetch:", fetchError?.message ?? "Review not found");
-    return false;
-  }
 
   const { data: updated, error } = await supabase
     .from("reviews")
@@ -541,10 +529,6 @@ export async function updateReviewStatus(
     return false;
   }
 
-  const practitionerId = (row as { practitioner_id?: string } | null)?.practitioner_id;
-  if (practitionerId) {
-    await syncPractitionerReviewAggregate(practitionerId);
-  }
   return true;
 }
 export async function countReviews(): Promise<number> {
