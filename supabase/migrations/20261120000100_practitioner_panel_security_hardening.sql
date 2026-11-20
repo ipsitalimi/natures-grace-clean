@@ -222,10 +222,31 @@ BEGIN
     RAISE EXCEPTION 'practitioner_metadata_field_not_editable' USING ERRCODE = '42501';
   END IF;
 
+  IF NEW.name IS NOT NULL AND char_length(NEW.name) > 120 THEN
+    RAISE EXCEPTION 'practitioner_name_too_long' USING ERRCODE = '22001';
+  END IF;
+  IF NEW.bio IS NOT NULL AND char_length(NEW.bio) > 600 THEN
+    RAISE EXCEPTION 'practitioner_bio_too_long' USING ERRCODE = '22001';
+  END IF;
+  IF NEW.experience IS NOT NULL AND char_length(NEW.experience) > 120 THEN
+    RAISE EXCEPTION 'practitioner_experience_too_long' USING ERRCODE = '22001';
+  END IF;
+  IF cardinality(COALESCE(NEW.certifications, '{}'::text[])) > 30
+     OR EXISTS (
+       SELECT 1
+       FROM unnest(COALESCE(NEW.certifications, '{}'::text[])) AS cert(certification)
+       WHERE char_length(certification) > 200
+     ) THEN
+    RAISE EXCEPTION 'practitioner_certifications_invalid' USING ERRCODE = '22001';
+  END IF;
+  IF NEW.photo_url IS NOT NULL AND char_length(NEW.photo_url) > 2048 THEN
+    RAISE EXCEPTION 'practitioner_photo_url_too_long' USING ERRCODE = '22001';
+  END IF;
+
   NEW.updated_at := now();
   RETURN NEW;
 END;
-$$;
+$;
 
 DROP TRIGGER IF EXISTS practitioners_guard_self_update ON public.practitioners;
 CREATE TRIGGER practitioners_guard_self_update
