@@ -160,6 +160,14 @@ ALTER TABLE public.practitioner_wallets
 ALTER TABLE public.practitioner_wallets
   ALTER COLUMN bank_account_label DROP DEFAULT;
 
+-- The old default was a fake HDFC placeholder, not a verified payout account.
+-- Clear only rows matching that exact schema default so practitioners must enter
+-- their own bank details before requesting a manual payout.
+UPDATE public.practitioner_wallets
+SET bank_account_label = NULL,
+    bank_account_holder = NULL
+WHERE bank_account_label = 'HDFC Bank ···· 4821';
+
 DROP POLICY IF EXISTS "practitioner_wallets_insert_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_update_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_write_practitioner" ON public.practitioner_wallets;
