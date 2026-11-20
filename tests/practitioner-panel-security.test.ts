@@ -6,11 +6,14 @@ import {
   MANUAL_PAYOUT_NOTICE,
   formatNextPayoutDate,
   isBankAccountLinked,
+  isPractitionerBankAccountLinked,
 } from "../client/lib/payoutDisclosure";
 
-test("practitioner wallet accepts legitimate masked bank labels, including HDFC ending 4821", () => {
-  assert.equal(isBankAccountLinked("HDFC Bank ···· 4821"), true);
-  assert.equal(isBankAccountLinked("ICICI Bank ···· 1234"), true);
+test("practitioner bank details require both a masked label and account-holder name", () => {
+  assert.equal(isPractitionerBankAccountLinked("HDFC Bank ···· 4821", ""), false);
+  assert.equal(isPractitionerBankAccountLinked("HDFC Bank ···· 4821", "A Practitioner"), true);
+  assert.equal(isPractitionerBankAccountLinked("ICICI Bank ···· 1234", "A Practitioner"), true);
+  assert.equal(isPractitionerBankAccountLinked("Bank account not linked", "A Practitioner"), false);
 });
 
 test("practitioner wallet recognizes missing bank details", () => {
