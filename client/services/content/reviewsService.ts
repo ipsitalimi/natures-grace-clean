@@ -396,12 +396,6 @@ export async function getPractitionerReviewStats(
   return { avgRating, reviewCount };
 }
 
-export async function syncPractitionerReviewAggregate(
-  _practitionerId: string
-): Promise<void> {
-  // Practitioner rating and review_count are recalculated by the trusted
-  // database trigger on review insert/update/delete. Never write them from a client.
-}
 
 function displayNameFromProfile(
   fullName: string | undefined,
@@ -521,10 +515,6 @@ export async function deleteMyReview(reviewId: string): Promise<boolean> {
     return false;
   }
 
-  const practitionerId = (row as { practitioner_id?: string } | null)?.practitioner_id;
-  if (practitionerId && (row as { status?: string })?.status === "Approved") {
-    await syncPractitionerReviewAggregate(practitionerId);
-  }
   return true;
 }
 
@@ -556,10 +546,6 @@ export async function updateReviewStatus(
     return false;
   }
 
-  const practitionerId = (row as { practitioner_id?: string } | null)?.practitioner_id;
-  if (practitionerId) {
-    await syncPractitionerReviewAggregate(practitionerId);
-  }
   return true;
 }
 export async function countReviews(): Promise<number> {
