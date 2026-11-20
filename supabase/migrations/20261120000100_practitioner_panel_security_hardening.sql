@@ -194,6 +194,82 @@ REVOKE INSERT, UPDATE, DELETE ON public.practitioner_wallets FROM anon, authenti
 REVOKE INSERT, UPDATE, DELETE ON public.practitioner_wallet_transactions FROM anon, authenticated;
 REVOKE INSERT, UPDATE, DELETE ON public.practitioner_payouts FROM anon, authenticated;
 
+-- Table-level REVOKE does not remove column-level grants. Remove all residual
+-- anon column writes and authenticated writes from the financial/history tables.
+DO $
+DECLARE
+  v_table text;
+  v_columns text;
+BEGIN
+  FOREACH v_table IN ARRAY ARRAY[
+    'practitioner_wallets',
+    'practitioner_wallet_transactions',
+    'practitioner_payouts',
+    'practitioner_session_history',
+    'practitioner_bookings',
+    'practitioners',
+    'practitioner_availability',
+    'practitioner_offerings',
+    'practitioner_booking_intro_messages',
+    'practitioner_pricing_rules',
+    'reviews'
+  ] LOOP
+    SELECT string_agg(format('%I', column_name), ', ' ORDER BY ordinal_position)
+      INTO v_columns
+      FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = v_table;
+
+    IF v_columns IS NOT NULL THEN
+      EXECUTE format(
+        'REVOKE INSERT (%1$s), UPDATE (%1$s) ON TABLE public.%2$I FROM anon',
+        v_columns, v_table
+      );
+    END IF;
+  END LOOP;
+
+  FOREACH v_table IN ARRAY ARRAY[
+    'practitioner_wallets',
+    'practitioner_wallet_transactions',
+    'practitioner_payouts',
+    'practitioner_session_history'
+  ] LOOP
+    SELECT string_agg(format('%I', column_name), ', ' ORDER BY ordinal_position)
+      INTO v_columns
+      FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = v_table;
+
+    IF v_columns IS NOT NULL THEN
+      EXECUTE format(
+        'REVOKE INSERT (%1$s), UPDATE (%1$s) ON TABLE public.%2$I FROM authenticated',
+        v_columns, v_table
+      );
+    END IF;
+  END LOOP;
+
+  SELECT string_agg(format('%I', column_name), ', ' ORDER BY ordinal_position)
+    INTO v_columns
+    FROM information_schema.columns
+   WHERE table_schema = 'public'
+     AND table_name = 'practitioner_bookings';
+  EXECUTE format(
+    'REVOKE INSERT (%1$s) ON TABLE public.practitioner_bookings FROM authenticated',
+    v_columns
+  );
+
+  SELECT string_agg(format('%I', column_name), ', ' ORDER BY ordinal_position)
+    INTO v_columns
+    FROM information_schema.columns
+   WHERE table_schema = 'public'
+     AND table_name = 'practitioner_booking_intro_messages';
+  EXECUTE format(
+    'REVOKE UPDATE (%1$s) ON TABLE public.practitioner_booking_intro_messages FROM authenticated',
+    v_columns
+  );
+END;
+$;
+
 -- Wallet creation is performed by approval/backend flows, never by a practitioner RPC.
 REVOKE ALL ON FUNCTION public.ensure_practitioner_wallet(numeric) FROM PUBLIC, anon, authenticated;
 
