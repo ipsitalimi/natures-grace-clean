@@ -1,6 +1,8 @@
 -- Practitioner panel security hardening.
--- This migration is intentionally additive/targeted. It does not touch production data
--- and must be applied only after review in the intended Supabase environment.
+-- This migration does not modify any database until deliberately applied.
+-- On apply, its only existing-row corrections are to clear the exact shared bank
+-- placeholder and recalculate practitioner ratings from approved reviews.
+-- Apply only after review in the intended Supabase environment.
 
 -- 1) Practitioner identity is ownership, not public availability.
 CREATE OR REPLACE FUNCTION public.current_practitioner_id()
