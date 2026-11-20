@@ -671,6 +671,12 @@ REVOKE ALL ON FUNCTION public.sync_practitioner_review_aggregate_from_reviews() 
 REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated, service_role;
 
+-- Close mutable search paths on practitioner helper functions flagged by the
+-- production security advisor. These are invoker/trigger helpers, not public RPCs.
+ALTER FUNCTION public.set_updated_at() SET search_path = public;
+ALTER FUNCTION public.parse_practitioner_subcategories_from_form(jsonb) SET search_path = public;
+ALTER FUNCTION public.merge_practitioner_specialties(uuid, text, text[]) SET search_path = public;
+
 -- 9) Restore the database RPCs used by the admin payout queue and seller
 -- withdrawal endpoint. Rejected payouts require an auditable reversal category.
 ALTER TABLE public.wallet_transactions
