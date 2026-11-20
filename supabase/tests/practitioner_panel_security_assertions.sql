@@ -247,6 +247,24 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_offerings'
+      AND policyname = 'practitioner_offerings_select_scoped'
+      AND qual ILIKE '%approval_status%'
+      AND qual ILIKE '%is_active%'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_availability'
+      AND policyname = 'practitioner_availability_select_scoped'
+      AND qual ILIKE '%approval_status%'
+      AND qual ILIKE '%is_active%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: inactive or unapproved practitioners can still be publicly discovered through offerings/availability';
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM pg_trigger
     WHERE tgrelid = 'public.practitioner_bookings'::regclass
       AND tgname = 'practitioner_bookings_guard_practitioner_update'
