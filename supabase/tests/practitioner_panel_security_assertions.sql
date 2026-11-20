@@ -229,6 +229,24 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_offerings'
+      AND policyname = 'practitioner_offerings_write_practitioner'
+      AND qual ILIKE '%approval_status%'
+      AND with_check ILIKE '%approval_status%'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_availability'
+      AND policyname = 'practitioner_availability_write_practitioner'
+      AND qual ILIKE '%approval_status%'
+      AND with_check ILIKE '%approval_status%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: unapproved practitioners can still edit offerings or availability';
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM pg_trigger
     WHERE tgrelid = 'public.practitioner_bookings'::regclass
       AND tgname = 'practitioner_bookings_guard_practitioner_update'
