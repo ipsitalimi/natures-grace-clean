@@ -742,7 +742,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $review_insert_guard$
 BEGIN
   IF auth.role() = 'service_role' OR public.is_admin() THEN
     RETURN NEW;
@@ -763,7 +763,7 @@ BEGIN
   NEW.updated_at := now();
   RETURN NEW;
 END;
-$;
+$review_insert_guard$;
 
 DROP TRIGGER IF EXISTS reviews_before_insert_guard ON public.reviews;
 CREATE TRIGGER reviews_before_insert_guard
