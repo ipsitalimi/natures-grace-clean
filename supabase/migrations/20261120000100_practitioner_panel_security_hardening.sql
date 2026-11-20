@@ -269,7 +269,7 @@ BEGIN
   END IF;
 
   IF NEW.booking_status = 'Completed' AND OLD.booking_status IS DISTINCT FROM 'Completed' THEN
-    IF OLD.payment_status NOT IN ('Paid','Free') THEN
+    IF OLD.payment_status IS DISTINCT FROM 'Paid' AND OLD.payment_status IS DISTINCT FROM 'Free' THEN
       RAISE EXCEPTION 'booking_not_eligible_for_completion' USING ERRCODE = '42501';
     END IF;
     NEW.completed_at := now();
