@@ -212,7 +212,7 @@ REVOKE INSERT, UPDATE, DELETE ON public.practitioner_session_history FROM anon, 
 -- an availability flag is accidentally enabled by a privileged workflow.
 DROP POLICY IF EXISTS "practitioners_select" ON public.practitioners;
 CREATE POLICY "practitioners_select"
-  ON public.practitioners FOR SELECT TO anon, authenticated
+  ON public.practitioners FOR SELECT TO authenticated
   USING (is_active IS TRUE AND approval_status = 'Approved');
 
 -- 4) Protect every admin-controlled practitioner field at the database boundary.
@@ -422,13 +422,9 @@ REVOKE ALL PRIVILEGES ON TABLE
   public.reviews
 FROM PUBLIC, anon, authenticated;
 
--- Public catalog access remains read-only.
-GRANT SELECT ON TABLE
-  public.practitioners,
-  public.practitioner_availability,
-  public.practitioner_offerings,
-  public.reviews
-TO anon;
+-- Public approved reviews remain readable; practitioner catalogue and scheduling
+-- data retain their existing authenticated-only access model.
+GRANT SELECT ON TABLE public.reviews TO anon;
 
 -- Authenticated app access is limited to the operations used by each panel.
 GRANT SELECT, UPDATE ON TABLE public.practitioners TO authenticated;
