@@ -661,4 +661,249 @@ REVOKE ALL ON FUNCTION public.sync_practitioner_review_aggregate_from_reviews() 
 REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated, service_role;
 
+-- 9) Restore the database RPCs used by the admin payout queue and seller
+-- withdrawal endpoint. All calls are service-role-only; user-facing routes must
+-- authenticate and authorize the caller before invoking them.
+CREATE OR REPLACE FUNCTION public.admin_update_payout_status(
+  p_payout_type text,
+  p_payout_id uuid,
+  p_status text,
+  p_admin_id uuid,
+  p_rejection_reason text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+  v_wallet_id uuid;
+  v_amount numeric(12,2);
+  v_current_status text;
+  v_now timestamptz := now();
+  v_reason text := NULLIF(btrim(p_rejection_reason), '');
+BEGIN
+  IF p_payout_type NOT IN ('seller', 'practitioner')
+     OR p_payout_id IS NULL
+     OR p_admin_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Invalid payout details');
+  END IF;
+
+  IF p_status NOT IN ('Under Review', 'Processing', 'Completed', 'Rejected') THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Invalid status');
+  END IF;
+
+  IF v_reason IS NOT NULL AND length(v_reason) > 500 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Rejection reason is too long');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+     WHERE id = p_admin_id
+       AND lower(role) = 'admin'
+       AND lower(COALESCE(status, 'active')) = 'active'
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Active admin identity required');
+  END IF;
+
+  IF p_payout_type = 'seller' THEN
+    SELECT wallet_id, amount, status
+      INTO v_wallet_id, v_amount, v_current_status
+      FROM public.seller_payouts
+     WHERE id = p_payout_id
+     FOR UPDATE;
+  ELSE
+    SELECT wallet_id, amount, status
+      INTO v_wallet_id, v_amount, v_current_status
+      FROM public.practitioner_payouts
+     WHERE id = p_payout_id
+     FOR UPDATE;
+  END IF;
+
+  IF v_wallet_id IS NULL OR v_amount IS NULL OR v_amount <= 0 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Payout not found or invalid');
+  END IF;
+
+  IF v_current_status = p_status THEN
+    RETURN jsonb_build_object('ok', true, 'already_applied', true);
+  END IF;
+
+  IF v_current_status IN ('Completed', 'Rejected', 'Failed', 'Cancelled') THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Payout is already in a terminal state');
+  END IF;
+
+  IF p_status = 'Rejected' THEN
+    IF p_payout_type = 'seller' THEN
+      UPDATE public.seller_wallets
+         SET available_balance = available_balance + v_amount,
+             pending_payout = pending_payout - v_amount
+       WHERE id = v_wallet_id
+         AND pending_payout >= v_amount;
+      IF NOT FOUND THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'Seller wallet not found or reserved payout balance is insufficient');
+      END IF;
+
+      INSERT INTO public.wallet_transactions(
+        wallet_id, payout_id, type, category, amount, description, is_released
+      ) VALUES (
+        v_wallet_id, p_payout_id, 'credit', 'payout_reversal', v_amount,
+        COALESCE(v_reason, 'Payout rejected — funds returned'), true
+      );
+
+      UPDATE public.seller_payouts
+         SET status = p_status, processed_by = p_admin_id,
+             rejection_reason = COALESCE(v_reason, 'Rejected by admin'),
+             updated_at = v_now
+       WHERE id = p_payout_id;
+    ELSE
+      UPDATE public.practitioner_wallets
+         SET available_balance = available_balance + v_amount,
+             pending_payout = pending_payout - v_amount
+       WHERE id = v_wallet_id
+         AND pending_payout >= v_amount;
+      IF NOT FOUND THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'Practitioner wallet not found or reserved payout balance is insufficient');
+      END IF;
+
+      INSERT INTO public.practitioner_wallet_transactions(
+        wallet_id, payout_id, type, category, amount, description, is_released
+      ) VALUES (
+        v_wallet_id, p_payout_id, 'credit', 'payout_reversal', v_amount,
+        COALESCE(v_reason, 'Payout rejected — funds returned'), true
+      );
+
+      UPDATE public.practitioner_payouts
+         SET status = p_status, processed_by = p_admin_id,
+             rejection_reason = COALESCE(v_reason, 'Rejected by admin'),
+             updated_at = v_now
+       WHERE id = p_payout_id;
+    END IF;
+  ELSE
+    IF p_status = 'Completed' THEN
+      IF p_payout_type = 'seller' THEN
+        UPDATE public.seller_wallets
+           SET pending_payout = pending_payout - v_amount
+         WHERE id = v_wallet_id
+           AND pending_payout >= v_amount;
+      ELSE
+        UPDATE public.practitioner_wallets
+           SET pending_payout = pending_payout - v_amount
+         WHERE id = v_wallet_id
+           AND pending_payout >= v_amount;
+      END IF;
+
+      IF NOT FOUND THEN
+        RETURN jsonb_build_object('ok', false, 'error', 'Wallet not found or reserved payout balance is insufficient');
+      END IF;
+    END IF;
+
+    IF p_payout_type = 'seller' THEN
+      UPDATE public.seller_payouts
+         SET status = p_status, processed_by = p_admin_id,
+             completed_at = CASE WHEN p_status = 'Completed' THEN v_now ELSE completed_at END,
+             updated_at = v_now
+       WHERE id = p_payout_id;
+    ELSE
+      UPDATE public.practitioner_payouts
+         SET status = p_status, processed_by = p_admin_id,
+             completed_at = CASE WHEN p_status = 'Completed' THEN v_now ELSE completed_at END,
+             updated_at = v_now
+       WHERE id = p_payout_id;
+    END IF;
+  END IF;
+
+  RETURN jsonb_build_object('ok', true, 'already_applied', false);
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.admin_update_payout_status(text, uuid, text, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_payout_status(text, uuid, text, uuid, text) TO service_role;
+
+-- Seller withdrawal requests remain a manual admin queue item; this RPC only
+-- reserves wallet funds and creates the queue/ledger records. It never transfers money.
+CREATE OR REPLACE FUNCTION public.request_wallet_payout(
+  p_payout_type text,
+  p_wallet_id uuid,
+  p_amount numeric,
+  p_notes text DEFAULT 'Manual withdrawal — processed by Nature''s Grace team within 3–7 business days'
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+  v_available numeric(12,2);
+  v_pending numeric(12,2);
+  v_bank_label text;
+  v_bank_holder text;
+  v_payout_id uuid;
+BEGIN
+  IF p_payout_type NOT IN ('seller', 'practitioner')
+     OR p_wallet_id IS NULL
+     OR p_amount IS NULL
+     OR p_amount <= 0
+     OR p_amount > 100000000 THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Invalid payout details');
+  END IF;
+
+  IF p_payout_type = 'seller' THEN
+    SELECT available_balance, bank_account_label
+      INTO v_available, v_bank_label
+      FROM public.seller_wallets
+     WHERE id = p_wallet_id
+     FOR UPDATE;
+  ELSE
+    SELECT available_balance, bank_account_label, bank_account_holder
+      INTO v_available, v_bank_label, v_bank_holder
+      FROM public.practitioner_wallets
+     WHERE id = p_wallet_id
+     FOR UPDATE;
+  END IF;
+
+  IF v_available IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Wallet not found');
+  END IF;
+
+  IF v_bank_label IS NULL OR btrim(v_bank_label) = ''
+     OR lower(v_bank_label) LIKE '%not linked%'
+     OR (p_payout_type = 'practitioner'
+         AND (v_bank_holder IS NULL OR btrim(v_bank_holder) = ''
+              OR lower(v_bank_label) = 'hdfc bank ···· 4821')) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Complete valid bank details before requesting a payout');
+  END IF;
+
+  IF v_available < p_amount THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Insufficient available balance');
+  END IF;
+
+  IF p_payout_type = 'seller' THEN
+    UPDATE public.seller_wallets
+       SET available_balance = available_balance - p_amount,
+           pending_payout = pending_payout + p_amount
+     WHERE id = p_wallet_id;
+    INSERT INTO public.seller_payouts(wallet_id, amount, status, notes)
+      VALUES (p_wallet_id, p_amount, 'Pending', p_notes)
+      RETURNING id INTO v_payout_id;
+    INSERT INTO public.wallet_transactions(wallet_id, payout_id, type, category, amount, description, is_released)
+      VALUES (p_wallet_id, v_payout_id, 'debit', 'payout', p_amount, 'Payout to Bank Account (pending)', true);
+  ELSE
+    UPDATE public.practitioner_wallets
+       SET available_balance = available_balance - p_amount,
+           pending_payout = pending_payout + p_amount
+     WHERE id = p_wallet_id;
+    INSERT INTO public.practitioner_payouts(wallet_id, amount, status, notes)
+      VALUES (p_wallet_id, p_amount, 'Pending', p_notes)
+      RETURNING id INTO v_payout_id;
+    INSERT INTO public.practitioner_wallet_transactions(wallet_id, payout_id, type, category, amount, description, is_released)
+      VALUES (p_wallet_id, v_payout_id, 'debit', 'payout', p_amount, 'Payout to Bank Account (pending)', true);
+  END IF;
+
+  RETURN jsonb_build_object('ok', true, 'payout_id', v_payout_id);
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.request_wallet_payout(text, uuid, numeric, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.request_wallet_payout(text, uuid, numeric, text) TO service_role;
+
 NOTIFY pgrst, 'reload schema';
