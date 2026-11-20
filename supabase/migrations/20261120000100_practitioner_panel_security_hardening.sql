@@ -688,7 +688,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
 DECLARE
   v_wallet_id uuid;
   v_amount numeric(12,2);
@@ -827,7 +827,7 @@ BEGIN
 
   RETURN jsonb_build_object('ok', true, 'already_applied', false);
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.admin_update_payout_status(text, uuid, text, uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_payout_status(text, uuid, text, uuid, text) TO service_role;
@@ -844,7 +844,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
 DECLARE
   v_available numeric(12,2);
   v_pending numeric(12,2);
@@ -882,8 +882,7 @@ BEGIN
   IF v_bank_label IS NULL OR btrim(v_bank_label) = ''
      OR lower(v_bank_label) LIKE '%not linked%'
      OR (p_payout_type = 'practitioner'
-         AND (v_bank_holder IS NULL OR btrim(v_bank_holder) = ''
-              OR lower(v_bank_label) = 'hdfc bank ···· 4821')) THEN
+         AND (v_bank_holder IS NULL OR btrim(v_bank_holder) = '')) THEN
     RETURN jsonb_build_object('ok', false, 'error', 'Complete valid bank details before requesting a payout');
   END IF;
 
@@ -915,7 +914,7 @@ BEGIN
 
   RETURN jsonb_build_object('ok', true, 'payout_id', v_payout_id);
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.request_wallet_payout(text, uuid, numeric, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.request_wallet_payout(text, uuid, numeric, text) TO service_role;
