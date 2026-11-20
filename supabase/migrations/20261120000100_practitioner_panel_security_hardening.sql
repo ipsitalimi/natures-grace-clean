@@ -410,6 +410,64 @@ UPDATE public.practitioners p
      OR p.review_count IS DISTINCT FROM COALESCE(a.review_count, 0)
    );
 
+-- The SECURITY DEFINER intro-chat starter must independently enforce the
+-- same practitioner approval rule as the message INSERT policy.
+CREATE OR REPLACE FUNCTION public.start_practitioner_booking_intro_chat(p_booking_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_booking RECORD;
+BEGIN
+  SELECT b.id, b.user_id, b.practitioner_id, b.payment_status, b.booking_status,
+         b.intro_chat_started_at, b.intro_chat_ends_at,
+         p.profile_id AS practitioner_profile_id,
+         p.approval_status AS practitioner_approval_status
+    INTO v_booking
+    FROM public.practitioner_bookings b
+    LEFT JOIN public.practitioners p ON p.id = b.practitioner_id
+   WHERE b.id = p_booking_id
+   FOR UPDATE OF b;
+
+  IF NOT FOUND
+     OR auth.uid() IS NULL
+     OR (v_booking.user_id IS DISTINCT FROM auth.uid()
+         AND v_booking.practitioner_profile_id IS DISTINCT FROM auth.uid()) THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Booking not found');
+  END IF;
+
+  IF v_booking.practitioner_profile_id = auth.uid()
+     AND v_booking.practitioner_approval_status IS DISTINCT FROM 'Approved' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Practitioner approval is required to start intro chat');
+  END IF;
+
+  IF v_booking.payment_status <> 'Paid' OR v_booking.booking_status <> 'Confirmed' THEN
+    RETURN jsonb_build_object('ok', false, 'error', 'Intro chat is available only for paid, confirmed bookings');
+  END IF;
+
+  IF v_booking.intro_chat_started_at IS NULL THEN
+    UPDATE public.practitioner_bookings
+       SET intro_chat_started_at = NOW(),
+           intro_chat_ends_at = NOW() + INTERVAL '7 minutes'
+     WHERE id = p_booking_id
+     RETURNING intro_chat_started_at, intro_chat_ends_at
+       INTO v_booking.intro_chat_started_at, v_booking.intro_chat_ends_at;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'ok', true,
+    'started_at', v_booking.intro_chat_started_at,
+    'ends_at', v_booking.intro_chat_ends_at,
+    'remaining_seconds', GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (v_booking.intro_chat_ends_at - NOW()))))
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.start_practitioner_booking_intro_chat(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.start_practitioner_booking_intro_chat(uuid) TO authenticated, service_role;
+
 -- Only approved practitioners may initiate the booking intro chat; existing
 -- participants can still read their previous conversation history.
 DROP POLICY IF EXISTS "booking_intro_messages_insert_participants" ON public.practitioner_booking_intro_messages;
