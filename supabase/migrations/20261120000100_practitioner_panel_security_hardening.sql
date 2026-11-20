@@ -76,10 +76,21 @@ BEGIN
   -- name, bio, experience, certifications, photo_url and is_active (availability).
   -- All other columns, including identity, pricing, approval, verification, ratings,
   -- featured status, categories, meeting links and internal metadata are protected.
-  IF (to_jsonb(NEW) - ARRAY['name','bio','experience','certifications','photo_url','is_active','updated_at'])
+  IF (to_jsonb(NEW) - ARRAY['name','bio','experience','certifications','photo_url','is_active','metadata','updated_at'])
      IS DISTINCT FROM
-     (to_jsonb(OLD) - ARRAY['name','bio','experience','certifications','photo_url','is_active','updated_at']) THEN
+     (to_jsonb(OLD) - ARRAY['name','bio','experience','certifications','photo_url','is_active','metadata','updated_at']) THEN
     RAISE EXCEPTION 'practitioner_field_not_editable' USING ERRCODE = '42501';
+  END IF;
+
+  -- The onboarding flow may set this one-way flag; all other metadata stays locked.
+  IF (COALESCE(NEW.metadata, '{}'::jsonb) - 'onboarding_complete')
+     IS DISTINCT FROM
+     (COALESCE(OLD.metadata, '{}'::jsonb) - 'onboarding_complete')
+     OR (
+       NEW.metadata->'onboarding_complete' IS DISTINCT FROM OLD.metadata->'onboarding_complete'
+       AND NEW.metadata->'onboarding_complete' IS DISTINCT FROM 'true'::jsonb
+     ) THEN
+    RAISE EXCEPTION 'practitioner_metadata_field_not_editable' USING ERRCODE = '42501';
   END IF;
 
   NEW.updated_at := now();
