@@ -336,6 +336,62 @@ REVOKE INSERT, UPDATE, DELETE ON public.practitioner_wallets,
   public.practitioner_pricing_rules, public.reviews
 FROM anon;
 
+-- Remove broad default table grants first. RLS does not protect against TRUNCATE,
+-- and REFERENCES/TRIGGER are not needed by mobile clients.
+REVOKE ALL PRIVILEGES ON TABLE
+  public.practitioners,
+  public.practitioner_availability,
+  public.practitioner_offerings,
+  public.practitioner_pricing_rules,
+  public.practitioner_bookings,
+  public.practitioner_booking_intro_messages,
+  public.practitioner_wallets,
+  public.practitioner_wallet_transactions,
+  public.practitioner_payouts,
+  public.practitioner_session_history,
+  public.reviews
+FROM PUBLIC, anon, authenticated;
+
+-- Public catalog access remains read-only.
+GRANT SELECT ON TABLE
+  public.practitioners,
+  public.practitioner_availability,
+  public.practitioner_offerings,
+  public.reviews
+TO anon;
+
+-- Authenticated app access is limited to the operations used by each panel.
+GRANT SELECT, UPDATE ON TABLE public.practitioners TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+  public.practitioner_availability,
+  public.practitioner_offerings
+TO authenticated;
+GRANT SELECT, UPDATE ON TABLE public.practitioner_bookings TO authenticated;
+GRANT SELECT, INSERT ON TABLE public.practitioner_booking_intro_messages TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.practitioner_pricing_rules TO authenticated;
+GRANT SELECT ON TABLE
+  public.practitioner_wallets,
+  public.practitioner_wallet_transactions,
+  public.practitioner_payouts,
+  public.practitioner_session_history
+TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.reviews TO authenticated;
+
+-- Backend routes, payment webhooks and trusted database workflows retain full access.
+GRANT ALL PRIVILEGES ON TABLE
+  public.practitioners,
+  public.practitioner_availability,
+  public.practitioner_offerings,
+  public.practitioner_pricing_rules,
+  public.practitioner_bookings,
+  public.practitioner_booking_intro_messages,
+  public.practitioner_wallets,
+  public.practitioner_wallet_transactions,
+  public.practitioner_payouts,
+  public.practitioner_session_history,
+  public.reviews
+TO service_role;
+
 -- 6) Separate practitioner review replies from seller replies.
 ALTER TABLE public.reviews
   ADD COLUMN IF NOT EXISTS practitioner_reply text;
