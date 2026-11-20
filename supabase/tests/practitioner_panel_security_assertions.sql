@@ -2,7 +2,7 @@
 -- Run only after applying 20261120000100_practitioner_panel_security_hardening.sql.
 -- This script performs no INSERT, UPDATE, DELETE, or schema changes.
 
-DO $
+DO $$
 DECLARE
   v_table_name text;
 BEGIN
