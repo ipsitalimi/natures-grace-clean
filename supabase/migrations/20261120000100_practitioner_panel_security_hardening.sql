@@ -262,22 +262,10 @@ CREATE POLICY "practitioner_availability_write_practitioner"
 DROP POLICY IF EXISTS "practitioner_offerings_write_practitioner" ON public.practitioner_offerings;
 CREATE POLICY "practitioner_offerings_write_practitioner"
   ON public.practitioner_offerings FOR ALL TO authenticated
-  USING (
-    practitioner_id = public.current_practitioner_id()
-    AND EXISTS (
-      SELECT 1 FROM public.practitioners p
-      WHERE p.id = practitioner_offerings.practitioner_id
-        AND p.approval_status = 'Approved'
-    )
-  )
-  WITH CHECK (
-    practitioner_id = public.current_practitioner_id()
-    AND EXISTS (
-      SELECT 1 FROM public.practitioners p
-      WHERE p.id = practitioner_offerings.practitioner_id
-        AND p.approval_status = 'Approved'
-    )
-  );
+  USING (practitioner_id = public.current_practitioner_id())
+  WITH CHECK (practitioner_id = public.current_practitioner_id());
+-- The offering trigger below enforces approval, active status and admin price
+-- ranges whenever an offering is published; owners can still unpublish drafts.
 
 DROP POLICY IF EXISTS "practitioner_bookings_update_practitioner" ON public.practitioner_bookings;
 CREATE POLICY "practitioner_bookings_update_practitioner"
