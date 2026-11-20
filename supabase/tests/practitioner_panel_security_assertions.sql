@@ -63,6 +63,15 @@ BEGIN
     RAISE EXCEPTION 'FAIL: scoped practitioner wallet SELECT policy is missing';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_wallets'
+      AND column_name = 'bank_account_holder'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: backend-managed bank account holder field is missing';
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public'
