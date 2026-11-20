@@ -19,6 +19,127 @@ $$;
 REVOKE ALL ON FUNCTION public.current_practitioner_id() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.current_practitioner_id() TO authenticated, service_role;
 
+-- Harden the internal application helper itself: applicant-supplied priceRange
+-- must never set administrative pricing, and self-provisioning must use the
+-- already-approved application stored in the database.
+CREATE OR REPLACE FUNCTION public.apply_practitioner_application(
+  p_user_id uuid,
+  p_form jsonb
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+DECLARE
+  v_form jsonb;
+  v_practitioner_id uuid;
+  v_category text;
+  v_subs text[];
+  v_merged jsonb;
+  v_primary_sub text;
+BEGIN
+  IF p_user_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_practitioner_application' USING ERRCODE = '22023';
+  END IF;
+
+  IF auth.role() = 'service_role' OR public.is_admin() THEN
+    v_form := COALESCE(p_form, '{}'::jsonb);
+  ELSE
+    IF auth.uid() IS NULL OR p_user_id IS DISTINCT FROM auth.uid() THEN
+      RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
+    END IF;
+
+    SELECT COALESCE(ra.form_data, '{}'::jsonb)
+      INTO v_form
+      FROM public.role_applications ra
+     WHERE ra.user_id = auth.uid()
+       AND ra.target_role = 'Practitioner'
+       AND ra.status = 'Approved'
+     ORDER BY ra.reviewed_at DESC NULLS LAST, ra.created_at DESC
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'approved_practitioner_application_required' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  v_category := COALESCE(NULLIF(btrim(v_form->>'category'), ''), 'Healings');
+  v_subs := public.parse_practitioner_subcategories_from_form(v_form);
+  v_primary_sub := COALESCE(v_subs[1], '');
+
+  SELECT id INTO v_practitioner_id
+    FROM public.practitioners
+   WHERE profile_id = p_user_id
+   LIMIT 1;
+
+  IF v_practitioner_id IS NULL THEN
+    INSERT INTO public.practitioners (
+      profile_id, name, category, subcategory, bio, experience, certifications,
+      rating, review_count, price_per_session, approval_status, is_verified,
+      featured, is_active, specialties
+    ) VALUES (
+      p_user_id,
+      COALESCE(NULLIF(btrim(v_form->>'fullName'), ''), 'Practitioner'),
+      v_category,
+      v_primary_sub,
+      COALESCE(v_form->>'bio', ''),
+      COALESCE(v_form->>'experience', ''),
+      COALESCE(
+        (SELECT array_agg(btrim(x))
+           FROM unnest(string_to_array(COALESCE(v_form->>'certifications', ''), ',')) AS x
+          WHERE btrim(x) <> ''),
+        '{}'::text[]
+      ),
+      0, 0, 0, 'Approved', false, false, true, '[]'::jsonb
+    )
+    RETURNING id INTO v_practitioner_id;
+  ELSE
+    UPDATE public.practitioners
+       SET name = COALESCE(NULLIF(btrim(v_form->>'fullName'), ''), name),
+           category = v_category,
+           subcategory = COALESCE(NULLIF(v_primary_sub, ''), subcategory),
+           bio = COALESCE(NULLIF(v_form->>'bio', ''), bio),
+           experience = COALESCE(NULLIF(v_form->>'experience', ''), experience),
+           certifications = COALESCE(
+             (SELECT array_agg(btrim(x))
+                FROM unnest(string_to_array(COALESCE(v_form->>'certifications', ''), ',')) AS x
+               WHERE btrim(x) <> ''),
+             certifications
+           ),
+           approval_status = 'Approved',
+           is_active = true,
+           updated_at = now()
+     WHERE id = v_practitioner_id;
+  END IF;
+
+  v_merged := public.merge_practitioner_specialties(v_practitioner_id, v_category, v_subs);
+
+  UPDATE public.practitioners
+     SET specialties = v_merged,
+         subcategory = COALESCE(
+           NULLIF(v_primary_sub, ''),
+           NULLIF(btrim(subcategory), ''),
+           (SELECT btrim(x->>'subcategory')
+              FROM jsonb_array_elements(v_merged) x
+             LIMIT 1),
+           ''
+         ),
+         updated_at = now()
+   WHERE id = v_practitioner_id;
+
+  INSERT INTO public.practitioner_wallets (practitioner_id)
+  SELECT v_practitioner_id
+   WHERE NOT EXISTS (
+     SELECT 1
+       FROM public.practitioner_wallets pw
+      WHERE pw.practitioner_id = v_practitioner_id
+   );
+
+  RETURN v_practitioner_id;
+END;
+$;
+
 -- These SECURITY DEFINER entry points are internal helpers. Their trusted
 -- callers (admin approval and self-provisioning) execute as the function owner.
 -- Do not expose them as direct PostgREST RPCs to anonymous or signed-in clients.
