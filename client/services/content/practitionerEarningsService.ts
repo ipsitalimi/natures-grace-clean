@@ -5,7 +5,7 @@ import type {
 } from "@/data/practitionerBookings";
 import { getSupabase } from "@/lib/supabase";
 import { resolvePractitionerId } from "@/services/content/practitionerId";
-import { isPractitionerBankAccountLinked } from "@/lib/payoutDisclosure";
+import { isBankAccountLinked } from "@/lib/payoutDisclosure";
 
 export type DbPractitionerWalletRow = {
   id: string;
@@ -211,7 +211,7 @@ export async function fetchWalletSnapshot(
     heldBalance: Number(wallet.held_balance),
     totalEarned: Number(wallet.total_earned),
     commissionRate: Number(wallet.commission_rate),
-    bankAccountLabel: isPractitionerBankAccountLinked(wallet.bank_account_label)
+    bankAccountLabel: isBankAccountLinked(wallet.bank_account_label)
       ? wallet.bank_account_label!.trim()
       : "Bank account not linked",
     bankAccountHolder: wallet.bank_account_holder?.trim() || "",
