@@ -6,6 +6,7 @@ import { verifyPaymentWebhookSignature } from "../server/services/paymentWebhook
 import { isValidBookingPaymentInput } from "../server/services/razorpayCheckout";
 import { isValidPayoutAmount, validateBankDetailsInput } from "../server/lib/walletBank";
 import { isInactiveAccountStatus } from "../server/middleware/auth";
+import { isPractitionerBankAccountLinked } from "../client/lib/payoutDisclosure";
 import {
   computeSellerPromoDiscount,
   normalizeStoreOrderItems,
@@ -143,6 +144,13 @@ test("seller promo discounts enforce limits and cap discounts at the subtotal", 
   );
 });
 
+
+test("practitioner wallet treats the legacy HDFC default as unlinked", () => {
+  assert.equal(isPractitionerBankAccountLinked("HDFC Bank ···· 4821"), false);
+  assert.equal(isPractitionerBankAccountLinked("ICICI Bank ···· 1234"), true);
+  assert.equal(isPractitionerBankAccountLinked("Bank account not linked"), false);
+  assert.equal(isPractitionerBankAccountLinked(null), false);
+});
 
 test("role-protected APIs reject suspended and deletion-requested accounts", () => {
   assert.equal(isInactiveAccountStatus("Active"), false);
