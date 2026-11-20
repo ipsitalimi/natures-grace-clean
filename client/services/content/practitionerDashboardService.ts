@@ -144,7 +144,9 @@ export async function buildDashboard(
   const name = profile?.name ?? "";
 
   const reviews = await fetchPractitionerReviews(practitionerId, name);
-  const { thisMonth, growthPct } = computeMonthlyEarnings(bookings);
+  const thisMonth = snapshot.monthlyEarnings;
+  const lastMonth = snapshot.previousMonthEarnings;
+  const growthPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0;
 
   let avgRating = profile?.rating ?? 0;
   let reviewCount = profile?.reviewCount ?? 0;
@@ -154,13 +156,9 @@ export async function buildDashboard(
   }
   reviewCount = Math.max(reviewCount, reviews.length);
 
-  const monthlyFromWallet = snapshot.transactions
-    .filter((t) => t.category === "booking_earning" || t.category === "earning_release")
-    .reduce((s, t) => s + (t.type === "credit" ? t.amount : 0), 0);
-
   return {
     weeklySessions: computeWeeklySessions(bookings),
-    monthlyEarnings: thisMonth > 0 ? thisMonth : monthlyFromWallet,
+    monthlyEarnings: thisMonth,
     monthlyGrowthPct: growthPct,
     avgRating: Math.round(avgRating * 10) / 10,
     reviewCount,
