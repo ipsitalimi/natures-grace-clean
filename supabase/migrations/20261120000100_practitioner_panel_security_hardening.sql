@@ -756,6 +756,17 @@ REVOKE ALL ON FUNCTION public.sync_practitioner_review_aggregate_from_reviews() 
 REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated, service_role;
 
+-- Admin RPCs must never be callable anonymously. Authenticated admin UI
+-- access remains supported; each function independently checks is_admin().
+REVOKE ALL ON FUNCTION public.admin_first_response_stats() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.admin_list_role_applications() FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.admin_provision_user_role(uuid, text, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.approve_role_application_transaction(uuid, uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.admin_first_response_stats() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.admin_list_role_applications() TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.admin_provision_user_role(uuid, text, uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.approve_role_application_transaction(uuid, uuid) TO authenticated, service_role;
+
 -- Close mutable search paths on practitioner helper functions flagged by the
 -- production security advisor. These are invoker/trigger helpers, not public RPCs.
 ALTER FUNCTION public.set_updated_at() SET search_path = public;
