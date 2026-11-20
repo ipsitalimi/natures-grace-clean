@@ -685,7 +685,7 @@ REVOKE ALL ON FUNCTION public.apply_practitioner_application(uuid, jsonb) FROM P
 GRANT EXECUTE ON FUNCTION public.apply_practitioner_application(uuid, jsonb) TO service_role;
 
 -- Explicitly keep helper callable by signed-in RLS checks only.
-REVOKE ALL ON FUNCTION public.is_admin() FROM anon;
-GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated, service_role;
 
 NOTIFY pgrst, 'reload schema';
