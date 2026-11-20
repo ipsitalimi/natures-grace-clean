@@ -118,6 +118,12 @@ BEGIN
     RAISE EXCEPTION 'FAIL: practitioner wallet provisioning RPC remains directly executable';
   END IF;
 
+  IF NOT has_function_privilege('service_role', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.apply_practitioner_application(uuid,jsonb)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.current_practitioner_id()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: trusted backend execute grants are missing';
+  END IF;
+
   IF has_function_privilege('anon', 'public.guard_practitioner_offering_pricing()', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.guard_practitioner_offering_pricing()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.practitioner_bookings_guard_practitioner_update()', 'EXECUTE')
