@@ -248,6 +248,14 @@ BEGIN
     RAISE EXCEPTION 'FAIL: practitioner review aggregate trigger is missing';
   END IF;
 
+  IF EXISTS (
+    SELECT 1 FROM public.practitioners
+    WHERE COALESCE(review_count, 0) = 0
+      AND COALESCE(rating, 0) <> 0
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioners without reviews still show a fabricated rating';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
