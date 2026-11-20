@@ -118,6 +118,12 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'FAIL: new practitioner wallets still receive a fake default bank label';
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.practitioner_wallets
+    WHERE bank_account_label = 'HDFC Bank ···· 4821'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: legacy fake practitioner bank labels were not cleared';
+  END IF;
 
   IF EXISTS (
     SELECT 1 FROM pg_policies
