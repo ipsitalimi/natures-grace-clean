@@ -452,6 +452,7 @@ BEGIN
   END IF;
 
   v_is_seller_owner := OLD.target_type = 'product'
+    AND OLD.status = 'Approved'
     AND EXISTS (
       SELECT 1
       FROM public.products p
