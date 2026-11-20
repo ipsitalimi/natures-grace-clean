@@ -110,6 +110,16 @@ BEGIN
   END IF;
 
   IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_wallets'
+      AND column_name = 'bank_account_label'
+      AND column_default IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'FAIL: new practitioner wallets still receive a fake default bank label';
+  END IF;
+
+  IF EXISTS (
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public'
       AND tablename = 'practitioner_wallets'
