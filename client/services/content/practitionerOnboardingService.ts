@@ -76,15 +76,18 @@ export async function completePractitionerOnboarding(
       ? (existing.metadata as Record<string, unknown>)
       : {};
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("practitioners")
     .update({
       name: input.name.trim(),
       bio: input.bio.trim(),
       metadata: { ...priorMeta, onboarding_complete: true },
     })
-    .eq("id", practitionerId);
+    .eq("id", practitionerId)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { ok: false, error: error.message };
+  if (!updated?.id) return { ok: false, error: "Your practitioner profile was not updated. Refresh and try again." };
   return { ok: true };
 }
