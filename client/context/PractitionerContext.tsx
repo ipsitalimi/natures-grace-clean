@@ -31,10 +31,7 @@ import * as earningsService from "@/services/content/practitionerEarningsService
 import * as offeringsService from "@/services/content/practitionerOfferingsService";
 import { buildDashboard } from "@/services/content/practitionerDashboardService";
 import { fetchPractitionerProfile } from "@/services/content/practitionerId";
-import {
-  requestPractitionerPayout,
-  syncPractitionerWallet,
-} from "@/services/walletLedgerApi";
+import { syncPractitionerWallet } from "@/services/walletLedgerApi";
 
 interface PractitionerContextType {
   loading: boolean;
@@ -56,11 +53,6 @@ interface PractitionerContextType {
   completeSession: (bookingId: string, notes?: string) => Promise<PractitionerSession | null>;
   cancelSession: (bookingId: string, notes?: string) => Promise<PractitionerSession | null>;
   cancelUserSession: (bookingId: string) => Promise<UserSessionHistory | null>;
-  requestPayout: (amount?: number) => Promise<{
-    error?: string;
-    status?: string;
-    message?: string;
-  }>;
 }
 
 function computeStats(
@@ -90,7 +82,7 @@ function computeStats(
     pendingPayout: snapshot.pendingPayout,
     totalSessions: sessions.filter((s) => s.status === "Completed").length,
     sessionsThisWeek,
-    earnedThisMonth: snapshot.totalEarned,
+    earnedThisMonth: snapshot.monthlyEarnings,
   };
 }
 
@@ -342,28 +334,6 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
     [commissionRate, session?.access_token]
   );
 
-  const requestPayout = useCallback(
-    async (amount?: number) => {
-      const amt = amount ?? snapshot.availableBalance;
-      if (!isSupabaseConfigured()) {
-        return { error: "Connect Supabase to request payouts" };
-      }
-      if (!session?.access_token) {
-        return { error: "Please sign in to request a payout" };
-      }
-
-      const result = await requestPractitionerPayout(amt, session.access_token);
-      if (result.error) return { error: result.error };
-
-      await refresh();
-      return {
-        status: "Pending",
-        message:
-          "Your withdrawal request was received. The Nature's Grace team processes requests manually within 3–7 business days.",
-      };
-    },
-    [snapshot.availableBalance, commissionRate, profileId, refresh, session?.access_token]
-  );
 
   const stats = useMemo(
     () => computeStats(sessions, snapshot),
@@ -388,7 +358,6 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
       completeSession,
       cancelSession,
       cancelUserSession,
-      requestPayout,
     }),
     [
       loading,
@@ -407,7 +376,6 @@ export function PractitionerProvider({ children }: { children: React.ReactNode }
       completeSession,
       cancelSession,
       cancelUserSession,
-      requestPayout,
     ]
   );
 
