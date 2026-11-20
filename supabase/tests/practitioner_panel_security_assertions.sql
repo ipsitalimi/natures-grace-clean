@@ -93,6 +93,15 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.reviews'::regclass
+      AND tgname = 'reviews_practitioner_rating_aggregate'
+      AND NOT tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner review aggregate trigger is missing';
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name = 'reviews'
