@@ -19,6 +19,14 @@ $$;
 REVOKE ALL ON FUNCTION public.current_practitioner_id() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.current_practitioner_id() TO authenticated, service_role;
 
+-- These SECURITY DEFINER entry points are internal helpers. Their trusted
+-- callers (admin approval and self-provisioning) execute as the function owner.
+-- Do not expose them as direct PostgREST RPCs to anonymous or signed-in clients.
+REVOKE ALL ON FUNCTION public.apply_practitioner_application(uuid, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.ensure_practitioner_profile() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.ensure_practitioner_profile() TO authenticated;
+REVOKE ALL ON FUNCTION public.guard_practitioner_offering_pricing() FROM PUBLIC, anon, authenticated;
+
 -- 2) Wallets are readable by their owner but never directly writable by app clients.
 DROP POLICY IF EXISTS "practitioner_wallets_insert_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_update_practitioner" ON public.practitioner_wallets;
