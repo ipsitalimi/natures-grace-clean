@@ -4,12 +4,11 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { isBankAccountLinked, isPractitionerBankAccountLinked } from "@/lib/payoutDisclosure";
+import { isBankAccountLinked } from "@/lib/payoutDisclosure";
 
 type Props = {
   bankAccountLabel: string;
   bankAccountHolder?: string;
-  isPractitionerAccount?: boolean;
   onSave: (input: {
     accountHolder: string;
     bankName: string;
@@ -17,10 +16,8 @@ type Props = {
   }) => Promise<{ error?: string }>;
 };
 
-export default function BankDetailsCard({ bankAccountLabel, bankAccountHolder, isPractitionerAccount = false, onSave }: Props) {
-  const linked = isPractitionerAccount
-    ? isPractitionerBankAccountLinked(bankAccountLabel)
-    : isBankAccountLinked(bankAccountLabel);
+export default function BankDetailsCard({ bankAccountLabel, bankAccountHolder, onSave }: Props) {
+  const linked = isBankAccountLinked(bankAccountLabel);
   const [editing, setEditing] = useState(!linked);
   const [accountHolder, setAccountHolder] = useState("");
   const [bankName, setBankName] = useState("");
