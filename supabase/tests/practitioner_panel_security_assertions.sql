@@ -85,6 +85,12 @@ BEGIN
     RAISE EXCEPTION 'FAIL: admin role-approval RPC privileges are incorrect';
   END IF;
 
+  IF has_function_privilege('anon', 'public.start_practitioner_booking_intro_chat(uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.start_practitioner_booking_intro_chat(uuid)', 'EXECUTE')
+     OR position('practitioner_approval_status' IN pg_get_functiondef('public.start_practitioner_booking_intro_chat(uuid)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: intro chat RPC is not approval-scoped';
+  END IF;
+
   IF position('priceRange' IN pg_get_functiondef('public.apply_practitioner_application(uuid,jsonb)'::regprocedure)) > 0 THEN
     RAISE EXCEPTION 'FAIL: applicant form data can still set practitioner pricing';
   END IF;
