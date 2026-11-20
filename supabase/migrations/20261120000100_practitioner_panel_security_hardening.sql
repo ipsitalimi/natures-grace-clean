@@ -486,14 +486,24 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- A nested, trusted database trigger may update the aggregate rating/count.
-  -- Direct authenticated UPDATEs execute at trigger depth 1 and remain blocked.
-  IF pg_trigger_depth() > 1
-     OR current_setting('app.practitioner_application_sync', true) = 'true' THEN
+  IF auth.role() = 'service_role' OR public.is_admin() THEN
     RETURN NEW;
   END IF;
 
-  IF auth.role() = 'service_role' OR public.is_admin() THEN
+  -- Application provisioning is an internal SECURITY DEFINER workflow.
+  IF current_setting('app.practitioner_application_sync', true) = 'true' THEN
+    RETURN NEW;
+  END IF;
+
+  -- The review aggregate trigger may change only rating/count, never other
+  -- practitioner fields. Do not use pg_trigger_depth() as a blanket bypass.
+  IF current_setting('app.practitioner_rating_sync', true) = 'true' THEN
+    IF (to_jsonb(NEW) - ARRAY['rating','review_count','updated_at'])
+       IS DISTINCT FROM
+       (to_jsonb(OLD) - ARRAY['rating','review_count','updated_at']) THEN
+      RAISE EXCEPTION 'practitioner_rating_sync_field_not_editable' USING ERRCODE = '42501';
+    END IF;
+    NEW.updated_at := now();
     RETURN NEW;
   END IF;
 
@@ -725,6 +735,49 @@ TO service_role;
 ALTER TABLE public.reviews
   ADD COLUMN IF NOT EXISTS practitioner_reply text;
 
+-- Customer-created reviews must never self-approve or pre-populate a seller /
+-- practitioner response. Only trusted backend/admin moderation can set status.
+CREATE OR REPLACE FUNCTION public.reviews_before_insert_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $
+BEGIN
+  IF auth.role() = 'service_role' OR public.is_admin() THEN
+    RETURN NEW;
+  END IF;
+
+  IF auth.uid() IS NULL OR NEW.user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'review_author_required' USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.body IS NULL OR char_length(btrim(NEW.body)) = 0 OR char_length(NEW.body) > 2000 THEN
+    RAISE EXCEPTION 'review_body_invalid' USING ERRCODE = '22023';
+  END IF;
+
+  NEW.status := 'Pending';
+  NEW.seller_reply := '';
+  NEW.practitioner_reply := '';
+  NEW.created_at := now();
+  NEW.updated_at := now();
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS reviews_before_insert_guard ON public.reviews;
+CREATE TRIGGER reviews_before_insert_guard
+  BEFORE INSERT ON public.reviews
+  FOR EACH ROW
+  EXECUTE FUNCTION public.reviews_before_insert_guard();
+
+REVOKE ALL ON FUNCTION public.reviews_before_insert_guard() FROM PUBLIC, anon, authenticated;
+
+DROP POLICY IF EXISTS "reviews_insert_own" ON public.reviews;
+CREATE POLICY "reviews_insert_own"
+  ON public.reviews FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid() AND status = 'Pending');
+
 DROP POLICY IF EXISTS "reviews_update_practitioner_reply" ON public.reviews;
 CREATE POLICY "reviews_update_practitioner_reply"
   ON public.reviews FOR UPDATE TO authenticated
@@ -895,11 +948,13 @@ BEGIN
        AND r.target_type IN ('practitioner','event')
        AND r.status = 'Approved';
 
+    PERFORM set_config('app.practitioner_rating_sync', 'true', true);
     UPDATE public.practitioners
        SET rating = ROUND(v_rating, 1),
            review_count = v_count,
            updated_at = now()
      WHERE id = v_practitioner_id;
+    PERFORM set_config('app.practitioner_rating_sync', 'false', true);
   END IF;
 
   IF TG_OP = 'UPDATE'
@@ -912,11 +967,13 @@ BEGIN
        AND r.target_type IN ('practitioner','event')
        AND r.status = 'Approved';
 
+    PERFORM set_config('app.practitioner_rating_sync', 'true', true);
     UPDATE public.practitioners
        SET rating = ROUND(v_rating, 1),
            review_count = v_count,
            updated_at = now()
      WHERE id = OLD.practitioner_id;
+    PERFORM set_config('app.practitioner_rating_sync', 'false', true);
   END IF;
 
   IF TG_OP = 'DELETE' THEN
