@@ -143,6 +143,24 @@ BEGIN
 END;
 $$;
 
+-- Ownership lookup must not depend on availability. Practitioners who switch
+-- availability off still need to see their own history, earnings and profile.
+CREATE OR REPLACE FUNCTION public.current_practitioner_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $
+  SELECT p.id
+    FROM public.practitioners p
+   WHERE p.profile_id = auth.uid()
+   LIMIT 1;
+$;
+
+REVOKE ALL ON FUNCTION public.current_practitioner_id() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.current_practitioner_id() TO authenticated;
+
 -- These SECURITY DEFINER entry points are internal helpers. Their trusted
 -- callers (admin approval and self-provisioning) execute as the function owner.
 -- Do not expose them as direct PostgREST RPCs to anonymous or signed-in clients.
