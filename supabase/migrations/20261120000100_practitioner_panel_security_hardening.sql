@@ -156,6 +156,10 @@ REVOKE ALL ON FUNCTION public.guard_practitioner_offering_pricing() FROM PUBLIC,
 ALTER TABLE public.practitioner_wallets
   ADD COLUMN IF NOT EXISTS bank_account_holder text;
 
+-- Do not prefill a fake bank account on newly provisioned wallets.
+ALTER TABLE public.practitioner_wallets
+  ALTER COLUMN bank_account_label DROP DEFAULT;
+
 DROP POLICY IF EXISTS "practitioner_wallets_insert_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_update_practitioner" ON public.practitioner_wallets;
 DROP POLICY IF EXISTS "practitioner_wallets_write_practitioner" ON public.practitioner_wallets;
