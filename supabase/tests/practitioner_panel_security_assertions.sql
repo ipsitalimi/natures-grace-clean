@@ -118,6 +118,13 @@ BEGIN
     RAISE EXCEPTION 'FAIL: practitioner wallet provisioning RPC remains directly executable';
   END IF;
 
+  IF has_function_privilege('anon', 'public.guard_practitioner_offering_pricing()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.guard_practitioner_offering_pricing()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.practitioner_bookings_guard_practitioner_update()', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.practitioner_bookings_guard_practitioner_update()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: trigger-only practitioner functions remain exposed as RPCs';
+  END IF;
+
   IF has_function_privilege('anon', 'public.ensure_practitioner_profile()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.ensure_practitioner_profile()', 'EXECUTE') THEN
     RAISE EXCEPTION 'FAIL: practitioner profile provisioning RPC grants are incorrect';
