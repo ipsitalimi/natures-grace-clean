@@ -86,6 +86,7 @@ export type PractitionerWalletSnapshot = {
   totalEarned: number;
   commissionRate: number;
   bankAccountLabel: string;
+  bankAccountHolder: string;
   nextPayoutDate: string;
   transactions: PractitionerWalletTransaction[];
   payouts: PractitionerPayout[];
