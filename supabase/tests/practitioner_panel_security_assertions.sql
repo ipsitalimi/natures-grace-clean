@@ -50,6 +50,17 @@ BEGIN
      OR NOT has_function_privilege('anon', 'public.is_admin()', 'EXECUTE') THEN
     RAISE EXCEPTION 'FAIL: public catalog read/RLS function access was removed';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioners'
+      AND policyname = 'practitioners_select'
+      AND cmd = 'SELECT'
+      AND 'anon' = ANY(roles)
+      AND 'authenticated' = ANY(roles)
+  ) THEN
+    RAISE EXCEPTION 'FAIL: public approved-practitioner discovery policy is missing';
+  END IF;
 
   IF NOT has_table_privilege('service_role', 'public.practitioner_wallets', 'UPDATE')
      OR NOT has_table_privilege('service_role', 'public.practitioner_wallets', 'INSERT') THEN
