@@ -146,6 +146,20 @@ BEGIN
     RAISE EXCEPTION 'FAIL: practitioner payout audit fields are missing';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.practitioner_wallet_transactions'::regclass
+      AND conname = 'practitioner_wallet_transactions_category_check'
+      AND pg_get_constraintdef(oid) ILIKE '%payout_reversal%'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.wallet_transactions'::regclass
+      AND conname = 'wallet_transactions_category_check'
+      AND pg_get_constraintdef(oid) ILIKE '%payout_reversal%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: payout reversal ledger categories are not permitted';
+  END IF;
+
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
