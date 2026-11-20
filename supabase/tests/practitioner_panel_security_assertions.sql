@@ -257,6 +257,18 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid = 'public.parse_practitioner_subcategories_from_form(jsonb)'::regprocedure
+      AND proconfig @> ARRAY['search_path=public']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid = 'public.merge_practitioner_specialties(uuid,text,text[])'::regprocedure
+      AND proconfig @> ARRAY['search_path=public']
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner helper function search paths are not pinned';
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name = 'reviews'
