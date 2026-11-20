@@ -77,6 +77,7 @@ export default function PractitionerWalletScreen() {
         </View>
 
         <BankDetailsCard
+          isPractitionerAccount
           bankAccountLabel={snapshot.bankAccountLabel}
           bankAccountHolder={snapshot.bankAccountHolder}
           onSave={async (input) => {
