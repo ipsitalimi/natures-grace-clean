@@ -256,6 +256,10 @@ BEGIN
     RAISE EXCEPTION 'FAIL: practitioners without reviews still show a fabricated rating';
   END IF;
 
+  IF position('        0, 0, 1000' IN pg_get_functiondef('public.admin_provision_user_role(uuid,text,uuid)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: admin provisioning still assigns a fabricated five-star rating';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM pg_proc
     WHERE oid = 'public.parse_practitioner_subcategories_from_form(jsonb)'::regprocedure
