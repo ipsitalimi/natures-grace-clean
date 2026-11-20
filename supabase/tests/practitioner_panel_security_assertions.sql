@@ -341,6 +341,32 @@ BEGIN
     RAISE EXCEPTION 'FAIL: scoped practitioner review reply policy is missing';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.reviews'::regclass
+      AND tgname = 'reviews_before_insert_guard'
+      AND NOT tgisinternal
+  ) OR position('NEW.status := ''Pending''' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0
+    OR position('NEW.practitioner_reply := ''''' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: customer review inserts can self-approve or pre-populate replies';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'reviews'
+      AND policyname = 'reviews_insert_own'
+      AND with_check ILIKE '%Pending%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: review insert policy does not require pending moderation';
+  END IF;
+
+  IF position('pg_trigger_depth' IN pg_get_functiondef('public.practitioners_guard_self_update()'::regprocedure)) > 0
+     OR position('app.practitioner_rating_sync' IN pg_get_functiondef('public.practitioners_guard_self_update()'::regprocedure)) = 0
+     OR position('app.practitioner_rating_sync' IN pg_get_functiondef('public.sync_practitioner_review_aggregate_from_reviews()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: practitioner rating aggregate trigger has an unrestricted nested-trigger bypass';
+  END IF;
+
   RAISE NOTICE 'PASS: practitioner panel security schema assertions';
 END;
 $$;
