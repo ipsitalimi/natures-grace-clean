@@ -129,6 +129,16 @@ BEGIN
   END IF;
 
   IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioners'
+      AND policyname = 'practitioners_select'
+      AND qual ILIKE '%approval_status%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: public practitioner discovery does not require approval';
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM pg_trigger
     WHERE tgrelid = 'public.practitioner_bookings'::regclass
       AND tgname = 'practitioner_bookings_guard_practitioner_update'
