@@ -69,7 +69,7 @@ async function fetchWalletByPractitionerId(
 }
 
 export async function getOrCreateWallet(
-  commissionRate = 10,
+  _commissionRate = 10,
   profileId?: string | null
 ): Promise<DbPractitionerWalletRow | null> {
   const supabase = getSupabase();
@@ -77,26 +77,12 @@ export async function getOrCreateWallet(
 
   const practitionerId = await resolvePractitionerId(profileId);
   if (!practitionerId) {
-    console.warn("[practitionerEarnings] wallet skipped: no active practitioner row");
+    console.warn("[practitionerEarnings] wallet skipped: practitioner profile not found");
     return null;
   }
 
-  const existing = await fetchWalletByPractitionerId(practitionerId);
-  if (existing) return existing;
-
-  const { data, error } = await supabase.rpc("ensure_practitioner_wallet", {
-    p_commission_rate: commissionRate,
-  });
-
-  if (!error && data) {
-    return data as DbPractitionerWalletRow;
-  }
-
-  if (error) {
-    console.warn("[practitionerEarnings] ensure wallet:", error.message);
-  }
-
-  // Race or migration not applied yet — retry read-only path.
+  // Wallet creation and commission assignment are backend/admin-only. The
+  // practitioner client is deliberately read-only and never invokes a wallet RPC.
   return fetchWalletByPractitionerId(practitionerId);
 }
 
