@@ -52,25 +52,16 @@ BEGIN
     RAISE EXCEPTION 'practitioner_owner_required' USING ERRCODE = '42501';
   END IF;
 
-  -- Reject attempts to alter identity or administrator-owned fields rather than
-  -- silently accepting a no-op update that the client could mistake for success.
-  IF NEW.id IS DISTINCT FROM OLD.id
-     OR NEW.profile_id IS DISTINCT FROM OLD.profile_id
-     OR NEW.approval_status IS DISTINCT FROM OLD.approval_status
-     OR NEW.is_verified IS DISTINCT FROM OLD.is_verified
-     OR NEW.featured IS DISTINCT FROM OLD.featured
-     OR NEW.rating IS DISTINCT FROM OLD.rating
-     OR NEW.review_count IS DISTINCT FROM OLD.review_count
-     OR NEW.price_per_session IS DISTINCT FROM OLD.price_per_session
-     OR NEW.is_active IS DISTINCT FROM OLD.is_active
-     OR NEW.created_at IS DISTINCT FROM OLD.created_at
-     OR NEW.metadata IS DISTINCT FROM OLD.metadata THEN
-    RAISE EXCEPTION 'practitioner_admin_field_forbidden' USING ERRCODE = '42501';
+  -- Explicit practitioner-editable allowlist mirrors the existing My Profile UI:
+  -- name, bio, experience, certifications, photo_url and is_active (availability).
+  -- All other columns, including identity, pricing, approval, verification, ratings,
+  -- featured status, categories, meeting links and internal metadata are protected.
+  IF (to_jsonb(NEW) - ARRAY['name','bio','experience','certifications','photo_url','is_active','updated_at'])
+     IS DISTINCT FROM
+     (to_jsonb(OLD) - ARRAY['name','bio','experience','certifications','photo_url','is_active','updated_at']) THEN
+    RAISE EXCEPTION 'practitioner_field_not_editable' USING ERRCODE = '42501';
   END IF;
 
-  -- Explicit practitioner-editable profile allowlist:
-  -- name, category, subcategory, bio, experience, certifications,
-  -- photo_url, meeting_link and specialties.
   NEW.updated_at := now();
   RETURN NEW;
 END;
