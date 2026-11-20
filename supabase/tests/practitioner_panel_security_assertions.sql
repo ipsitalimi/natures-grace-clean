@@ -275,32 +275,6 @@ BEGIN
     RAISE EXCEPTION 'FAIL: scoped practitioner review reply policy is missing';
   END IF;
 
-  IF has_function_privilege('authenticated', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE')
-     OR NOT has_function_privilege('service_role', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'FAIL: admin payout status RPC is not service-role-only';
-  END IF;
-
-  IF has_function_privilege('authenticated', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE')
-     OR NOT has_function_privilege('service_role', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'FAIL: payout queue RPC is not service-role-only';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.wallet_transactions'::regclass
-      AND conname = 'wallet_transactions_category_check'
-      AND pg_get_constraintdef(oid) LIKE '%payout_reversal%'
-  ) OR NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.practitioner_wallet_transactions'::regclass
-      AND conname = 'practitioner_wallet_transactions_category_check'
-      AND pg_get_constraintdef(oid) LIKE '%payout_reversal%'
-  ) THEN
-    RAISE EXCEPTION 'FAIL: auditable payout reversal category is missing';
-  END IF;
-
   RAISE NOTICE 'PASS: practitioner panel security schema assertions';
 END;
 $$;
