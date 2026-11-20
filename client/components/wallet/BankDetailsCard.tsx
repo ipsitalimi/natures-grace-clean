@@ -8,6 +8,7 @@ import { isBankAccountLinked } from "@/lib/payoutDisclosure";
 
 type Props = {
   bankAccountLabel: string;
+  bankAccountHolder?: string;
   onSave: (input: {
     accountHolder: string;
     bankName: string;
@@ -15,7 +16,7 @@ type Props = {
   }) => Promise<{ error?: string }>;
 };
 
-export default function BankDetailsCard({ bankAccountLabel, onSave }: Props) {
+export default function BankDetailsCard({ bankAccountLabel, bankAccountHolder, onSave }: Props) {
   const linked = isBankAccountLinked(bankAccountLabel);
   const [editing, setEditing] = useState(!linked);
   const [accountHolder, setAccountHolder] = useState("");
@@ -45,7 +46,8 @@ export default function BankDetailsCard({ bankAccountLabel, onSave }: Props) {
 
       {linked && !editing ? (
         <>
-          <ThemedText style={styles.linkedLabel}>{bankAccountLabel}</ThemedText>
+          <ThemedText style={styles.linkedLabel}>{bankAccountHolder?.trim() || "Account holder not provided"}</ThemedText>
+          <ThemedText style={styles.hint}>{bankAccountLabel}</ThemedText>
           <ThemedText style={styles.hint}>
             Withdrawals use this account after admin verification.
           </ThemedText>
