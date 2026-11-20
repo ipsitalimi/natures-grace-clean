@@ -530,7 +530,7 @@ RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
-AS $
+AS $$
 DECLARE
   v_practitioner_id uuid;
   v_rating numeric;
@@ -579,7 +579,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS reviews_practitioner_rating_aggregate ON public.reviews;
 CREATE TRIGGER reviews_practitioner_rating_aggregate
