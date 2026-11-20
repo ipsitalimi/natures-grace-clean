@@ -2,7 +2,9 @@
 -- Run only after applying 20261120000100_practitioner_panel_security_hardening.sql.
 -- This script performs no INSERT, UPDATE, DELETE, or schema changes.
 
-DO $$
+DO $
+DECLARE
+  v_table_name text;
 BEGIN
   IF has_table_privilege('authenticated', 'public.practitioner_wallets', 'UPDATE')
      OR has_table_privilege('authenticated', 'public.practitioner_wallets', 'INSERT')
@@ -12,6 +14,41 @@ BEGIN
 
   IF NOT has_table_privilege('authenticated', 'public.practitioner_wallets', 'SELECT') THEN
     RAISE EXCEPTION 'FAIL: practitioner wallet read access was removed';
+  END IF;
+  -- RLS does not protect TRUNCATE, REFERENCES or TRIGGER privileges.
+  -- Verify app roles cannot bypass row policies through table-level grants.
+  FOR v_table_name IN
+    SELECT unnest(ARRAY[
+      'practitioners',
+      'practitioner_availability',
+      'practitioner_offerings',
+      'practitioner_pricing_rules',
+      'practitioner_bookings',
+      'practitioner_booking_intro_messages',
+      'practitioner_wallets',
+      'practitioner_wallet_transactions',
+      'practitioner_payouts',
+      'practitioner_session_history',
+      'reviews'
+    ])
+  LOOP
+    IF has_table_privilege('authenticated', format('public.%I', v_table_name), 'TRUNCATE')
+       OR has_table_privilege('authenticated', format('public.%I', v_table_name), 'REFERENCES')
+       OR has_table_privilege('authenticated', format('public.%I', v_table_name), 'TRIGGER')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'INSERT')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'UPDATE')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'DELETE')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'TRUNCATE') THEN
+      RAISE EXCEPTION 'FAIL: broad app-role table privilege remains on %', v_table_name;
+    END IF;
+  END LOOP;
+
+  IF NOT has_table_privilege('anon', 'public.practitioners', 'SELECT')
+     OR NOT has_table_privilege('anon', 'public.practitioner_offerings', 'SELECT')
+     OR NOT has_table_privilege('anon', 'public.practitioner_availability', 'SELECT')
+     OR NOT has_table_privilege('anon', 'public.reviews', 'SELECT')
+     OR NOT has_function_privilege('anon', 'public.is_admin()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: public catalog read/RLS function access was removed';
   END IF;
 
   IF NOT has_table_privilege('service_role', 'public.practitioner_wallets', 'UPDATE')
