@@ -48,6 +48,16 @@ function PayoutCard({
       <ThemedText style={styles.cardDate}>
         {new Date(item.created_at).toLocaleDateString()}
       </ThemedText>
+      {type === "practitioner" ? (
+        <View style={{ marginTop: 8 }}>
+          <ThemedText style={styles.cardMeta}>
+            Account holder: {item.practitioner_wallets?.bank_account_holder?.trim() || "Not provided"}
+          </ThemedText>
+          <ThemedText style={styles.cardMeta}>
+            Bank: {item.practitioner_wallets?.bank_account_label?.trim() || "Not linked"}
+          </ThemedText>
+        </View>
+      ) : null}
       {item.status === "Pending" || item.status === "Under Review" || item.status === "Processing" ? (
         <View style={styles.actionRow}>
           {STATUSES.map((s) => (

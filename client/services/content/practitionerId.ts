@@ -462,12 +462,20 @@ export async function updatePractitionerProfileDetails(
   if (patch.isActive !== undefined) dbPatch.is_active = patch.isActive;
   if (patch.photoUrl !== undefined) dbPatch.photo_url = patch.photoUrl.trim() || null;
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("practitioners")
     .update(dbPatch)
-    .eq("id", resolvedId);
+    .eq("id", resolvedId)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { error: error.message, code: "lookup_failed" };
+  if (!updated?.id) {
+    return {
+      error: "Your practitioner profile was not updated. Refresh and try again.",
+      code: "lookup_failed",
+    };
+  }
 
   cachedPractitionerId = null;
   cachedProfile = null;

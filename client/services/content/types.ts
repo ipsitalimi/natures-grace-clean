@@ -109,6 +109,7 @@ export type DbReviewRow = {
   status: string;
   created_at: string;
   updated_at?: string;
+  practitioner_reply?: string | null;
 };
 
 export function eventRowToCommunityEvent(row: DbEventRow): CommunityEvent {

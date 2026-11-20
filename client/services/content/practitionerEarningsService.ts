@@ -5,6 +5,7 @@ import type {
 } from "@/data/practitionerBookings";
 import { getSupabase } from "@/lib/supabase";
 import { resolvePractitionerId } from "@/services/content/practitionerId";
+import { isPractitionerBankAccountLinked } from "@/lib/payoutDisclosure";
 
 export type DbPractitionerWalletRow = {
   id: string;
@@ -15,6 +16,7 @@ export type DbPractitionerWalletRow = {
   total_earned: number;
   commission_rate: number;
   bank_account_label: string | null;
+  bank_account_holder: string | null;
   next_payout_date: string | null;
 };
 
@@ -48,6 +50,68 @@ function formatDate(iso: string): string {
   });
 }
 
+type MonthlyWalletTxnRow = {
+  amount: number;
+  type: "credit" | "debit";
+  created_at: string;
+};
+
+async function fetchMonthlyWalletEarnings(
+  walletId: string
+): Promise<{ currentMonth: number; previousMonth: number }> {
+  const supabase = getSupabase();
+  if (!supabase) return { currentMonth: 0, previousMonth: 0 };
+
+  const now = new Date();
+  const currentStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const previousStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const nextStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const rows: MonthlyWalletTxnRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("practitioner_wallet_transactions")
+      .select("amount, type, created_at")
+      .eq("wallet_id", walletId)
+      .in("category", ["booking_earning", "refund", "adjustment"])
+      .gte("created_at", previousStart.toISOString())
+      .lt("created_at", nextStart.toISOString())
+      .order("created_at", { ascending: true })
+      .range(offset, offset + 999);
+
+    if (error) {
+      console.warn("[practitionerEarnings] monthly ledger:", error.message);
+      return { currentMonth: 0, previousMonth: 0 };
+    }
+
+    const page = (data ?? []) as MonthlyWalletTxnRow[];
+    rows.push(...page);
+    if (page.length < 1000) break;
+    offset += 1000;
+  }
+
+  let currentMonth = 0;
+  let previousMonth = 0;
+  for (const row of rows) {
+    const createdAt = new Date(row.created_at);
+    const amount = Number(row.amount);
+    if (!Number.isFinite(amount)) continue;
+    const signedAmount = row.type === "debit" ? -amount : amount;
+    if (createdAt >= currentStart && createdAt < nextStart) {
+      currentMonth += signedAmount;
+    } else if (createdAt >= previousStart && createdAt < currentStart) {
+      previousMonth += signedAmount;
+    }
+  }
+
+  return {
+    currentMonth: Math.round(currentMonth * 100) / 100,
+    previousMonth: Math.round(previousMonth * 100) / 100,
+  };
+}
+
+
 async function fetchWalletByPractitionerId(
   practitionerId: string
 ): Promise<DbPractitionerWalletRow | null> {
@@ -69,7 +133,7 @@ async function fetchWalletByPractitionerId(
 }
 
 export async function getOrCreateWallet(
-  commissionRate = 10,
+  _commissionRate = 10,
   profileId?: string | null
 ): Promise<DbPractitionerWalletRow | null> {
   const supabase = getSupabase();
@@ -77,26 +141,12 @@ export async function getOrCreateWallet(
 
   const practitionerId = await resolvePractitionerId(profileId);
   if (!practitionerId) {
-    console.warn("[practitionerEarnings] wallet skipped: no active practitioner row");
+    console.warn("[practitionerEarnings] wallet skipped: practitioner profile not found");
     return null;
   }
 
-  const existing = await fetchWalletByPractitionerId(practitionerId);
-  if (existing) return existing;
-
-  const { data, error } = await supabase.rpc("ensure_practitioner_wallet", {
-    p_commission_rate: commissionRate,
-  });
-
-  if (!error && data) {
-    return data as DbPractitionerWalletRow;
-  }
-
-  if (error) {
-    console.warn("[practitionerEarnings] ensure wallet:", error.message);
-  }
-
-  // Race or migration not applied yet — retry read-only path.
+  // Wallet creation and commission assignment are backend/admin-only. The
+  // practitioner client is deliberately read-only and never invokes a wallet RPC.
   return fetchWalletByPractitionerId(practitionerId);
 }
 
@@ -135,6 +185,7 @@ export async function fetchWalletSnapshot(
     return null;
   }
 
+  const monthlyEarnings = await fetchMonthlyWalletEarnings(wallet.id);
   const payoutRows = (payouts ?? []) as DbPayoutRow[];
   const activePayoutCount = payoutRows.filter(
     (p) => p.status === "Pending" || p.status === "Processing" || p.status === "Under Review"
@@ -160,7 +211,15 @@ export async function fetchWalletSnapshot(
     heldBalance: Number(wallet.held_balance),
     totalEarned: Number(wallet.total_earned),
     commissionRate: Number(wallet.commission_rate),
-    bankAccountLabel: wallet.bank_account_label?.trim() || "Bank account not linked",
+    bankAccountLabel: isPractitionerBankAccountLinked(
+      wallet.bank_account_label,
+      wallet.bank_account_holder
+    )
+      ? wallet.bank_account_label!.trim()
+      : "Bank account not linked",
+    bankAccountHolder: wallet.bank_account_holder?.trim() || "",
+    monthlyEarnings: monthlyEarnings.currentMonth,
+    previousMonthEarnings: monthlyEarnings.previousMonth,
     nextPayoutDate: wallet.next_payout_date?.trim() || "Scheduled after admin review",
     transactions,
     payouts: payoutRows.map((p) => ({

@@ -13,6 +13,8 @@ export type PayoutQueueItem = {
   };
   practitioner_wallets?: {
     practitioner_id?: string;
+    bank_account_label?: string | null;
+    bank_account_holder?: string | null;
     practitioners?: { name?: string; profile_id?: string };
   };
 };

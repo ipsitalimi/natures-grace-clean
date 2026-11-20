@@ -1,0 +1,401 @@
+-- Read-only post-migration assertions for practitioner panel hardening.
+-- Run only after applying 20261120000100_practitioner_panel_security_hardening.sql.
+-- This script performs no INSERT, UPDATE, DELETE, or schema changes.
+
+DO $$
+DECLARE
+  v_table_name text;
+BEGIN
+  IF has_table_privilege('authenticated', 'public.practitioner_wallets', 'UPDATE')
+     OR has_table_privilege('authenticated', 'public.practitioner_wallets', 'INSERT')
+     OR has_table_privilege('authenticated', 'public.practitioner_wallets', 'DELETE') THEN
+    RAISE EXCEPTION 'FAIL: authenticated still has practitioner wallet write privileges';
+  END IF;
+
+  IF NOT has_table_privilege('authenticated', 'public.practitioner_wallets', 'SELECT') THEN
+    RAISE EXCEPTION 'FAIL: practitioner wallet read access was removed';
+  END IF;
+  -- RLS does not protect TRUNCATE, REFERENCES or TRIGGER privileges.
+  -- Verify app roles cannot bypass row policies through table-level grants.
+  FOR v_table_name IN
+    SELECT unnest(ARRAY[
+      'practitioners',
+      'practitioner_availability',
+      'practitioner_offerings',
+      'practitioner_pricing_rules',
+      'practitioner_bookings',
+      'practitioner_booking_intro_messages',
+      'practitioner_wallets',
+      'practitioner_wallet_transactions',
+      'practitioner_payouts',
+      'practitioner_session_history',
+      'reviews'
+    ])
+  LOOP
+    IF has_table_privilege('authenticated', format('public.%I', v_table_name), 'TRUNCATE')
+       OR has_table_privilege('authenticated', format('public.%I', v_table_name), 'REFERENCES')
+       OR has_table_privilege('authenticated', format('public.%I', v_table_name), 'TRIGGER')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'INSERT')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'UPDATE')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'DELETE')
+       OR has_table_privilege('anon', format('public.%I', v_table_name), 'TRUNCATE') THEN
+      RAISE EXCEPTION 'FAIL: broad app-role table privilege remains on %', v_table_name;
+    END IF;
+  END LOOP;
+
+  IF NOT has_table_privilege('authenticated', 'public.practitioners', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.practitioner_offerings', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.practitioner_availability', 'SELECT')
+     OR NOT has_table_privilege('anon', 'public.reviews', 'SELECT')
+     OR NOT has_function_privilege('anon', 'public.is_admin()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner catalogue or public approved-review read access was removed';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioners'
+      AND policyname = 'practitioners_select'
+      AND cmd = 'SELECT'
+      AND 'authenticated' = ANY(roles)
+      AND NOT ('anon' = ANY(roles))
+  ) THEN
+    RAISE EXCEPTION 'FAIL: public approved-practitioner discovery policy is missing';
+  END IF;
+
+  IF NOT has_table_privilege('service_role', 'public.practitioner_wallets', 'UPDATE')
+     OR NOT has_table_privilege('service_role', 'public.practitioner_wallets', 'INSERT') THEN
+    RAISE EXCEPTION 'FAIL: trusted backend wallet write privileges are missing';
+  END IF;
+
+  IF has_table_privilege('authenticated', 'public.practitioner_bookings', 'INSERT')
+     OR NOT has_table_privilege('authenticated', 'public.practitioner_bookings', 'UPDATE')
+     OR NOT has_table_privilege('service_role', 'public.practitioner_bookings', 'INSERT') THEN
+    RAISE EXCEPTION 'FAIL: booking creation/update grants are not server-owned as expected';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.apply_practitioner_application(uuid,jsonb)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.apply_practitioner_application(uuid,jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: internal practitioner application RPC remains directly executable';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.approve_role_application_transaction(uuid,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.approve_role_application_transaction(uuid,uuid)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.admin_provision_user_role(uuid,text,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.admin_provision_user_role(uuid,text,uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: admin role-approval RPC privileges are incorrect';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.start_practitioner_booking_intro_chat(uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.start_practitioner_booking_intro_chat(uuid)', 'EXECUTE')
+     OR position('practitioner_approval_status' IN pg_get_functiondef('public.start_practitioner_booking_intro_chat(uuid)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: intro chat RPC is not approval-scoped';
+  END IF;
+
+  IF position('priceRange' IN pg_get_functiondef('public.apply_practitioner_application(uuid,jsonb)'::regprocedure)) > 0 THEN
+    RAISE EXCEPTION 'FAIL: applicant form data can still set practitioner pricing';
+  END IF;
+
+  IF position('is_active' IN pg_get_functiondef('public.current_practitioner_id()'::regprocedure)) > 0 THEN
+    RAISE EXCEPTION 'FAIL: practitioner identity helper still depends on availability';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner wallet provisioning RPC remains directly executable';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.ensure_practitioner_profile()', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.ensure_practitioner_profile()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner profile provisioning RPC grants are incorrect';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.current_practitioner_id()', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.current_practitioner_id()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner identity helper grants are incorrect';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_wallets'
+      AND policyname = 'practitioner_wallets_select_scoped'
+      AND cmd = 'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: scoped practitioner wallet SELECT policy is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_payouts'
+      AND policyname = 'practitioner_payouts_select_scoped'
+      AND cmd = 'SELECT'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_wallet_transactions'
+      AND policyname = 'practitioner_wallet_txn_select_scoped'
+      AND cmd = 'SELECT'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner payout or ledger read policies are missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_wallets'
+      AND column_name = 'bank_account_holder'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: backend-managed bank account holder field is missing';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.admin_update_payout_status(text,uuid,text,uuid,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: manual admin payout status RPC privileges are incorrect';
+  END IF;
+
+  IF has_function_privilege('anon', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.request_wallet_payout(text,uuid,numeric,text)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: manual payout queue RPC privileges are incorrect';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_payouts'
+      AND column_name = 'processed_by'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_payouts'
+      AND column_name = 'rejection_reason'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner payout audit fields are missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.practitioner_wallet_transactions'::regclass
+      AND conname = 'practitioner_wallet_transactions_category_check'
+      AND pg_get_constraintdef(oid) ILIKE '%payout_reversal%'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.wallet_transactions'::regclass
+      AND conname = 'wallet_transactions_category_check'
+      AND pg_get_constraintdef(oid) ILIKE '%payout_reversal%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: payout reversal ledger categories are not permitted';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'practitioner_wallets'
+      AND column_name = 'bank_account_label'
+      AND column_default IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION 'FAIL: new practitioner wallets still receive a fake default bank label';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.practitioner_wallets
+    WHERE bank_account_label = 'HDFC Bank ···· 4821'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: legacy fake practitioner bank labels were not cleared';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_wallets'
+      AND cmd IN ('INSERT','UPDATE','ALL')
+      AND policyname ILIKE '%practitioner%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner wallet write policy remains';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.practitioners'::regclass
+      AND tgname = 'practitioners_guard_self_update'
+      AND NOT tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner profile allowlist trigger is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioners'
+      AND policyname = 'practitioners_select'
+      AND qual ILIKE '%approval_status%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: public practitioner discovery does not require approval';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_offerings'
+      AND policyname = 'practitioner_offerings_write_practitioner'
+      AND qual ILIKE '%current_practitioner_id%'
+      AND with_check ILIKE '%current_practitioner_id%'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_availability'
+      AND policyname = 'practitioner_availability_write_practitioner'
+      AND qual ILIKE '%approval_status%'
+      AND with_check ILIKE '%approval_status%'
+  ) OR position('v_approval_status' IN pg_get_functiondef('public.guard_practitioner_offering_pricing()'::regprocedure)) = 0
+    OR position('v_practitioner_active' IN pg_get_functiondef('public.guard_practitioner_offering_pricing()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: practitioner offering/availability write guards are incomplete';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_offerings'
+      AND policyname = 'practitioner_offerings_select_scoped'
+      AND qual ILIKE '%approval_status%'
+      AND qual ILIKE '%is_active%'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'practitioner_availability'
+      AND policyname = 'practitioner_availability_select_scoped'
+      AND qual ILIKE '%approval_status%'
+      AND qual ILIKE '%is_active%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: inactive or unapproved practitioners can still be publicly discovered through offerings/availability';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.practitioner_bookings'::regclass
+      AND tgname = 'practitioner_bookings_guard_practitioner_update'
+      AND NOT tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner booking allowlist trigger is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.practitioner_bookings'::regclass
+      AND tgname = 'practitioner_booking_completion_history'
+      AND NOT tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'FAIL: completion history trigger is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.reviews'::regclass
+      AND tgname = 'reviews_practitioner_rating_aggregate'
+      AND NOT tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner review aggregate trigger is missing';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.practitioners
+    WHERE COALESCE(review_count, 0) = 0
+      AND COALESCE(rating, 0) <> 0
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioners without reviews still show a fabricated rating';
+  END IF;
+
+  IF position('        0, 0, 1000' IN pg_get_functiondef('public.admin_provision_user_role(uuid,text,uuid)'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: admin provisioning still assigns a fabricated five-star rating';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid = 'public.parse_practitioner_subcategories_from_form(jsonb)'::regprocedure
+      AND proconfig @> ARRAY['search_path=public']
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid = 'public.merge_practitioner_specialties(uuid,text,text[])'::regprocedure
+      AND proconfig @> ARRAY['search_path=public']
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner helper function search paths are not pinned';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reviews'
+      AND column_name = 'practitioner_reply'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: practitioner_reply column is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'reviews'
+      AND policyname = 'reviews_update_practitioner_reply'
+      AND cmd = 'UPDATE'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: scoped practitioner review reply policy is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_trigger
+    WHERE tgrelid = 'public.reviews'::regclass
+      AND tgname = 'reviews_before_insert_guard'
+      AND NOT tgisinternal
+  ) OR position('NEW.status := ''Pending''' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0
+    OR position('NEW.practitioner_reply :=' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0
+    OR position('NEW.seller_reply :=' IN pg_get_functiondef('public.reviews_before_insert_guard()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: customer review inserts can self-approve or pre-populate replies';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'reviews'
+      AND policyname = 'reviews_insert_own'
+      AND with_check ILIKE '%Pending%'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: review insert policy does not require pending moderation';
+  END IF;
+
+  IF position('pg_trigger_depth' IN pg_get_functiondef('public.practitioners_guard_self_update()'::regprocedure)) > 0
+     OR position('app.practitioner_rating_sync' IN pg_get_functiondef('public.practitioners_guard_self_update()'::regprocedure)) = 0
+     OR position('app.practitioner_rating_sync' IN pg_get_functiondef('public.sync_practitioner_review_aggregate_from_reviews()'::regprocedure)) = 0 THEN
+    RAISE EXCEPTION 'FAIL: practitioner rating aggregate trigger has an unrestricted nested-trigger bypass';
+  END IF;
+
+  IF has_column_privilege('authenticated', 'public.practitioner_wallets', 'available_balance', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'pending_payout', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'held_balance', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'total_earned', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'commission_rate', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'bank_account_label', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'bank_account_holder', 'UPDATE') THEN
+    RAISE EXCEPTION 'FAIL: authenticated retains practitioner wallet column-level UPDATE privileges';
+  END IF;
+
+  IF NOT has_function_privilege('service_role', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner wallet provisioning is not service-role-only';
+  END IF;
+
+  IF NOT has_function_privilege('service_role', 'public.credit_practitioner_booking_earning(uuid,numeric)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.credit_practitioner_booking_earning(uuid,numeric)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.credit_practitioner_booking_earning(uuid,numeric)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.release_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.release_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.reverse_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.reverse_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.apply_practitioner_booking_refund(uuid,uuid,numeric,numeric)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.apply_practitioner_booking_refund(uuid,uuid,numeric,numeric)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner financial ledger RPCs are not restricted to the trusted backend';
+  END IF;
+
+  RAISE NOTICE 'PASS: practitioner panel security schema assertions';
+END;
+$$;

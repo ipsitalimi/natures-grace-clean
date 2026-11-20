@@ -45,31 +45,6 @@ export function computeWeeklySessions(bookings: DbBookingRow[]): WeeklySessionPo
   });
 }
 
-function sumEarningsInMonth(
-  bookings: DbBookingRow[],
-  month: number,
-  year: number
-): number {
-  return bookings
-    .filter((b) => {
-      if (b.payment_status !== "Paid") return false;
-      const at = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
-      return at.getMonth() === month && at.getFullYear() === year;
-    })
-    .reduce((s, b) => s + Number(b.amount), 0);
-}
-
-export function computeMonthlyEarnings(bookings: DbBookingRow[]): {
-  thisMonth: number;
-  growthPct: number;
-} {
-  const now = new Date();
-  const thisMonth = sumEarningsInMonth(bookings, now.getMonth(), now.getFullYear());
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonth = sumEarningsInMonth(bookings, prev.getMonth(), prev.getFullYear());
-  const growthPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0;
-  return { thisMonth, growthPct };
-}
 
 function countClientsBookedToday(bookings: DbBookingRow[]): number {
   const today = new Date();
@@ -91,6 +66,7 @@ export async function fetchPractitionerReviews(
     .from("reviews")
     .select("*")
     .eq("status", "Approved")
+    .in("target_type", ["practitioner", "event"])
     .order("created_at", { ascending: false })
     .limit(10);
 
@@ -114,7 +90,8 @@ export async function fetchPractitionerReviews(
       rating: number;
       body: string;
       created_at: string;
-      seller_reply?: string;
+      practitioner_reply?: string | null;
+      seller_reply?: string | null;
     };
     return {
       id: r.id,
@@ -127,7 +104,7 @@ export async function fetchPractitionerReviews(
         month: "short",
         year: "numeric",
       }),
-      providerReply: r.seller_reply?.trim() || undefined,
+      providerReply: r.practitioner_reply?.trim() || r.seller_reply?.trim() || undefined,
     };
   });
 }
@@ -142,7 +119,9 @@ export async function buildDashboard(
   const name = profile?.name ?? "";
 
   const reviews = await fetchPractitionerReviews(practitionerId, name);
-  const { thisMonth, growthPct } = computeMonthlyEarnings(bookings);
+  const thisMonth = snapshot.monthlyEarnings;
+  const lastMonth = snapshot.previousMonthEarnings;
+  const growthPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0;
 
   let avgRating = profile?.rating ?? 0;
   let reviewCount = profile?.reviewCount ?? 0;
@@ -152,13 +131,9 @@ export async function buildDashboard(
   }
   reviewCount = Math.max(reviewCount, reviews.length);
 
-  const monthlyFromWallet = snapshot.transactions
-    .filter((t) => t.category === "booking_earning" || t.category === "earning_release")
-    .reduce((s, t) => s + (t.type === "credit" ? t.amount : 0), 0);
-
   return {
     weeklySessions: computeWeeklySessions(bookings),
-    monthlyEarnings: thisMonth > 0 ? thisMonth : monthlyFromWallet,
+    monthlyEarnings: thisMonth,
     monthlyGrowthPct: growthPct,
     avgRating: Math.round(avgRating * 10) / 10,
     reviewCount,

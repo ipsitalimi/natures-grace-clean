@@ -4,10 +4,12 @@ import { Feather } from "@expo/vector-icons";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import { isBankAccountLinked } from "@/lib/payoutDisclosure";
+import { isBankAccountLinked, isPractitionerBankAccountLinked } from "@/lib/payoutDisclosure";
 
 type Props = {
   bankAccountLabel: string;
+  bankAccountHolder?: string;
+  isPractitionerAccount?: boolean;
   onSave: (input: {
     accountHolder: string;
     bankName: string;
@@ -15,8 +17,10 @@ type Props = {
   }) => Promise<{ error?: string }>;
 };
 
-export default function BankDetailsCard({ bankAccountLabel, onSave }: Props) {
-  const linked = isBankAccountLinked(bankAccountLabel);
+export default function BankDetailsCard({ bankAccountLabel, bankAccountHolder, isPractitionerAccount, onSave }: Props) {
+  const linked = isPractitionerAccount
+    ? isPractitionerBankAccountLinked(bankAccountLabel, bankAccountHolder)
+    : isBankAccountLinked(bankAccountLabel);
   const [editing, setEditing] = useState(!linked);
   const [accountHolder, setAccountHolder] = useState("");
   const [bankName, setBankName] = useState("");
@@ -27,13 +31,18 @@ export default function BankDetailsCard({ bankAccountLabel, onSave }: Props) {
   const handleSave = async () => {
     setSaving(true);
     setError(null);
-    const result = await onSave({ accountHolder, bankName, last4 });
-    setSaving(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await onSave({ accountHolder, bankName, last4 });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save bank details. Try again.");
+    } finally {
+      setSaving(false);
     }
-    setEditing(false);
   };
 
   return (
@@ -45,7 +54,8 @@ export default function BankDetailsCard({ bankAccountLabel, onSave }: Props) {
 
       {linked && !editing ? (
         <>
-          <ThemedText style={styles.linkedLabel}>{bankAccountLabel}</ThemedText>
+          <ThemedText style={styles.linkedLabel}>{bankAccountHolder?.trim() || "Account holder not provided"}</ThemedText>
+          <ThemedText style={styles.hint}>{bankAccountLabel}</ThemedText>
           <ThemedText style={styles.hint}>
             Withdrawals use this account after admin verification.
           </ThemedText>
