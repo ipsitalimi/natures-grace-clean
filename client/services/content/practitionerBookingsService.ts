@@ -330,7 +330,7 @@ export async function completeBooking(
   }
 
   const row = data as DbBookingRow;
-  await recordSessionHistory(row);
+  // The database completion trigger writes immutable session history atomically.
   return toPractitionerSession(row);
 }
 
@@ -377,32 +377,6 @@ export async function cancelBooking(
   }
 
   return toPractitionerSession(data as DbBookingRow);
-}
-
-async function recordSessionHistory(row: DbBookingRow): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase) return;
-
-  const { data: existing } = await supabase
-    .from("practitioner_session_history")
-    .select("id")
-    .eq("booking_id", row.id)
-    .maybeSingle();
-
-  if (existing) return;
-
-  await supabase.from("practitioner_session_history").insert({
-    booking_id: row.id,
-    practitioner_id: row.practitioner_id,
-    client_name: row.client_name,
-    service_name: row.service_name,
-    session_date: row.session_date,
-    session_time: row.session_time,
-    duration_minutes: row.duration_minutes,
-    amount: row.amount,
-    notes: row.notes,
-    completed_at: row.completed_at ?? new Date().toISOString(),
-  });
 }
 
 export async function fetchAllBookingRows(
