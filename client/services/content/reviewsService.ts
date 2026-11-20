@@ -285,6 +285,7 @@ export async function fetchApprovedPractitionerReviews(
     .from("reviews")
     .select("*")
     .eq("practitioner_id", practitionerId)
+    .in("target_type", ["practitioner", "event"])
     .eq("status", "Approved")
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -358,6 +359,7 @@ export async function getPractitionerReviewStats(
     .from("reviews")
     .select("rating")
     .eq("practitioner_id", practitionerId)
+    .in("target_type", ["practitioner", "event"])
     .eq("status", "Approved");
 
   if (error) {
