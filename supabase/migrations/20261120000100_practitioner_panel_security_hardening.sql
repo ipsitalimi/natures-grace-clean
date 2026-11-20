@@ -199,6 +199,32 @@ CREATE POLICY "practitioners_select"
   ON public.practitioners FOR SELECT TO authenticated
   USING (is_active IS TRUE AND approval_status = 'Approved');
 
+-- Correct the misleading 5-star default: a practitioner with no approved
+-- reviews must have rating 0 and review_count 0, not a fabricated five-star score.
+ALTER TABLE public.practitioners
+  ALTER COLUMN rating SET DEFAULT 0;
+
+WITH practitioner_review_aggregates AS (
+  SELECT practitioner_id,
+         ROUND(AVG(rating), 1) AS rating,
+         COUNT(*)::integer AS review_count
+    FROM public.reviews
+   WHERE target_type IN ('practitioner','event')
+     AND status = 'Approved'
+     AND practitioner_id IS NOT NULL
+   GROUP BY practitioner_id
+)
+UPDATE public.practitioners p
+   SET rating = COALESCE(a.rating, 0),
+       review_count = COALESCE(a.review_count, 0)
+  FROM (SELECT id FROM public.practitioners) existing
+  LEFT JOIN practitioner_review_aggregates a ON a.practitioner_id = existing.id
+ WHERE p.id = existing.id
+   AND (
+     p.rating IS DISTINCT FROM COALESCE(a.rating, 0)
+     OR p.review_count IS DISTINCT FROM COALESCE(a.review_count, 0)
+   );
+
 -- 4) Protect every admin-controlled practitioner field at the database boundary.
 CREATE OR REPLACE FUNCTION public.practitioners_guard_self_update()
 RETURNS trigger
