@@ -396,19 +396,10 @@ export async function getPractitionerReviewStats(
 }
 
 export async function syncPractitionerReviewAggregate(
-  practitionerId: string
+  _practitionerId: string
 ): Promise<void> {
-  const supabase = getSupabase();
-  if (!supabase || !practitionerId) return;
-
-  const stats = await getPractitionerReviewStats(practitionerId);
-  await supabase
-    .from("practitioners")
-    .update({
-      rating: Math.round(stats.avgRating * 10) / 10,
-      review_count: stats.reviewCount,
-    })
-    .eq("id", practitionerId);
+  // Practitioner rating and review_count are recalculated by the trusted
+  // database trigger on review insert/update/delete. Never write them from a client.
 }
 
 function displayNameFromProfile(
