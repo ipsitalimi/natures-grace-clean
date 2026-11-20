@@ -177,11 +177,14 @@ CREATE TRIGGER practitioner_booking_completion_history
 
 REVOKE ALL ON FUNCTION public.record_practitioner_session_history_on_completion() FROM PUBLIC, anon, authenticated;
 
--- Anonymous clients never need write access to practitioner financial/session records.
+-- Anonymous clients never need write access to practitioner records, booking
+-- messages, or reviews. Authenticated write access remains governed by RLS below.
 REVOKE INSERT, UPDATE, DELETE ON public.practitioner_wallets,
   public.practitioner_wallet_transactions, public.practitioner_payouts,
   public.practitioner_session_history, public.practitioner_bookings,
-  public.practitioners
+  public.practitioners, public.practitioner_availability,
+  public.practitioner_offerings, public.practitioner_booking_intro_messages,
+  public.practitioner_pricing_rules, public.reviews
 FROM anon;
 
 -- 6) Separate practitioner review replies from seller replies.
