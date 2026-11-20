@@ -6,6 +6,12 @@ export function isBankAccountLinked(label: string | null | undefined): boolean {
   return !trimmed.toLowerCase().includes("not linked");
 }
 
+export function isPractitionerBankAccountLinked(label: string | null | undefined): boolean {
+  const normalized = label?.trim().toLowerCase() ?? "";
+  if (!normalized || normalized === "hdfc bank ···· 4821") return false;
+  return !normalized.includes("not linked");
+}
+
 export function formatNextPayoutDate(value: string | null | undefined): string {
   const trimmed = value?.trim();
   if (!trimmed) return "Scheduled after admin review";
