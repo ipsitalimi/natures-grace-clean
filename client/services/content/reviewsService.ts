@@ -22,6 +22,7 @@ export type DbReviewRowFull = DbReviewRow & {
   booking_id: string | null;
   order_id: string | null;
   seller_reply: string;
+  practitioner_reply?: string | null;
   updated_at: string;
 };
 
@@ -47,6 +48,7 @@ function mapRow(row: DbReviewRowFull): Review {
     body: row.body,
     status: row.status as Review["status"],
     sellerReply: row.seller_reply ?? "",
+    practitionerReply: row.practitioner_reply ?? "",
     createdAt: row.created_at,
   };
 }
@@ -253,25 +255,45 @@ export async function saveSellerReply(
   reply: string
 ): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase) return false;
+  const value = reply.trim();
+  if (!supabase || !reviewId || !value || value.length > 2000) return false;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("reviews")
-    .update({ seller_reply: reply.trim() })
-    .eq("id", reviewId);
+    .update({ seller_reply: value })
+    .eq("id", reviewId)
+    .eq("target_type", "product")
+    .select("id")
+    .maybeSingle();
 
   if (error) {
     console.error("[reviewsService] seller reply:", error.message);
     return false;
   }
-  return true;
+  return Boolean(data?.id);
 }
 
 export async function savePractitionerReply(
   reviewId: string,
   reply: string
 ): Promise<boolean> {
-  return saveSellerReply(reviewId, reply);
+  const supabase = getSupabase();
+  const value = reply.trim();
+  if (!supabase || !reviewId || !value || value.length > 2000) return false;
+
+  const { data, error } = await supabase
+    .from("reviews")
+    .update({ practitioner_reply: value })
+    .eq("id", reviewId)
+    .in("target_type", ["practitioner", "event"])
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[reviewsService] practitioner reply:", error.message);
+    return false;
+  }
+  return Boolean(data?.id);
 }
 
 export async function fetchApprovedPractitionerReviews(
