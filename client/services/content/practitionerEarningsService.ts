@@ -5,6 +5,7 @@ import type {
 } from "@/data/practitionerBookings";
 import { getSupabase } from "@/lib/supabase";
 import { resolvePractitionerId } from "@/services/content/practitionerId";
+import { isPractitionerBankAccountLinked } from "@/lib/payoutDisclosure";
 
 export type DbPractitionerWalletRow = {
   id: string;
@@ -15,6 +16,7 @@ export type DbPractitionerWalletRow = {
   total_earned: number;
   commission_rate: number;
   bank_account_label: string | null;
+  bank_account_holder: string | null;
   next_payout_date: string | null;
 };
 
@@ -69,7 +71,7 @@ async function fetchWalletByPractitionerId(
 }
 
 export async function getOrCreateWallet(
-  commissionRate = 10,
+  _commissionRate = 10,
   profileId?: string | null
 ): Promise<DbPractitionerWalletRow | null> {
   const supabase = getSupabase();
@@ -77,26 +79,12 @@ export async function getOrCreateWallet(
 
   const practitionerId = await resolvePractitionerId(profileId);
   if (!practitionerId) {
-    console.warn("[practitionerEarnings] wallet skipped: no active practitioner row");
+    console.warn("[practitionerEarnings] wallet skipped: practitioner profile not found");
     return null;
   }
 
-  const existing = await fetchWalletByPractitionerId(practitionerId);
-  if (existing) return existing;
-
-  const { data, error } = await supabase.rpc("ensure_practitioner_wallet", {
-    p_commission_rate: commissionRate,
-  });
-
-  if (!error && data) {
-    return data as DbPractitionerWalletRow;
-  }
-
-  if (error) {
-    console.warn("[practitionerEarnings] ensure wallet:", error.message);
-  }
-
-  // Race or migration not applied yet — retry read-only path.
+  // Wallet creation and commission assignment are backend/admin-only. The
+  // practitioner client is deliberately read-only and never invokes a wallet RPC.
   return fetchWalletByPractitionerId(practitionerId);
 }
 
@@ -160,7 +148,10 @@ export async function fetchWalletSnapshot(
     heldBalance: Number(wallet.held_balance),
     totalEarned: Number(wallet.total_earned),
     commissionRate: Number(wallet.commission_rate),
-    bankAccountLabel: wallet.bank_account_label?.trim() || "Bank account not linked",
+    bankAccountLabel: isPractitionerBankAccountLinked(wallet.bank_account_label)
+      ? wallet.bank_account_label!.trim()
+      : "Bank account not linked",
+    bankAccountHolder: wallet.bank_account_holder?.trim() || "",
     nextPayoutDate: wallet.next_payout_date?.trim() || "Scheduled after admin review",
     transactions,
     payouts: payoutRows.map((p) => ({
