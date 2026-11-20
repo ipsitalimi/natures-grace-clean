@@ -28,13 +28,18 @@ export default function BankDetailsCard({ bankAccountLabel, bankAccountHolder, o
   const handleSave = async () => {
     setSaving(true);
     setError(null);
-    const result = await onSave({ accountHolder, bankName, last4 });
-    setSaving(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+    try {
+      const result = await onSave({ accountHolder, bankName, last4 });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save bank details. Try again.");
+    } finally {
+      setSaving(false);
     }
-    setEditing(false);
   };
 
   return (
