@@ -372,6 +372,28 @@ UPDATE public.practitioners p
      OR p.review_count IS DISTINCT FROM COALESCE(a.review_count, 0)
    );
 
+-- Only approved practitioners may initiate the booking intro chat; existing
+-- participants can still read their previous conversation history.
+DROP POLICY IF EXISTS "booking_intro_messages_insert_participants" ON public.practitioner_booking_intro_messages;
+CREATE POLICY "booking_intro_messages_insert_participants"
+  ON public.practitioner_booking_intro_messages FOR INSERT TO authenticated
+  WITH CHECK (
+    sender_id = auth.uid()
+    AND EXISTS (
+      SELECT 1
+      FROM public.practitioner_bookings b
+      LEFT JOIN public.practitioners p ON p.id = b.practitioner_id
+      WHERE b.id = practitioner_booking_intro_messages.booking_id
+        AND b.payment_status = 'Paid'
+        AND b.booking_status = 'Confirmed'
+        AND b.intro_chat_ends_at > now()
+        AND (
+          b.user_id = auth.uid()
+          OR (p.profile_id = auth.uid() AND p.approval_status = 'Approved')
+        )
+    )
+  );
+
 -- 4) Protect every admin-controlled practitioner field at the database boundary.
 CREATE OR REPLACE FUNCTION public.practitioners_guard_self_update()
 RETURNS trigger
@@ -626,11 +648,21 @@ CREATE POLICY "reviews_update_practitioner_reply"
     target_type IN ('practitioner','event')
     AND status = 'Approved'
     AND practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = reviews.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
   )
   WITH CHECK (
     target_type IN ('practitioner','event')
     AND status = 'Approved'
     AND practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = reviews.practitioner_id
+        AND p.approval_status = 'Approved'
+    )
   );
 
 CREATE OR REPLACE FUNCTION public.reviews_before_update_guard()
@@ -708,7 +740,12 @@ BEGIN
 
   v_is_practitioner_owner := OLD.target_type IN ('practitioner','event')
     AND OLD.status = 'Approved'
-    AND OLD.practitioner_id = public.current_practitioner_id();
+    AND OLD.practitioner_id = public.current_practitioner_id()
+    AND EXISTS (
+      SELECT 1 FROM public.practitioners p
+      WHERE p.id = OLD.practitioner_id
+        AND p.approval_status = 'Approved'
+    );
 
   IF v_is_practitioner_owner THEN
     NEW.id := OLD.id;
