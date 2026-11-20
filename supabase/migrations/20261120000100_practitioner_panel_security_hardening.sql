@@ -662,8 +662,21 @@ REVOKE ALL ON FUNCTION public.is_admin() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.is_admin() TO anon, authenticated, service_role;
 
 -- 9) Restore the database RPCs used by the admin payout queue and seller
--- withdrawal endpoint. All calls are service-role-only; user-facing routes must
--- authenticate and authorize the caller before invoking them.
+-- withdrawal endpoint. Rejected payouts require an auditable reversal category.
+ALTER TABLE public.wallet_transactions
+  DROP CONSTRAINT IF EXISTS wallet_transactions_category_check;
+ALTER TABLE public.wallet_transactions
+  ADD CONSTRAINT wallet_transactions_category_check
+  CHECK (category IN ('order_earning', 'earning_release', 'payout', 'refund', 'payout_reversal', 'adjustment'));
+
+ALTER TABLE public.practitioner_wallet_transactions
+  DROP CONSTRAINT IF EXISTS practitioner_wallet_transactions_category_check;
+ALTER TABLE public.practitioner_wallet_transactions
+  ADD CONSTRAINT practitioner_wallet_transactions_category_check
+  CHECK (category IN ('booking_earning', 'earning_release', 'payout', 'refund', 'payout_reversal', 'adjustment'));
+
+-- All payout RPC calls are service-role-only; user-facing routes must authenticate
+-- and authorize the caller before invoking them.
 CREATE OR REPLACE FUNCTION public.admin_update_payout_status(
   p_payout_type text,
   p_payout_id uuid,
