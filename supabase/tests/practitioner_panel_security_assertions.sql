@@ -30,6 +30,14 @@ BEGIN
     RAISE EXCEPTION 'FAIL: internal practitioner application RPC remains directly executable';
   END IF;
 
+  IF position('priceRange' IN pg_get_functiondef('public.apply_practitioner_application(uuid,jsonb)'::regprocedure)) > 0 THEN
+    RAISE EXCEPTION 'FAIL: applicant form data can still set practitioner pricing';
+  END IF;
+
+  IF position('is_active' IN pg_get_functiondef('public.current_practitioner_id()'::regprocedure)) > 0 THEN
+    RAISE EXCEPTION 'FAIL: practitioner identity helper still depends on availability';
+  END IF;
+
   IF has_function_privilege('anon', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE') THEN
     RAISE EXCEPTION 'FAIL: practitioner wallet provisioning RPC remains directly executable';
