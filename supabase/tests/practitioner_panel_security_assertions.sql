@@ -368,6 +368,34 @@ BEGIN
     RAISE EXCEPTION 'FAIL: practitioner rating aggregate trigger has an unrestricted nested-trigger bypass';
   END IF;
 
+  IF has_column_privilege('authenticated', 'public.practitioner_wallets', 'available_balance', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'pending_payout', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'held_balance', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'total_earned', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'commission_rate', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'bank_account_label', 'UPDATE')
+     OR has_column_privilege('authenticated', 'public.practitioner_wallets', 'bank_account_holder', 'UPDATE') THEN
+    RAISE EXCEPTION 'FAIL: authenticated retains practitioner wallet column-level UPDATE privileges';
+  END IF;
+
+  IF NOT has_function_privilege('service_role', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.ensure_practitioner_wallet(numeric)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner wallet provisioning is not service-role-only';
+  END IF;
+
+  IF NOT has_function_privilege('service_role', 'public.credit_practitioner_booking_earning(uuid,numeric)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.credit_practitioner_booking_earning(uuid,numeric)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.credit_practitioner_booking_earning(uuid,numeric)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.release_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.release_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.reverse_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.reverse_wallet_earning(text,uuid,uuid,text)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.apply_practitioner_booking_refund(uuid,uuid,numeric,numeric)', 'EXECUTE')
+     OR has_function_privilege('authenticated', 'public.apply_practitioner_booking_refund(uuid,uuid,numeric,numeric)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'FAIL: practitioner financial ledger RPCs are not restricted to the trusted backend';
+  END IF;
+
   RAISE NOTICE 'PASS: practitioner panel security schema assertions';
 END;
 $$;
