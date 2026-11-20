@@ -329,8 +329,11 @@ BEGIN
 
   IF NEW.booking_status IS DISTINCT FROM OLD.booking_status
      AND NOT (
-       OLD.booking_status = 'Confirmed'
-       AND NEW.booking_status IN ('Completed','Cancelled')
+       OLD.booking_status IS NOT DISTINCT FROM 'Confirmed'
+       AND (
+         NEW.booking_status IS NOT DISTINCT FROM 'Completed'
+         OR NEW.booking_status IS NOT DISTINCT FROM 'Cancelled'
+       )
      ) THEN
     RAISE EXCEPTION 'invalid_practitioner_booking_transition' USING ERRCODE = '42501';
   END IF;
@@ -493,7 +496,7 @@ BEGIN
 
   -- Review authors may edit only their own pending review content.
   IF OLD.user_id = auth.uid() THEN
-    IF OLD.status <> 'Pending' THEN
+    IF OLD.status IS DISTINCT FROM 'Pending' THEN
       RAISE EXCEPTION 'Cannot update review' USING ERRCODE = '42501';
     END IF;
     NEW.id := OLD.id;
