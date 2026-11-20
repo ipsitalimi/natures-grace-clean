@@ -45,31 +45,6 @@ export function computeWeeklySessions(bookings: DbBookingRow[]): WeeklySessionPo
   });
 }
 
-function sumEarningsInMonth(
-  bookings: DbBookingRow[],
-  month: number,
-  year: number
-): number {
-  return bookings
-    .filter((b) => {
-      if (b.payment_status !== "Paid") return false;
-      const at = b.completed_at ? new Date(b.completed_at) : new Date(b.created_at);
-      return at.getMonth() === month && at.getFullYear() === year;
-    })
-    .reduce((s, b) => s + Number(b.amount), 0);
-}
-
-export function computeMonthlyEarnings(bookings: DbBookingRow[]): {
-  thisMonth: number;
-  growthPct: number;
-} {
-  const now = new Date();
-  const thisMonth = sumEarningsInMonth(bookings, now.getMonth(), now.getFullYear());
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const lastMonth = sumEarningsInMonth(bookings, prev.getMonth(), prev.getFullYear());
-  const growthPct = lastMonth > 0 ? ((thisMonth - lastMonth) / lastMonth) * 100 : 0;
-  return { thisMonth, growthPct };
-}
 
 function countClientsBookedToday(bookings: DbBookingRow[]): number {
   const today = new Date();
