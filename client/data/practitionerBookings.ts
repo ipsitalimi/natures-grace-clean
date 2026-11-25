@@ -43,6 +43,9 @@ export type DbBookingRow = {
   booking_status: BookingStatus;
   payment_status: BookingPaymentStatus;
   razorpay_payment_id: string | null;
+  platform_fee_inr?: number | null;
+  platform_gst_inr?: number | null;
+  total_paid_amount_inr?: number | null;
   notes: string | null;
   created_at: string;
   completed_at: string | null;
@@ -146,5 +149,11 @@ export type UserSessionHistory = {
   price: string;
   time: string;
   paymentStatus?: BookingPaymentStatus;
+  bookingNumber?: string;
+  paymentId?: string;
+  serviceAmountInr?: number;
+  platformFeeInr?: number | null;
+  platformGstInr?: number | null;
+  totalPaidAmountInr?: number | null;
   meetingLink?: string;
 };
