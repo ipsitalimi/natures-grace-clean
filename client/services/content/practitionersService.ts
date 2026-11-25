@@ -43,6 +43,7 @@ export async function insertPractitioner(
         : []),
     bio: practitioner.bio ?? "",
     experience: practitioner.experience,
+    experience_category: practitioner.experienceCategory ?? null,
     certifications: practitioner.certifications ?? [],
     rating: practitioner.rating ?? 5,
     review_count: 0,
@@ -71,6 +72,7 @@ export async function updatePractitioner(
     name: string;
     bio: string;
     experience: string;
+    experience_category: string | null;
     certifications: string[];
     price_per_session: number;
     is_active: boolean;
