@@ -102,6 +102,7 @@ interface DataContextType {
     patch: Partial<Pick<Practitioner, "approvalStatus" | "isVerified" | "featured">>
   ) => void;
   updatePractitionerBio: (id: string, bio: string) => Promise<boolean>;
+  updatePractitionerExperienceCategory: (id: string, category: "0–5 years" | "5–10 years" | "10+ years") => Promise<boolean>;
   updatePractitionerPrice: (id: string, price: number) => Promise<boolean>;
 }
 
@@ -537,6 +538,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, []);
 
+  const updatePractitionerExperienceCategory = useCallback(async (id: string, category: "0–5 years" | "5–10 years" | "10+ years"): Promise<boolean> => {
+    if (!isSupabaseConfigured()) return false;
+    const ok = await practitionersService.updatePractitioner(id, { experience_category: category });
+    if (!ok) return false;
+    setPractitionerCats((prev) => prev.map((cat) => ({
+      ...cat,
+      practitioners: cat.practitioners.map((p) => p.id === id ? { ...p, experienceCategory: category } : p),
+    })));
+    return true;
+  }, []);
+
   const updatePractitionerPrice = useCallback(async (id: string, price: number): Promise<boolean> => {
     if (!isSupabaseConfigured() || !Number.isFinite(price) || price < 0) return false;
     const ok = await practitionersService.updatePractitioner(id, { price_per_session: price });
@@ -584,6 +596,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     deletePractitioner,
     updatePractitionerMeta,
     updatePractitionerBio,
+    updatePractitionerExperienceCategory,
     updatePractitionerPrice,
   };
 
