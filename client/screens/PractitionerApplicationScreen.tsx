@@ -40,6 +40,7 @@ export default function PractitionerApplicationScreen() {
   const [category, setCategory] = useState("");
   const [subcategories, setSubcategories] = useState<string[]>([]);
   const [experience, setExperience] = useState("");
+  const [experienceCategory, setExperienceCategory] = useState<"0–5 years" | "5–10 years" | "10+ years" | "">("");
   const [certifications, setCertifications] = useState("");
   const [bio, setBio] = useState("");
   const [whyJoin, setWhyJoin] = useState("");
@@ -96,6 +97,7 @@ export default function PractitionerApplicationScreen() {
         subcategories: subcategories.join(", "),
         subcategory: subcategories[0] ?? "",
         experience: experience.trim(),
+        experienceCategory,
         certifications: certifications.trim(),
         bio: bio.trim(),
         whyJoin: whyJoin.trim(),
@@ -243,6 +245,15 @@ export default function PractitionerApplicationScreen() {
           placeholderTextColor={Colors.light.textMuted}
           testID="input-experience"
         />
+
+        <ThemedText style={styles.label}>Experience Category</ThemedText>
+        <View style={styles.categoryChips}>
+          {(["0–5 years", "5–10 years", "10+ years"] as const).map((option) => (
+            <Pressable key={option} onPress={() => setExperienceCategory(option)} style={[styles.chip, experienceCategory === option && styles.chipSelected]}>
+              <ThemedText style={[styles.chipText, experienceCategory === option && styles.chipTextSelected]}>{option}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
 
         <ThemedText style={styles.label}>Certifications / Training</ThemedText>
         <TextInput
