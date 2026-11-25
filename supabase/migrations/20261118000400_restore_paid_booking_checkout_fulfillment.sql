@@ -111,7 +111,12 @@ BEGIN
     RETURNING * INTO v_wallet;
   END IF;
 
-  v_commission := COALESCE(v_wallet.commission_rate, p_commission_rate);
+  -- The API passes the practitioner-only 30% platform share. Do not reuse
+  -- stale wallet commission settings; seller commission is handled elsewhere.
+  v_commission := p_commission_rate;
+  UPDATE public.practitioner_wallets
+     SET commission_rate = p_commission_rate
+   WHERE id = v_wallet.id;
   v_net := ROUND(v_gross * (1 - v_commission / 100), 2);
 
   INSERT INTO public.practitioner_wallet_transactions (
