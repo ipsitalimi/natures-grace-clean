@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Linking,
+  Modal,
+  ScrollView,
   StyleSheet,
   Pressable,
   TextInput,
@@ -61,6 +63,11 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatReceiptAmount(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(Number(value))) return "Unavailable";
+  return `₹${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function getStatusColor(status: UserSessionHistory["status"]): string {
   switch (status) {
     case "Completed":
@@ -91,6 +98,7 @@ export default function SessionDetailScreen() {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [receiptVisible, setReceiptVisible] = useState(false);
   const { bookingCancelMessage } = useCancellationPolicy();
   const session = userSessions.find((s) => s.id === sessionId);
 
@@ -251,6 +259,114 @@ export default function SessionDetailScreen() {
             </View>
             <Feather name="external-link" size={18} color={Colors.light.textMuted} />
           </Pressable>
+        ) : null}
+
+        {session.paymentStatus === "Paid" ? (
+          <>
+            <Pressable
+              style={styles.refundCard}
+              onPress={() => setReceiptVisible(true)}
+              testID="button-view-booking-receipt"
+            >
+              <Feather name="file-text" size={18} color={Colors.light.accent} />
+              <View style={styles.refundCardBody}>
+                <ThemedText style={styles.refundCardTitle}>View Receipt</ThemedText>
+                <ThemedText style={styles.refundCardText}>View your payment breakdown</ThemedText>
+              </View>
+              <Feather name="chevron-right" size={18} color={Colors.light.textMuted} />
+            </Pressable>
+
+            <Modal
+              visible={receiptVisible}
+              transparent
+              animationType="slide"
+              onRequestClose={() => setReceiptVisible(false)}
+              statusBarTranslucent
+            >
+              <View style={styles.receiptOverlay}>
+                <View style={styles.receiptSheet}>
+                  <View style={styles.receiptHeader}>
+                    <View>
+                      <ThemedText style={styles.receiptBrand}>NATURE'S GRACE</ThemedText>
+                      <ThemedText style={styles.receiptTitle}>Payment receipt</ThemedText>
+                    </View>
+                    <Pressable
+                      onPress={() => setReceiptVisible(false)}
+                      hitSlop={12}
+                      accessibilityLabel="Close receipt"
+                      testID="button-close-booking-receipt"
+                    >
+                      <Feather name="x" size={22} color={Colors.light.text} />
+                    </Pressable>
+                  </View>
+
+                  <ScrollView showsVerticalScrollIndicator={false}>
+                    <View style={styles.receiptMeta}>
+                      <ThemedText style={styles.receiptMetaLabel}>Booking reference</ThemedText>
+                      <ThemedText style={styles.receiptMetaValue}>
+                        {session.bookingNumber || session.id}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.receiptMeta}>
+                      <ThemedText style={styles.receiptMetaLabel}>Payment status</ThemedText>
+                      <ThemedText style={styles.receiptPaid}>PAID</ThemedText>
+                    </View>
+                    <View style={styles.receiptDivider} />
+
+                    <ThemedText style={styles.receiptSectionTitle}>Session</ThemedText>
+                    <DetailRow label="Practitioner" value={session.practitionerName} />
+                    <DetailRow label="Service" value={session.serviceType} />
+                    <DetailRow label="Date" value={session.date} />
+                    <DetailRow label="Time" value={session.time} />
+                    <DetailRow label="Duration" value={session.duration} />
+
+                    <View style={styles.receiptDivider} />
+                    <ThemedText style={styles.receiptSectionTitle}>Payment breakdown</ThemedText>
+                    <View style={styles.receiptMoneyRow}>
+                      <ThemedText style={styles.receiptMoneyLabel}>Session amount</ThemedText>
+                      <ThemedText style={styles.receiptMoneyValue}>
+                        {formatReceiptAmount(session.serviceAmountInr)}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.receiptMoneyRow}>
+                      <ThemedText style={styles.receiptMoneyLabel}>Platform fee</ThemedText>
+                      <ThemedText style={styles.receiptMoneyValue}>
+                        {formatReceiptAmount(session.platformFeeInr)}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.receiptMoneyRow}>
+                      <ThemedText style={styles.receiptMoneyLabel}>GST on platform fee</ThemedText>
+                      <ThemedText style={styles.receiptMoneyValue}>
+                        {formatReceiptAmount(session.platformGstInr)}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.receiptTotalRow}>
+                      <ThemedText style={styles.receiptTotalLabel}>Total paid</ThemedText>
+                      <ThemedText style={styles.receiptTotalValue}>
+                        {formatReceiptAmount(session.totalPaidAmountInr)}
+                      </ThemedText>
+                    </View>
+
+                    <View style={styles.receiptDivider} />
+                    <ThemedText style={styles.receiptSectionTitle}>Transaction</ThemedText>
+                    <DetailRow label="Payment method" value="Razorpay" />
+                    <DetailRow label="Payment ID" value={session.paymentId || "Unavailable"} />
+                    <ThemedText style={styles.receiptFootnote}>
+                      This receipt reflects the amounts recorded for this booking.
+                    </ThemedText>
+                  </ScrollView>
+
+                  <Pressable
+                    style={styles.receiptCloseButton}
+                    onPress={() => setReceiptVisible(false)}
+                    testID="button-done-booking-receipt"
+                  >
+                    <ThemedText style={styles.receiptCloseButtonText}>Done</ThemedText>
+                  </Pressable>
+                </View>
+              </View>
+            </Modal>
+          </>
         ) : null}
 
         {session.paymentStatus === "Paid" && session.status !== "Upcoming" ? (
@@ -453,6 +569,124 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Nunito_400Regular",
     color: Colors.light.textMuted,
+  },
+  receiptOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "flex-end",
+  },
+  receiptSheet: {
+    maxHeight: "88%",
+    backgroundColor: Colors.light.backgroundRoot,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  receiptHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: Spacing.lg,
+  },
+  receiptBrand: {
+    fontSize: 11,
+    letterSpacing: 1.4,
+    fontWeight: "700",
+    color: Colors.light.accent,
+  },
+  receiptTitle: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: Colors.light.text,
+    marginTop: 4,
+  },
+  receiptMeta: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 7,
+  },
+  receiptMetaLabel: {
+    fontSize: 13,
+    color: Colors.light.textSecondary,
+  },
+  receiptMetaValue: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Colors.light.text,
+    maxWidth: "62%",
+    textAlign: "right",
+  },
+  receiptPaid: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Colors.light.accent,
+  },
+  receiptDivider: {
+    height: 1,
+    backgroundColor: Colors.light.divider,
+    marginVertical: Spacing.md,
+  },
+  receiptSectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Colors.light.text,
+    marginBottom: 5,
+  },
+  receiptMoneyRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 9,
+  },
+  receiptMoneyLabel: {
+    fontSize: 14,
+    color: Colors.light.textSecondary,
+  },
+  receiptMoneyValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: Colors.light.text,
+  },
+  receiptTotalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: Colors.light.divider,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.md,
+  },
+  receiptTotalLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.light.text,
+  },
+  receiptTotalValue: {
+    fontSize: 19,
+    fontWeight: "700",
+    color: Colors.light.accent,
+  },
+  receiptFootnote: {
+    fontSize: 12,
+    color: Colors.light.textMuted,
+    lineHeight: 18,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  receiptCloseButton: {
+    backgroundColor: Colors.light.button,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: Spacing.md,
+  },
+  receiptCloseButtonText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
   noteCard: {
     flexDirection: "row",
