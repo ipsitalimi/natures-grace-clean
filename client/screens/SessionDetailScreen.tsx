@@ -311,6 +311,14 @@ export default function SessionDetailScreen() {
                       <ThemedText style={styles.receiptMetaLabel}>Payment status</ThemedText>
                       <ThemedText style={styles.receiptPaid}>PAID</ThemedText>
                     </View>
+                    <View style={styles.receiptMeta}>
+                      <ThemedText style={styles.receiptMetaLabel}>Payment method</ThemedText>
+                      <ThemedText style={styles.receiptMetaValue}>Razorpay</ThemedText>
+                    </View>
+                    <View style={styles.receiptMeta}>
+                      <ThemedText style={styles.receiptMetaLabel}>Payment ID</ThemedText>
+                      <ThemedText style={styles.receiptMetaValue}>{session.paymentId || "Unavailable"}</ThemedText>
+                    </View>
                     <View style={styles.receiptDivider} />
 
                     <ThemedText style={styles.receiptSectionTitle}>Session</ThemedText>
@@ -348,9 +356,6 @@ export default function SessionDetailScreen() {
                     </View>
 
                     <View style={styles.receiptDivider} />
-                    <ThemedText style={styles.receiptSectionTitle}>Transaction</ThemedText>
-                    <DetailRow label="Payment method" value="Razorpay" />
-                    <DetailRow label="Payment ID" value={session.paymentId || "Unavailable"} />
                     <ThemedText style={styles.receiptFootnote}>
                       This receipt reflects the amounts recorded for this booking.
                     </ThemedText>
