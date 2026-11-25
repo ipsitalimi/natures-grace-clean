@@ -179,9 +179,14 @@ export default function BookSessionScreen() {
         ? getTimeSlotsForDate(selectedDate.isoDate, availability, offering.duration)
         : [];
     });
-    return [...new Set(slots)].sort(
-      (a, b) => Date.parse(`1/1/2000 ${a}`) - Date.parse(`1/1/2000 ${b}`)
-    );
+    const toMinutes = (value: string) => {
+      const match = value.match(/^(\\d{1,2}):(\\d{2})\\s*(AM|PM)$/i);
+      if (!match) return 0;
+      const hour = Number(match[1]) % 12;
+      const minutes = Number(match[2]);
+      return (hour + (match[3].toUpperCase() === "PM" ? 12 : 0)) * 60 + minutes;
+    };
+    return [...new Set(slots)].sort((a, b) => toMinutes(a) - toMinutes(b));
   }, [selectedDate, offerings, availabilityByOfferingId]);
 
   useEffect(() => {
