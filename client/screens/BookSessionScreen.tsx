@@ -138,7 +138,7 @@ export default function BookSessionScreen() {
   const { practitionerId } = route.params;
 
   const [selectedDateIndex, setSelectedDateIndex] = useState<number | null>(null);
-  const [selectedTimeIndex, setSelectedTimeIndex] = useState<number | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedDurationIndex, setSelectedDurationIndex] = useState<number | null>(null);
   const [offerings, setOfferings] = useState<SessionOffering[]>([]);
   const [availabilityByOfferingId, setAvailabilityByOfferingId] = useState<
@@ -169,11 +169,20 @@ export default function BookSessionScreen() {
     ? availabilityByOfferingId[selectedOffering.id] ?? null
     : null;
   const selectedDate = selectedDateIndex !== null ? dates[selectedDateIndex] : null;
+  // Show times that fit at least one published offering. Duration is selected
+  // after time, so each duration is filtered against its own availability below.
   const timeSlots = useMemo(() => {
-    if (!selectedDate || !selectedAvailability) return [];
-    const duration = selectedDurationIndex !== null ? durationOptions[selectedDurationIndex]?.minutes ?? 0 : 0;
-    return getTimeSlotsForDate(selectedDate.isoDate, selectedAvailability, duration);
-  }, [selectedDate, selectedAvailability, selectedDurationIndex, durationOptions]);
+    if (!selectedDate) return [];
+    const slots = offerings.flatMap((offering) => {
+      const availability = availabilityByOfferingId[offering.id];
+      return availability
+        ? getTimeSlotsForDate(selectedDate.isoDate, availability, offering.duration)
+        : [];
+    });
+    return [...new Set(slots)].sort(
+      (a, b) => Date.parse(`1/1/2000 ${a}`) - Date.parse(`1/1/2000 ${b}`)
+    );
+  }, [selectedDate, offerings, availabilityByOfferingId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,15 +210,36 @@ export default function BookSessionScreen() {
   }, [practitionerId]);
 
   useEffect(() => {
-    setSelectedTimeIndex(null);
-  }, [selectedDateIndex, selectedDurationIndex]);
+    setSelectedTime(null);
+    setSelectedDurationIndex(null);
+  }, [selectedDateIndex]);
 
   const bookableDates = useMemo(() => {
-    if (!selectedAvailability) return dates.map((_, i) => i);
     return dates
-      .map((d, i) => (isDateBookable(d.isoDate, selectedAvailability) ? i : -1))
-      .filter((i) => i >= 0);
-  }, [dates, selectedAvailability]);
+      .map((date, index) => {
+        const hasAvailability = offerings.some((offering) => {
+          const availability = availabilityByOfferingId[offering.id];
+          return availability ? isDateBookable(date.isoDate, availability) : false;
+        });
+        return hasAvailability ? index : -1;
+      })
+      .filter((index) => index >= 0);
+  }, [dates, offerings, availabilityByOfferingId]);
+
+  const availableDurationOptions = useMemo(() => {
+    if (!selectedDate || !selectedTime) return [];
+    return durationOptions
+      .map((option, index) => ({ option, index }))
+      .filter(({ option }) => {
+        const offering = offerings.find((item) => item.duration === option.minutes);
+        const availability = offering ? availabilityByOfferingId[offering.id] : null;
+        return Boolean(
+          offering &&
+          availability &&
+          getTimeSlotsForDate(selectedDate.isoDate, availability, option.minutes).includes(selectedTime)
+        );
+      });
+  }, [selectedDate, selectedTime, durationOptions, offerings, availabilityByOfferingId]);
 
   if (!practitioner) {
     return (
@@ -222,14 +252,13 @@ export default function BookSessionScreen() {
 
   const canContinue =
     selectedDateIndex !== null &&
-    selectedTimeIndex !== null &&
+    selectedTime !== null &&
     selectedDurationIndex !== null &&
     timeSlots.length > 0 &&
     !loadingSchedule &&
     offerings.length > 0 &&
     selectedAvailability !== null;
 
-  const selectedTime = selectedTimeIndex !== null ? timeSlots[selectedTimeIndex] : null;
   const selectedDuration = selectedDurationIndex !== null ? durationOptions[selectedDurationIndex] : null;
 
   const handleContinue = () => {
@@ -326,7 +355,7 @@ export default function BookSessionScreen() {
             contentContainerStyle={styles.datesContainer}
           >
             {dates.map((day, index) => {
-              const disabled = selectedAvailability ? !bookableDates.includes(index) : false;
+              const disabled = loadingSchedule || !bookableDates.includes(index);
               return (
               <Pressable
                 key={index}
@@ -368,69 +397,82 @@ export default function BookSessionScreen() {
           </ScrollView>
         </View>
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <ClockIcon size={18} />
-            <ThemedText style={styles.sectionTitle}>Select Time</ThemedText>
-          </View>
-          <ThemedText style={styles.sectionSubtitle}>
-            {timeSlots.length === 0
-              ? "No times available for this date"
-              : "Available time slots"}
-          </ThemedText>
-          <View style={styles.timeSlotsGrid}>
-            {timeSlots.map((time, index) => (
-              <Pressable
-                key={index}
-                style={[
-                  styles.timeSlot,
-                  selectedTimeIndex === index && styles.timeSlotSelected,
-                ]}
-                onPress={() => setSelectedTimeIndex(index)}
-              >
-                <ThemedText
+        {selectedDate ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <ClockIcon size={18} />
+              <ThemedText style={styles.sectionTitle}>Select Time</ThemedText>
+            </View>
+            <ThemedText style={styles.sectionSubtitle}>
+              {timeSlots.length === 0
+                ? "No times available for this date"
+                : "Choose an available time"}
+            </ThemedText>
+            <View style={styles.timeSlotsGrid}>
+              {timeSlots.map((time) => (
+                <Pressable
+                  key={time}
                   style={[
-                    styles.timeSlotText,
-                    selectedTimeIndex === index && styles.timeSlotTextSelected,
+                    styles.timeSlot,
+                    selectedTime === time && styles.timeSlotSelected,
                   ]}
+                  onPress={() => {
+                    setSelectedTime(time);
+                    setSelectedDurationIndex(null);
+                  }}
                 >
-                  {time}
-                </ThemedText>
-              </Pressable>
-            ))}
+                  <ThemedText
+                    style={[
+                      styles.timeSlotText,
+                      selectedTime === time && styles.timeSlotTextSelected,
+                    ]}
+                  >
+                    {time}
+                  </ThemedText>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
+        ) : null}
 
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <DurationIcon size={18} />
-            <ThemedText style={styles.sectionTitle}>Select Duration</ThemedText>
+        {selectedTime ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <DurationIcon size={18} />
+              <ThemedText style={styles.sectionTitle}>Select Duration</ThemedText>
+            </View>
+            <ThemedText style={styles.sectionSubtitle}>
+              Choose a session length available at {selectedTime}
+            </ThemedText>
+            {availableDurationOptions.length === 0 ? (
+              <ThemedText style={styles.emptyScheduleText}>
+                No session durations are available at this time. Please choose another time.
+              </ThemedText>
+            ) : (
+              <View style={styles.durationGrid}>
+                {availableDurationOptions.map(({ option, index }) => (
+                  <Pressable
+                    key={option.minutes}
+                    style={[
+                      styles.durationOption,
+                      selectedDurationIndex === index && styles.durationOptionSelected,
+                    ]}
+                    onPress={() => setSelectedDurationIndex(index)}
+                  >
+                    <ThemedText
+                      style={[
+                        styles.durationText,
+                        selectedDurationIndex === index && styles.durationTextSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
-          <ThemedText style={styles.sectionSubtitle}>
-            How long would you like your session?
-          </ThemedText>
-          <View style={styles.durationGrid}>
-            {durationOptions.map((option, index) => (
-              <Pressable
-                key={index}
-                style={[
-                  styles.durationOption,
-                  selectedDurationIndex === index && styles.durationOptionSelected,
-                ]}
-                onPress={() => setSelectedDurationIndex(index)}
-              >
-                <ThemedText
-                  style={[
-                    styles.durationText,
-                    selectedDurationIndex === index && styles.durationTextSelected,
-                  ]}
-                >
-                  {option.label}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+        ) : null}
 
         <Pressable
           style={[styles.confirmButton, !canContinue && styles.confirmButtonDisabled]}
