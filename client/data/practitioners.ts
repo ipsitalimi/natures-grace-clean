@@ -22,6 +22,7 @@ export interface Practitioner {
   localPhoto?: ImageSourcePropType;
   bio: string;
   experience: string;
+  experienceCategory?: "0–5 years" | "5–10 years" | "10+ years" | null;
   certifications: string[];
   rating: number;
   reviewCount: number;
