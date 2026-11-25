@@ -65,6 +65,7 @@ export type DbPractitionerRow = {
   specialties?: DbPractitionerSpecialtyRow[] | null;
   bio: string;
   experience: string;
+  experience_category?: string | null;
   certifications: string[];
   rating: number;
   review_count: number;
@@ -233,6 +234,7 @@ export function practitionerRowToPractitioner(row: DbPractitionerRow): Practitio
     photo: row.photo_url ?? "",
     bio: row.bio,
     experience: row.experience,
+    experienceCategory: (row.experience_category as Practitioner["experienceCategory"]) ?? null,
     certifications: row.certifications ?? [],
     rating: Number(row.rating),
     reviewCount: row.review_count,
