@@ -24,6 +24,7 @@ function PractitionerCard({
   onToggleVerification,
   onEditBio,
   onEditPricing,
+  onEditExperienceCategory,
 }: {
   practitioner: Practitioner;
   state: PractitionerState;
@@ -33,6 +34,7 @@ function PractitionerCard({
   onToggleVerification: () => void;
   onEditBio: () => void;
   onEditPricing: () => void;
+  onEditExperienceCategory: () => void;
 }) {
   const getApprovalBadgeColor = (status: ApprovalStatus) => {
     switch (status) {
@@ -67,6 +69,11 @@ function PractitionerCard({
           </View>
           <ThemedText style={styles.practitionerCategory}>{practitioner.category}</ThemedText>
           <ThemedText style={styles.practitionerExperience}>{practitioner.experience}</ThemedText>
+          <ThemedText style={styles.practitionerExperience}>Experience level: {practitioner.experienceCategory ?? "Not set"}</ThemedText>
+          <Pressable style={styles.editBioButton} onPress={onEditExperienceCategory} testID={`button-edit-experience-category-${practitioner.id}`}>
+            <Feather name="edit-2" size={13} color={Colors.light.accent} />
+            <ThemedText style={styles.editBioText}>Edit experience category</ThemedText>
+          </Pressable>
           <ThemedText style={styles.bioPreview} numberOfLines={3}>{practitioner.bio || "No public bio yet."}</ThemedText>
           <Pressable style={styles.editBioButton} onPress={onEditBio} testID={`button-edit-bio-${practitioner.id}`}>
             <Feather name="edit-2" size={13} color={Colors.light.accent} />
@@ -144,13 +151,22 @@ export default function AdminPractitionersScreen({
   onAddPractitioner: () => void;
   onBackToDashboard: () => void;
 }) {
-  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio } = useDataContext();
+  const { practitionerCategories, deletePractitioner, updatePractitionerMeta, updatePractitionerBio, updatePractitionerExperienceCategory } = useDataContext();
   const { logActivity } = usePlatformConfig();
   const [bioTarget, setBioTarget] = useState<Practitioner | null>(null);
   const [bioDraft, setBioDraft] = useState("");
   const [bioBusy, setBioBusy] = useState(false);
   const [bioError, setBioError] = useState("");
   const [pricingTarget, setPricingTarget] = useState<Practitioner | null>(null);
+  const [experienceTarget, setExperienceTarget] = useState<Practitioner | null>(null);
+  const [experienceBusy, setExperienceBusy] = useState(false);
+  const saveExperienceCategory = async (category: "0–5 years" | "5–10 years" | "10+ years") => {
+    if (!experienceTarget) return;
+    setExperienceBusy(true);
+    const ok = await updatePractitionerExperienceCategory(experienceTarget.id, category);
+    setExperienceBusy(false);
+    if (ok) setExperienceTarget(null);
+  };
   const saveBio = async () => {
     if (!bioTarget) return;
     if (bioDraft.trim().length > 600) { setBioError("Keep the public bio under 600 characters (about 4–5 lines)."); return; }
@@ -254,6 +270,7 @@ export default function AdminPractitionersScreen({
             setBioError("");
           }}
           onEditPricing={() => setPricingTarget(practitioner)}
+          onEditExperienceCategory={() => setExperienceTarget(practitioner)}
         />
       ))
       )}
@@ -291,6 +308,21 @@ export default function AdminPractitionersScreen({
         </View>
       </Modal>
 
+
+      <Modal visible={experienceTarget !== null} transparent animationType="fade" onRequestClose={() => setExperienceTarget(null)}>
+        <View style={styles.bioModalOverlay}>
+          <View style={styles.bioModalCard}>
+            <ThemedText style={styles.bioModalTitle}>Experience category</ThemedText>
+            <ThemedText style={styles.bioModalHint}>Choose the practitioner's experience band. The existing years-of-experience text remains unchanged.</ThemedText>
+            {(["0–5 years", "5–10 years", "10+ years"] as const).map((category) => (
+              <Pressable key={category} style={styles.bioSave} onPress={() => void saveExperienceCategory(category)} disabled={experienceBusy}>
+                <ThemedText style={styles.bioSaveText}>{category}</ThemedText>
+              </Pressable>
+            ))}
+            <Pressable onPress={() => setExperienceTarget(null)} disabled={experienceBusy}><ThemedText style={styles.bioCancel}>Cancel</ThemedText></Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <AdminPractitionerPricingEditor visible={pricingTarget !== null} practitioner={pricingTarget} onClose={() => setPricingTarget(null)} />
     </>
