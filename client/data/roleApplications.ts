@@ -21,6 +21,7 @@ export type PractitionerApplicationForm = {
   /** @deprecated Legacy single subcategory — use subcategories */
   subcategory: string;
   experience: string;
+  experienceCategory?: string;
   certifications: string;
   bio: string;
   whyJoin: string;
