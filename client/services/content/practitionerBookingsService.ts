@@ -113,6 +113,12 @@ export function toPractitionerSession(row: DbBookingRow): PractitionerSession {
     notes: row.notes ?? undefined,
     amount: Number(row.amount),
     paymentStatus: row.payment_status,
+    bookingNumber: row.booking_number,
+    paymentId: row.razorpay_payment_id ?? undefined,
+    serviceAmountInr: Number(row.amount),
+    platformFeeInr: row.platform_fee_inr == null ? null : Number(row.platform_fee_inr),
+    platformGstInr: row.platform_gst_inr == null ? null : Number(row.platform_gst_inr),
+    totalPaidAmountInr: row.total_paid_amount_inr == null ? null : Number(row.total_paid_amount_inr),
     meetingLink: row.meeting_link ?? undefined,
   };
 }
