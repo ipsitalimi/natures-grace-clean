@@ -180,7 +180,7 @@ export default function BookSessionScreen() {
         : [];
     });
     const toMinutes = (value: string) => {
-      const match = value.match(/^(\\d{1,2}):(\\d{2})\\s*(AM|PM)$/i);
+      const match = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
       if (!match) return 0;
       const hour = Number(match[1]) % 12;
       const minutes = Number(match[2]);
