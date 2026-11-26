@@ -120,7 +120,6 @@ export default function SellerWalletScreen() {
               <ThemedText style={styles.payoutValue}>{snapshot.nextPayoutDate}</ThemedText>
             </View>
           </View>
-          </View>
         </View>
 
         <View style={styles.card}>
