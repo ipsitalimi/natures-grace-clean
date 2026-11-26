@@ -93,7 +93,6 @@ export async function createCheckoutOrder(params: {
       error?: string;
       bookingId?: string;
     };
-    if (res.status === 202) return json;
     if (!res.ok) {
       if (res.status === 401) {
         return {
@@ -159,6 +158,7 @@ export async function confirmCheckoutPayment(params: {
       });
     }
     const json = (await res.json()) as CheckoutConfirmResult & { error?: string };
+    if (res.status === 202) return json;
     if (!res.ok) {
       if (res.status === 401) {
         return {
