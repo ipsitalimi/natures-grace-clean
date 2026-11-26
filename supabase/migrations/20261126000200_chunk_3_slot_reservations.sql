@@ -375,4 +375,35 @@ GRANT EXECUTE ON FUNCTION public.release_practitioner_slot_reservation(uuid,uuid
 GRANT EXECUTE ON FUNCTION public.fulfill_paid_booking_checkout(uuid,text,text,numeric) TO service_role;
 GRANT EXECUTE ON FUNCTION public.create_free_practitioner_booking(uuid,jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.reschedule_user_practitioner_booking(uuid,uuid,text,text,integer) TO service_role;
+
+
+-- Admin schedule edits use the same availability/overlap guard.
+CREATE OR REPLACE FUNCTION public.admin_update_practitioner_booking_schedule(
+ p_booking_id uuid,p_new_session_date text,p_new_session_time text,p_meeting_link text DEFAULT NULL
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $
+DECLARE v_booking record; v_date date;
+BEGIN
+ SELECT * INTO v_booking FROM public.practitioner_bookings WHERE id=p_booking_id FOR UPDATE;
+ IF NOT FOUND THEN RETURN jsonb_build_object('ok',false,'error','Booking not found'); END IF;
+ IF v_booking.booking_status NOT IN ('Pending','Confirmed') THEN
+  RETURN jsonb_build_object('ok',false,'error','Only upcoming bookings can be rescheduled');
+ END IF;
+ BEGIN
+  v_date:=btrim(p_new_session_date)::date;
+  PERFORM public.ng_time_minutes(p_new_session_time);
+ EXCEPTION WHEN OTHERS THEN RETURN jsonb_build_object('ok',false,'error','Invalid date or session time'); END;
+ PERFORM pg_advisory_xact_lock(hashtext(v_booking.practitioner_id::text),hashtext(v_date::text));
+ IF NOT public.ng_booking_slot_is_available(v_booking.practitioner_id,v_booking.offering_id,
+   p_new_session_date,p_new_session_time,v_booking.duration_minutes,v_booking.id,NULL) THEN
+  RETURN jsonb_build_object('ok',false,'error','The selected session slot is unavailable or already booked');
+ END IF;
+ UPDATE public.practitioner_bookings SET session_date=v_date::text,session_time=btrim(p_new_session_time),
+  meeting_link=NULLIF(btrim(coalesce(p_meeting_link,'')),'')
+  WHERE id=p_booking_id;
+ RETURN jsonb_build_object('ok',true,'booking_id',p_booking_id,'session_date',v_date::text,
+  'session_time',btrim(p_new_session_time));
+END $;
+REVOKE ALL ON FUNCTION public.admin_update_practitioner_booking_schedule(uuid,text,text,text) FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_practitioner_booking_schedule(uuid,text,text,text) TO service_role;
+
 NOTIFY pgrst,'reload schema';
