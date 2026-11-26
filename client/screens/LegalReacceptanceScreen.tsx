@@ -26,7 +26,7 @@ import { getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutIns
 
 export default function LegalReacceptanceScreen() {
   const insets = useSafeAreaInsets();
-  const { profile, refreshProfile } = useAuth();
+  const { profile, refreshProfile, markLegalAcceptancesCurrent } = useAuth();
 
   const [versions, setVersions] = useState<Awaited<ReturnType<typeof fetchLegalVersions>> | null>(null);
   const [pendingKeys, setPendingKeys] = useState<UserMandatoryLegalKey[]>([]);
@@ -71,6 +71,7 @@ export default function LegalReacceptanceScreen() {
       return;
     }
 
+    markLegalAcceptancesCurrent(visibleKeys, versions);
     await refreshProfile();
     setSubmitting(false);
   };
