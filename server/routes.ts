@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import { registerPayoutRoutes } from "./routes/payouts";
 import { registerPractitionerPayoutRoutes } from "./routes/practitionerPayouts";
 import { registerBookingCheckoutRoutes } from "./routes/bookingCheckout";
+import { registerBookingRescheduleRoutes } from "./routes/bookingReschedule";
 import { registerEventCheckoutRoutes } from "./routes/eventCheckout";
 import { registerStoreCheckoutRoutes } from "./routes/storeCheckout";
 import { registerWalletLedgerRoutes } from "./routes/walletLedger";
@@ -15,6 +16,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerPayoutRoutes(app);
   registerPractitionerPayoutRoutes(app);
   registerBookingCheckoutRoutes(app);
+  registerBookingRescheduleRoutes(app);
   registerEventCheckoutRoutes(app);
   registerStoreCheckoutRoutes(app);
   registerWalletLedgerRoutes(app);
