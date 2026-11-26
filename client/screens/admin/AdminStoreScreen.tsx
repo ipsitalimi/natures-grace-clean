@@ -202,20 +202,13 @@ export default function AdminStoreScreen({ onBackToDashboard }: { onBackToDashbo
     logActivity("Product approved", "store");
   };
 
-  const handleRejectProduct = (productId: string) => {
-    Alert.alert("Reject product", "Reject this product listing?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Reject", style: "destructive", onPress: () => {
-        void (async () => {
-          const updated = await updateProduct(productId, { approvalStatus: "Rejected" });
-          if (!updated) {
-            Alert.alert("Could not reject product", "Check your connection and admin permissions, then try again.");
-            return;
-          }
-          logActivity("Product rejected", "store");
-        })();
-      }},
-    ]);
+  const handleRejectProduct = async (productId: string) => {
+    const updated = await updateProduct(productId, { approvalStatus: "Rejected" });
+    if (!updated) {
+      Alert.alert("Could not reject product", "Check your connection and admin permissions, then try again.");
+      return;
+    }
+    logActivity("Product rejected", "store");
   };
 
   const totalProducts = allProducts.length;
