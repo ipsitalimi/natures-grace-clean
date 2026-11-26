@@ -149,8 +149,9 @@ export default function PractitionerApplicationScreen() {
             Your application has been sent to the {appNameDisplay} team for review.
           </ThemedText>
           <ThemedText style={styles.confirmationSubtext}>
-            We'll contact you if your profile is approved. To offer another service, submit a
-            separate application after this one is reviewed.
+            {isExistingPractitioner
+              ? "You can offer this category once the team approves the request."
+              : "We'll contact you when your practitioner application has been reviewed."}
           </ThemedText>
           <Pressable
             style={styles.returnButton}
@@ -190,7 +191,9 @@ export default function PractitionerApplicationScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <ThemedText style={styles.introText}>
-          Share your practice with the {appNameDisplay} community.
+          {isExistingPractitioner
+            ? "Request approval to offer services in another practice category. Your existing practitioner profile remains active while the request is reviewed."
+            : "Share your practice with the Nature's Grace community."}
         </ThemedText>
 
         {!canSubmit ? (
