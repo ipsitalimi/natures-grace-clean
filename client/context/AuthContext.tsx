@@ -110,6 +110,7 @@ interface AuthContextType {
   setPendingSignupLegal: (
     payload: { keys: UserMandatoryLegalKey[]; versions: LegalVersions } | null
   ) => void;
+  markLegalAcceptancesCurrent: (keys: UserMandatoryLegalKey[], versions: LegalVersions) => void;
   pendingPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
   emailConfirmedMessage: string | null;
@@ -148,6 +149,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setPendingSignupLegal = useCallback(
     (payload: { keys: UserMandatoryLegalKey[]; versions: LegalVersions } | null) => {
       setPendingSignupLegalState(payload);
+    },
+    []
+  );
+
+  const markLegalAcceptancesCurrent = useCallback(
+    (keys: UserMandatoryLegalKey[], versions: LegalVersions) => {
+      const columns: Record<UserMandatoryLegalKey, [string, string, string]> = {
+        user_terms: ["accepted_user_terms", "accepted_user_terms_version", "accepted_user_terms_timestamp"],
+        privacy_policy: ["accepted_privacy_policy", "accepted_privacy_version", "accepted_privacy_timestamp"],
+        refund_policy: ["accepted_refund_policy", "accepted_refund_version", "accepted_refund_timestamp"],
+        medical_disclaimer: ["accepted_medical_disclaimer", "accepted_medical_version", "accepted_medical_timestamp"],
+        account_deletion_policy: ["accepted_account_deletion_policy", "accepted_account_deletion_version", "accepted_account_deletion_timestamp"],
+        grievance_policy: ["accepted_grievance_policy", "accepted_grievance_version", "accepted_grievance_timestamp"],
+        community_guidelines: ["accepted_community_guidelines", "accepted_community_guidelines_version", "accepted_community_guidelines_timestamp"],
+        shipping_policy: ["accepted_shipping_policy", "accepted_shipping_version", "accepted_shipping_timestamp"],
+      };
+      const acceptedAt = new Date().toISOString();
+      setProfile((current) => {
+        if (!current) return current;
+        const next = { ...current } as ProfileRow & Record<string, unknown>;
+        for (const key of keys) {
+          const [acceptedColumn, versionColumn, timestampColumn] = columns[key];
+          next[acceptedColumn] = true;
+          next[versionColumn] = versions[key];
+          next[timestampColumn] = acceptedAt;
+        }
+        return next as ProfileRow;
+      });
     },
     []
   );
@@ -625,6 +654,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshProfile,
       resendVerificationEmail,
       setPendingSignupLegal,
+      markLegalAcceptancesCurrent,
       pendingPasswordRecovery,
       clearPasswordRecovery,
       emailConfirmedMessage,
@@ -649,6 +679,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       refreshProfile,
       resendVerificationEmail,
       setPendingSignupLegal,
+      markLegalAcceptancesCurrent,
       pendingPasswordRecovery,
       clearPasswordRecovery,
       emailConfirmedMessage,
