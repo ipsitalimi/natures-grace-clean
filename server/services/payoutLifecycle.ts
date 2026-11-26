@@ -177,7 +177,7 @@ export async function completePayout(
   await updatePayoutTxnDescription(
     supabase,
     payoutId,
-    "Payout to Bank Account (completed)"
+    "Manual payout completed"
   );
 
   await reconcilePendingPayout(supabase, payout.wallet_id);
