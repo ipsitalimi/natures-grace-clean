@@ -141,6 +141,7 @@ export type PractitionerDashboard = {
 export type UserSessionHistory = {
   id: string;
   practitionerId?: string;
+  offeringId?: string;
   practitionerName: string;
   serviceType: string;
   date: string;
