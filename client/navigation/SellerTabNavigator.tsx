@@ -1,5 +1,5 @@
 import React from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
@@ -109,7 +109,7 @@ function TabIcon({ children, focused }: { children: React.ReactNode; focused: bo
 
 export default function SellerTabNavigator() {
   const insets = useSafeAreaInsets();
-  const bottomPadding = insets.bottom > 0 ? insets.bottom : 8;
+  // Android edge-to-edge can report zero here while the system navigation\n  // bar still overlays the app. Reserve its space in the seller tab bar.\n  const bottomPadding = Platform.OS === "android"\n    ? Math.max(insets.bottom, 24)\n    : (insets.bottom > 0 ? insets.bottom : 8);
   return (
     <Tab.Navigator
       initialRouteName="SellerHomeTab"
