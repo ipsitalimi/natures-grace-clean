@@ -208,6 +208,20 @@ export async function resolveSellerIdByProfileId(
   return await lookupSellerId(profileId);
 }
 
+export async function fetchSellerProductLimit(sellerId: string): Promise<number> {
+  const supabase = getSupabase();
+  if (!supabase) return 10;
+  const { data, error } = await supabase
+    .from("sellers")
+    .select("storefront_settings")
+    .eq("id", sellerId)
+    .maybeSingle();
+  if (error || !data) return 10;
+  const settings = (data as { storefront_settings?: Record<string, unknown> | null }).storefront_settings ?? {};
+  const limit = Number(settings.product_limit ?? 10);
+  return Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.floor(limit))) : 10;
+}
+
 export async function fetchSellerProductIds(sellerId: string): Promise<string[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
