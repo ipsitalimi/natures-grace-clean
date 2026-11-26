@@ -10,7 +10,6 @@ export function emptySellerWalletSnapshot(commissionRate = 10): SellerWalletSnap
     heldBalance: 0,
     totalEarned: 0,
     commissionRate,
-    bankAccountLabel: "",
     nextPayoutDate: "",
     transactions: [],
     payouts: [],
