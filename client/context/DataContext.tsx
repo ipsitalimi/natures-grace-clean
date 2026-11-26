@@ -34,6 +34,7 @@ export interface CommunityEvent {
   status: "Active" | "Draft" | "Ended";
   price: string;
   isVisible?: boolean;
+  photos?: string[];
 }
 
 interface DataContextType {
