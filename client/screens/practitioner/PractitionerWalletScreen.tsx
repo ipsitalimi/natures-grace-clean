@@ -67,19 +67,6 @@ export default function PractitionerWalletScreen() {
           <ThemedText style={styles.disclosureText}>{MANUAL_PAYOUT_NOTICE}</ThemedText>
         </View>
 
-        <BankDetailsCard
-          bankAccountLabel={snapshot.bankAccountLabel}
-          onSave={async (input) => {
-            if (!session?.access_token) {
-              return { error: "Sign in to save bank details." };
-            }
-            const result = await updatePractitionerBankDetails(input, session.access_token);
-            if (result.error) return result;
-            await refresh();
-            return {};
-          }}
-        />
-
         <View style={styles.balanceCard}>
           <ThemedText style={styles.balanceLabel}>Available Balance</ThemedText>
           <ThemedText
