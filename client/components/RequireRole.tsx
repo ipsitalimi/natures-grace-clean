@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { ActivityIndicator, View, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -7,6 +7,8 @@ import { useAuth, homeRouteForRole } from "@/context/AuthContext";
 import type { UserRole } from "@/types/database";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Colors } from "@/constants/theme";
+import { resolvePractitionerId } from "@/services/content/practitionerId";
+import { resolveSellerIdByProfileId } from "@/services/commerce/sellerId";
 
 type Props = {
   role: UserRole;
@@ -16,14 +18,39 @@ type Props = {
 export default function RequireRole({ role, children }: Props) {
   const { profile, session, loading, signOut } = useAuth();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [roleAuthorized, setRoleAuthorized] = useState(false);
 
   useEffect(() => {
     if (loading) return;
 
     if (!session || !profile) {
+      setRoleAuthorized(false);
       navigation.reset({ index: 0, routes: [{ name: "Login" }] });
       return;
     }
+
+    let cancelled = false;
+    const verifyRoleAccess = async () => {
+      if (profile.role === role) {
+        if (!cancelled) setRoleAuthorized(true);
+        return;
+      }
+      let hasRoleProfile = false;
+      if (role === "Practitioner") {
+        hasRoleProfile = Boolean(await resolvePractitionerId(profile.id));
+      } else if (role === "Seller") {
+        hasRoleProfile = Boolean(await resolveSellerIdByProfileId(profile.id));
+      }
+      if (cancelled) return;
+      setRoleAuthorized(hasRoleProfile);
+      if (!hasRoleProfile) {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: homeRouteForRole(profile.role) }],
+        });
+      }
+    };
+    void verifyRoleAccess();
 
     const blockedStatus = profile.status as string;
     if (
@@ -41,13 +68,14 @@ export default function RequireRole({ role, children }: Props) {
         routes: [{ name: homeRouteForRole(profile.role) }],
       });
     }
+    return () => { cancelled = true; };
   }, [loading, session, profile, role, navigation, signOut]);
 
   const blockedProfile = ["Suspended", "Deletion Requested", "Deleted"].includes(
     (profile?.status as string | undefined) ?? ""
   );
 
-  if (loading || !session || !profile || profile.role !== role || blockedProfile) {
+  if (loading || !session || !profile || !roleAuthorized || blockedProfile) {
     return (
       <View style={styles.boot}>
         <ActivityIndicator size="large" color={Colors.light.accent} />
