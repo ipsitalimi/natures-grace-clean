@@ -54,7 +54,8 @@ BEGIN
     RAISE EXCEPTION 'Invalid session time';
   END IF;
   RETURN extract(hour from v_time)::integer * 60 + extract(minute from v_time)::integer;
-END;\n$fn$;
+END;
+$fn$;
 
 CREATE OR REPLACE FUNCTION public.ng_booking_slot_is_available(
   p_practitioner_id uuid,
