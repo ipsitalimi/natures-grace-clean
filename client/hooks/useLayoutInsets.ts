@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Layout } from "@/constants/layout";
@@ -15,13 +16,18 @@ import {
  * Standard safe-area metrics for screens, headers, and scroll areas.
  * Prefer PageLayout + ScreenHeader instead of reading raw insets in screens.
  */
-export function useLayoutInsets(footerExtra = 0) {
+export function useLayoutInsets(footerExtra = 0, androidMinBottomInset = 0) {
   const insets = useSafeAreaInsets();
+  // Some Android edge-to-edge devices report a zero bottom inset even while
+  // the system navigation bar overlays app content. Opt-in per screen only.
+  const bottom = Platform.OS === "android"
+    ? Math.max(insets.bottom, androidMinBottomInset)
+    : insets.bottom;
 
   return {
     insets,
     top: insets.top,
-    bottom: insets.bottom,
+    bottom,
     left: insets.left,
     right: insets.right,
     gutter: Layout.gutter,
@@ -29,7 +35,7 @@ export function useLayoutInsets(footerExtra = 0) {
     headerPaddingTop: getHeaderPaddingTop(insets.top),
     headerPaddingTopCompact: getCompactHeaderPaddingTop(insets.top),
     authPaddingTop: getAuthScreenPaddingTop(insets.top),
-    scrollPaddingBottom: getScrollBottomPadding(insets.bottom, footerExtra),
+    scrollPaddingBottom: getScrollBottomPadding(bottom, footerExtra),
     headerRowStyle: { paddingTop: getHeaderPaddingTop(insets.top) },
   };
 }
