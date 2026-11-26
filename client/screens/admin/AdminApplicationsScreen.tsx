@@ -279,6 +279,12 @@ export default function AdminApplicationsScreen({
               <DetailField label="Why join" value={form.whyJoin ?? ""} />
               <DetailField label="Availability" value={form.availability ?? ""} />
             </>
+          ) : form.applicationType === "product_limit_increase" ? (
+            <>
+              <DetailField label="Request type" value="Higher seller product limit" />
+              <DetailField label="Requested product limit" value={`${form.requestedProductLimit ?? "20"} listings`} />
+              <DetailField label="Seller account" value={form.brandName ?? ""} />
+            </>
           ) : (
             <>
               <DetailField label="Brand / store" value={form.brandName ?? ""} />
@@ -331,7 +337,9 @@ export default function AdminApplicationsScreen({
           <View style={styles.confirmationCard} testID="approve-application-confirmation">
             <ThemedText style={styles.modalTitle}>Approve application?</ThemedText>
             <ThemedText style={styles.modalHint}>
-              This will grant {approveTarget.targetRole.toLowerCase()} access to {applicationDisplayName(approveTarget.formData)}.
+              {approveTarget.formData.applicationType === "product_limit_increase"
+                ? `This will increase the seller's product limit to ${approveTarget.formData.requestedProductLimit ?? "20"} listings.`
+                : `This will grant ${approveTarget.targetRole.toLowerCase()} access to ${applicationDisplayName(approveTarget.formData)}.`}
             </ThemedText>
             <View style={styles.modalActions}>
               <Pressable onPress={() => setApproveTarget(null)} disabled={actionBusy}>
