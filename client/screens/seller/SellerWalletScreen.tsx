@@ -9,11 +9,7 @@ import { useWalletContext } from "@/context/WalletContext";
 import { formatInr, formatInrSigned } from "@/lib/formatCurrency";
 import { BackHeader } from "@/components/layout";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
-import {
-  BANK_NOT_LINKED_NOTICE,
-  isBankAccountLinked,
-  MANUAL_PAYOUT_NOTICE,
-} from "@/lib/payoutDisclosure";
+import { MANUAL_PAYOUT_NOTICE } from "@/lib/payoutDisclosure";
 
 function TransactionRow({ txn }: { txn: WalletTransaction }) {
   const isCredit = txn.type === "credit";
