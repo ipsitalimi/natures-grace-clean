@@ -23,6 +23,7 @@ import { useSignOut } from "@/hooks/useSignOut";
 import { navigateAfterDrawerClose } from "@/lib/drawerNavigation";
 import { fetchSellerStorefrontByProfileId } from "@/services/commerce/sellerStorefrontService";
 import { getHeaderPaddingTop, getScrollBottomPadding, getAuthScreenPaddingTop } from "@/lib/layoutInsets";
+import { resolvePractitionerId } from "@/services/content/practitionerId";
 
 type RootStackParamList = {
   SessionHistory: undefined;
@@ -38,6 +39,7 @@ type RootStackParamList = {
   SellerStoreCustomization: undefined;
   SellerDeliverySettings: undefined;
   PractitionerApplication: undefined;
+  PractitionerMain: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -90,6 +92,7 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
   const { sellerStoreStats } = useReviews();
   const { stats } = useSellerAnalytics();
   const [storeName, setStoreName] = useState("");
+  const [hasPractitionerRole, setHasPractitionerRole] = useState(false);
 
   const displayName =
     profile?.full_name?.trim() ||
@@ -103,6 +106,9 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
     let cancelled = false;
     void fetchSellerStorefrontByProfileId(profile.id).then((res) => {
       if (!cancelled && res.ok) setStoreName(res.storefront.storeName);
+    });
+    void resolvePractitionerId(profile.id).then((id) => {
+      if (!cancelled) setHasPractitionerRole(Boolean(id));
     });
     return () => {
       cancelled = true;
@@ -200,7 +206,7 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
               <MenuItem icon="clock" title="Order History" onPress={() => go("SellerOrders")} />
               <MenuItem icon="settings" title="Settings" onPress={() => go("Settings")} />
               <MenuItem icon="help-circle" title="Support" onPress={() => go("Support")} />
-              <MenuItem icon="heart" title="Apply as Practitioner" onPress={() => go("PractitionerApplication")} />
+              <MenuItem icon="heart" title={hasPractitionerRole ? "Switch to Practitioner" : "Apply as Practitioner"} onPress={() => go(hasPractitionerRole ? "PractitionerMain" : "PractitionerApplication")} />
             </View>
 
             <View style={styles.signOutSection}>
