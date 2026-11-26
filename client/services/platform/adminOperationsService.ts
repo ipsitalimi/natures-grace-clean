@@ -26,6 +26,9 @@ export type RefundQueueItem = {
   description: string;
   status: string;
   admin_notes: string | null;
+  refund_amount?: number | null;
+  bank_transfer_reference?: string | null;
+  paid_at?: string | null;
   created_at: string;
 };
 
@@ -108,5 +111,25 @@ export async function updateRefundStatus(
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Update failed" };
+  }
+}
+
+export async function markRefundPaid(
+  accessToken: string,
+  refundId: string,
+  bankTransferReference: string,
+  adminNotes?: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${getApiBaseUrl()}/api/admin/refunds/${refundId}/mark-paid`, {
+      method: "POST",
+      headers: authJsonHeaders(accessToken),
+      body: JSON.stringify({ bankTransferReference, adminNotes }),
+    });
+    const json = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: json.error ?? "Could not record bank transfer" };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not record bank transfer" };
   }
 }
