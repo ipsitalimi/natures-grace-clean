@@ -18,6 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import {
   fetchAdminRefunds,
   updateRefundStatus,
+  markRefundPaid,
   type RefundQueueItem,
 } from "@/services/platform/adminOperationsService";
 
@@ -36,6 +37,8 @@ export default function AdminRefundQueueScreen({
     status: "in_review" | "approved" | "rejected";
   } | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
+  const [paidModalId, setPaidModalId] = useState<string | null>(null);
+  const [transferReference, setTransferReference] = useState("");
 
   const load = useCallback(async () => {
     if (!session?.access_token) return;
@@ -81,6 +84,24 @@ export default function AdminRefundQueueScreen({
     setAdminNotes("");
   };
 
+  const confirmMarkPaid = async () => {
+    if (!paidModalId || !session?.access_token) return;
+    if (!transferReference.trim()) {
+      Alert.alert("Transfer reference required", "Enter the bank transfer UTR or transaction reference.");
+      return;
+    }
+    setBusyId(paidModalId);
+    const result = await markRefundPaid(session.access_token, paidModalId, transferReference.trim());
+    setBusyId(null);
+    if (!result.ok) {
+      Alert.alert("Could not record transfer", result.error ?? "Please try again.");
+      return;
+    }
+    setPaidModalId(null);
+    setTransferReference("");
+    await load();
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
@@ -103,6 +124,14 @@ export default function AdminRefundQueueScreen({
             <ThemedText style={styles.cardMeta}>
               {r.status.replace("_", " ")} · {new Date(r.created_at).toLocaleDateString()}
             </ThemedText>
+            {r.booking_id ? (
+              <ThemedText style={styles.cardMeta}>
+                Booking refund · ₹{Number(r.refund_amount ?? 0).toLocaleString("en-IN")}
+              </ThemedText>
+            ) : null}
+            {r.bank_transfer_reference ? (
+              <ThemedText style={styles.cardMeta}>Bank transfer reference: {r.bank_transfer_reference}</ThemedText>
+            ) : null}
             <ThemedText style={styles.cardDesc} numberOfLines={3}>
               {r.description}
             </ThemedText>
@@ -122,6 +151,17 @@ export default function AdminRefundQueueScreen({
                 ))}
               </View>
             ) : null}
+            {r.status === "approved" && r.booking_id && Number(r.refund_amount ?? 0) > 0 ? (
+              <View style={styles.actionRow}>
+                <Pressable
+                  style={[styles.actionBtn, busyId === r.id && styles.actionDisabled]}
+                  onPress={() => { setPaidModalId(r.id); setTransferReference(""); }}
+                  disabled={busyId === r.id}
+                >
+                  <ThemedText style={styles.actionBtnText}>Mark Bank Transfer Paid</ThemedText>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ))
       )}
@@ -133,7 +173,7 @@ export default function AdminRefundQueueScreen({
               {notesModal?.status === "approved" ? "Confirm refund approval" : notesModal?.status === "rejected" ? "Confirm refund rejection" : "Move refund to review"}
             </ThemedText>
             {notesModal?.status === "approved" ? (
-              <ThemedText style={styles.modalDescription}>Approval initiates a refund through the payment provider and updates the related order or booking.</ThemedText>
+              <ThemedText style={styles.modalDescription}>Approval only authorises a manual bank transfer. No money is sent automatically. After transferring the refund, record the bank reference using Mark Bank Transfer Paid.</ThemedText>
             ) : null}
             <ThemedText style={styles.modalDescription}>Admin notes (optional)</ThemedText>
             <TextInput
@@ -150,6 +190,31 @@ export default function AdminRefundQueueScreen({
               </Pressable>
               <Pressable onPress={() => void confirmNotes()}>
                 <ThemedText style={styles.modalConfirm}>Confirm</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={paidModalId != null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <ThemedText style={styles.modalTitle}>Record manual bank transfer</ThemedText>
+            <ThemedText style={styles.modalDescription}>Only use this after the bank transfer has actually been completed. Enter the UTR or transaction reference.</ThemedText>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Bank transfer UTR / reference"
+              placeholderTextColor={Colors.light.textMuted}
+              value={transferReference}
+              onChangeText={setTransferReference}
+              autoCapitalize="characters"
+            />
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setPaidModalId(null)}>
+                <ThemedText style={styles.modalCancel}>Cancel</ThemedText>
+              </Pressable>
+              <Pressable onPress={() => void confirmMarkPaid()}>
+                <ThemedText style={styles.modalConfirm}>Confirm Paid</ThemedText>
               </Pressable>
             </View>
           </View>
