@@ -68,7 +68,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function getSessionStart(date: string, time: string): Date | null {
-  const match = time.trim().match(/^(\\d{1,2}):(\\d{2})\\s*(AM|PM)$/i);
+  const match = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (!match) return null;
   let hour = Number(match[1]) % 12;
   if (match[3].toUpperCase() === "PM") hour += 12;
