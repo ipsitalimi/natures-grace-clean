@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from "react";
-import { StyleSheet, Pressable, ActivityIndicator } from "react-native";
+import { StyleSheet, Pressable, ActivityIndicator, View } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -37,15 +37,9 @@ export default function ApplicationStatusScreen() {
     }, [load])
   );
 
-  const latest = apps[0];
-
-  const handleReapply = () => {
-    if (!latest) return;
-    if (latest.targetRole === "Practitioner") {
-      navigation.navigate("PractitionerApplication" as never);
-    } else {
-      navigation.navigate("SellerApplication" as never);
-    }
+  const handleReapply = (targetRole: RoleApplication["targetRole"]) => {
+    if (targetRole === "Practitioner") navigation.navigate("PractitionerApplication" as never);
+    else navigation.navigate("SellerApplication" as never);
   };
 
   return (
@@ -61,33 +55,34 @@ export default function ApplicationStatusScreen() {
         <Pressable onPress={() => void load()}>
           <ThemedText style={styles.errorText}>{error} — tap to retry</ThemedText>
         </Pressable>
-      ) : !latest ? (
+      ) : apps.length === 0 ? (
         <ThemedText style={styles.emptyText}>
           You have not submitted a practitioner or seller application yet.
         </ThemedText>
       ) : (
         <>
-          <ThemedText style={styles.roleLabel}>{latest.targetRole} Application</ThemedText>
-          <ThemedText style={styles.submitted}>
-            Submitted {new Date(latest.createdAt).toLocaleDateString()}
-          </ThemedText>
-
-          <ApplicationProgressTracker
-            stage={latest.progressStage}
-            rejectionReason={latest.rejectionReason}
-          />
-
-          {latest.status === "Rejected" ? (
-            <Pressable style={styles.reapplyBtn} onPress={handleReapply}>
-              <ThemedText style={styles.reapplyText}>Update & reapply</ThemedText>
-            </Pressable>
-          ) : null}
-
-          {latest.status === "Pending" ? (
-            <ThemedText style={styles.hint}>
-              Reviews typically take 5–7 business days. You'll be notified when there is an update.
-            </ThemedText>
-          ) : null}
+          {apps.map((application) => (
+            <View key={application.id} style={styles.applicationCard}>
+              <ThemedText style={styles.roleLabel}>{application.targetRole} Application</ThemedText>
+              <ThemedText style={styles.submitted}>
+                Submitted {new Date(application.createdAt).toLocaleDateString()}
+              </ThemedText>
+              <ApplicationProgressTracker
+                stage={application.progressStage}
+                rejectionReason={application.rejectionReason}
+              />
+              {application.status === "Rejected" ? (
+                <Pressable style={styles.reapplyBtn} onPress={() => handleReapply(application.targetRole)}>
+                  <ThemedText style={styles.reapplyText}>Update & reapply</ThemedText>
+                </Pressable>
+              ) : null}
+              {application.status === "Pending" ? (
+                <ThemedText style={styles.hint}>
+                  Reviews typically take 5–7 business days. You'll be notified when there is an update.
+                </ThemedText>
+              ) : null}
+            </View>
+          ))}
         </>
       )}
     </PageLayout>
@@ -95,6 +90,7 @@ export default function ApplicationStatusScreen() {
 }
 
 const styles = StyleSheet.create({
+  applicationCard: { backgroundColor: Colors.light.cardBackground, borderRadius: BorderRadius.md, padding: 16, marginBottom: 16 },
   content: {
     paddingTop: LayoutSpacing.xs,
   },
