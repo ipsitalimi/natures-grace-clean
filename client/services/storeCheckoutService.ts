@@ -215,6 +215,8 @@ export type BookingCheckoutResult = {
   bookingId?: string;
   bookingNumber?: string;
   error?: string;
+  paymentReceived?: boolean;
+  requiresAdminReview?: boolean;
 };
 
 /** Practitioner bookings: pay on server-verified checkout → server creates Paid booking. */
@@ -281,6 +283,9 @@ export async function runBookingCheckoutPayment(params: {
       booking: params.booking,
       accessToken: params.accessToken,
     });
+    if (confirm.requiresAdminReview) {
+      return { paymentId: confirm.paymentId, error: confirm.error, paymentReceived: true, requiresAdminReview: true };
+    }
     if (confirm.error || !confirm.paymentId) {
       return { error: confirm.error ?? "Payment confirmation failed" };
     }
@@ -318,6 +323,9 @@ export async function runBookingCheckoutPayment(params: {
     accessToken: params.accessToken,
   });
 
+  if (confirm.requiresAdminReview) {
+    return { paymentId: confirm.paymentId, error: confirm.error, paymentReceived: true, requiresAdminReview: true };
+  }
   if (confirm.error || !confirm.paymentId) {
     return { error: confirm.error ?? "Payment confirmation failed" };
   }
