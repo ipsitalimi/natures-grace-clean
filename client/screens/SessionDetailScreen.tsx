@@ -363,7 +363,6 @@ export default function SessionDetailScreen() {
             testID="button-reschedule-session"
             accessibilityState={{ disabled: !canReschedule }}
           >
-            <Feather name="calendar" size={18} color={canReschedule ? Colors.light.accent : Colors.light.textMuted} />
             <View style={styles.rescheduleButtonBody}>
               <ThemedText style={[styles.rescheduleButtonText, !canReschedule && styles.rescheduleButtonTextDisabled]}>
                 {canReschedule ? "Reschedule Session" : "Rescheduling unavailable"}
