@@ -22,6 +22,8 @@ import {
   stripAuthParamsFromBrowserUrl,
 } from "@/lib/authSessionFromUrl";
 import { getSupabase } from "@/lib/supabase";
+import { getApiBaseUrl } from "@/lib/apiBase";
+import { authJsonHeaders } from "@/lib/apiAuth";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import {
   buildAcceptanceInputs,
@@ -35,6 +37,16 @@ import {
 import type { LegalVersions, UserMandatoryLegalKey } from "@/types/legal";
 import { registerPushTokenForUser } from "@/services/pushTokenService";
 import type { ProfileRow, UserRole } from "@/types/database";
+
+export type AccountWorkspace = {
+  id: string;
+  workspace_profile_id: string;
+  workspace_role: UserRole;
+  display_name: string;
+  is_default: boolean;
+  is_enabled: boolean;
+  available: boolean;
+};
 
 export type AuthHomeRoute =
   | "Main"
@@ -63,6 +75,10 @@ interface AuthContextType {
   loading: boolean;
   session: Session | null;
   profile: ProfileRow | null;
+  workspaces: AccountWorkspace[];
+  activeWorkspaceProfileId: string | null;
+  refreshWorkspaces: () => Promise<AccountWorkspace[]>;
+  switchWorkspace: (workspaceProfileId: string) => Promise<{ error?: string }>;
   signIn: (
     email: string,
     password: string
@@ -109,6 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(isSupabaseConfigured());
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [workspaces, setWorkspaces] = useState<AccountWorkspace[]>([]);
+  const [activeWorkspaceProfileId, setActiveWorkspaceProfileId] = useState<string | null>(null);
   const [pendingPasswordRecovery, setPendingPasswordRecovery] = useState(false);
   const [emailConfirmedMessage, setEmailConfirmedMessage] = useState<string | null>(null);
   const [justVerifiedEmail, setJustVerifiedEmail] = useState(false);
@@ -159,12 +177,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     profileLoadGeneration.current += 1;
     setSession(null);
     setProfile(null);
+    setWorkspaces([]);
+    setActiveWorkspaceProfileId(null);
     setPendingPasswordRecovery(false);
   }, []);
 
-  const loadProfile = useCallback(async (userId: string) => {
+  const loadProfile = useCallback(async (profileId: string) => {
     const generation = ++profileLoadGeneration.current;
-    const row = await loadProfileWithRetry(userId);
+    const row = await loadProfileWithRetry(profileId);
 
     if (generation !== profileLoadGeneration.current) {
       return row;
@@ -188,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Keep the last known profile for this user when a refetch fails or races.
-    setProfile((current) => (current?.id === userId ? current : null));
+    setProfile((current) => (current?.id === profileId ? current : null));
     return null;
   }, [loadProfileWithRetry, clearAuthState]);
 
@@ -251,7 +271,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (nextSession?.user?.id) {
         setAuthCallbackError(null);
-        await loadProfile(nextSession.user.id);
+        const workspaceProfileId = String(nextSession.user.app_metadata?.active_workspace_profile_id ?? nextSession.user.id);
+        setActiveWorkspaceProfileId(workspaceProfileId === nextSession.user.id ? null : workspaceProfileId);
+        await loadProfile(workspaceProfileId);
         void registerPushTokenForUser(nextSession.user.id);
         return;
       }
@@ -376,7 +398,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userId = data.user?.id;
       if (!userId) return { error: "Sign-in succeeded but no user was returned." };
 
-      const row = await loadProfile(userId);
+      const activeId = String(data.user?.app_metadata?.active_workspace_profile_id ?? userId);
+      setActiveWorkspaceProfileId(activeId === userId ? null : activeId);
+      const row = await loadProfile(activeId);
       if (!row) return { error: "Profile not found. Contact support." };
       if (row.status === "Suspended") {
         await supabase.auth.signOut();
@@ -484,8 +508,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (!session?.user?.id) return null;
-    return loadProfile(session.user.id);
+    const supabase = getSupabase();
+    const { data } = supabase ? await supabase.auth.getSession() : { data: { session: null } };
+    const profileId = String(data.session?.user?.app_metadata?.active_workspace_profile_id ?? session.user.id);
+    setActiveWorkspaceProfileId(profileId === session.user.id ? null : profileId);
+    return loadProfile(profileId);
   }, [session?.user?.id, loadProfile]);
+
+  const refreshWorkspaces = useCallback(async () => {
+    if (!session?.access_token || profile?.role !== "Admin") return [];
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/account/workspaces`, {
+        headers: authJsonHeaders(session.access_token),
+      });
+      if (!response.ok) throw new Error(`Unable to load workspaces (${response.status})`);
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.workspaces) ? payload.workspaces as AccountWorkspace[] : [];
+      setWorkspaces(rows);
+      return rows;
+    } catch (error) {
+      console.error("[AuthContext] refreshWorkspaces:", error);
+      return [];
+    }
+  }, [session?.access_token, profile?.role]);
+
+  const switchWorkspace = useCallback(async (workspaceProfileId: string) => {
+    const supabase = getSupabase();
+    if (!supabase || !session?.access_token || !session.user.id) return { error: "You are not signed in." };
+    if (!workspaces.some((workspace) => workspace.workspace_profile_id === workspaceProfileId && workspace.available)) {
+      return { error: "This workspace is unavailable." };
+    }
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/api/account/workspaces/activate`, {
+        method: "POST",
+        headers: authJsonHeaders(session.access_token),
+        body: JSON.stringify({ workspace_profile_id: workspaceProfileId }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) return { error: payload?.error ?? "Unable to switch workspace." };
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session) return { error: error?.message ?? "Please sign in again to refresh your session." };
+      setSession(data.session);
+      setActiveWorkspaceProfileId(workspaceProfileId === session.user.id ? null : workspaceProfileId);
+      const row = await loadProfile(workspaceProfileId);
+      if (!row) return { error: "Workspace profile could not be loaded. Your session was refreshed; try again." };
+      setProfile(row);
+      return {};
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Unable to switch workspace." };
+    }
+  }, [session, workspaces, loadProfile]);
 
   const resendVerificationEmail = useCallback(async (email: string) => {
     const supabase = getSupabase();
@@ -506,6 +578,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       session,
       profile,
+      workspaces,
+      activeWorkspaceProfileId,
+      refreshWorkspaces,
+      switchWorkspace,
       signIn,
       signUp,
       signOut,
@@ -526,6 +602,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       session,
       profile,
+      workspaces,
+      activeWorkspaceProfileId,
+      refreshWorkspaces,
+      switchWorkspace,
       signIn,
       signUp,
       signOut,
