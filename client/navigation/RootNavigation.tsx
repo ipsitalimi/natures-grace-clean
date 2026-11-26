@@ -124,7 +124,7 @@ export default function RootNavigation({ navigationRef }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [isConfigured, session?.user?.id, profile?.role]);
+  }, [isConfigured, session?.user?.id, profile?.id, profile?.role]);
 
   useEffect(() => {
     if (!isConfigured || !session?.user?.id || !profile) {
