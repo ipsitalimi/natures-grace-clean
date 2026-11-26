@@ -55,47 +55,56 @@ export default function SignupLegalScreen() {
     setError("");
     setSubmitting(true);
 
-    const signupResult = await signUp(email, password, name);
-    if (signupResult.error) {
-      setSubmitting(false);
-      setError(signupResult.error);
-      return;
-    }
+    try {
+      const signupResult = await signUp(email, password, name);
+      if (signupResult.error) {
+        setError(signupResult.error);
+        return;
+      }
 
-    if (signupResult.needsEmailConfirmation) {
-      const keys = legalKeys;
-      setPendingSignupLegal({ keys, versions });
-      setSubmitting(false);
+      if (signupResult.needsEmailConfirmation) {
+        setPendingSignupLegal({ keys: legalKeys, versions });
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "VerifyEmail", params: { email } }],
+        });
+        return;
+      }
+
+      const recordResult = await recordLegalAcceptances(
+        buildAcceptanceInputs(legalKeys, versions)
+      );
+
+      if (!recordResult.ok) {
+        setPendingSignupLegal({ keys: legalKeys, versions });
+        setError(
+          recordResult.error ??
+            "Your account was created, but we couldn't save the policy acceptance. Please sign in and contact support if this continues."
+        );
+        return;
+      }
+
+      const updatedProfile = (await refreshProfile()) ?? signupResult.profile ?? null;
+      if (updatedProfile) {
+        syncSessionFromProfile(updatedProfile);
+      }
+
+      // Make the destination explicit rather than leaving the user on the
+      // legal screen while the global auth navigator catches up.
       navigation.reset({
         index: 0,
-        routes: [{ name: "VerifyEmail", params: { email } }],
+        routes: [{ name: signupResult.route ?? "Main" }],
       });
-      return;
-    }
-
-    const keys = legalKeys;
-    const recordResult = await recordLegalAcceptances(
-      buildAcceptanceInputs(keys, versions)
-    );
-
-    if (!recordResult.ok) {
-      const keys = legalKeys;
-      setPendingSignupLegal({ keys, versions });
-      setSubmitting(false);
+    } catch (err) {
+      console.error("[SignupLegal] account creation failed:", err);
       setError(
-        recordResult.error ??
-          "Account created, but legal acceptances could not be saved. Sign in to complete setup."
+        err instanceof Error
+          ? err.message
+          : "We couldn't finish creating your account. Please try again."
       );
-      return;
+    } finally {
+      setSubmitting(false);
     }
-
-    const updatedProfile = await refreshProfile();
-    if (updatedProfile) {
-      syncSessionFromProfile(updatedProfile);
-    } else if (signupResult.profile) {
-      syncSessionFromProfile(signupResult.profile);
-    }
-    setSubmitting(false);
   };
 
   return (
