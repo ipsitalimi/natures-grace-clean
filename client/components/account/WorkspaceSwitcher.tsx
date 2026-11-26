@@ -64,12 +64,12 @@ export default function WorkspaceSwitcher({ inline = false }: { inline?: boolean
         accessibilityRole="button"
         accessibilityLabel="Switch account workspace"
         onPress={openSwitcher}
-        style={styles.floatingButton}
+        style={inline ? styles.inlineAvatarButton : styles.floatingButton}
       >
-        <Text style={styles.buttonEyebrow}>WORKSPACE</Text>
-        <Text style={styles.buttonTitle} numberOfLines={1}>
-          {activeWorkspace?.display_name ?? profile?.role ?? "Account"}  ▾
-        </Text>
+        <View style={styles.avatarCircle}>
+          <Text style={styles.avatarText}>A</Text>
+        </View>
+        <Text style={styles.avatarChevron}>⌄</Text>
       </Pressable>
 
       <Modal visible={visible} transparent animationType="fade" onRequestClose={() => setVisible(false)}>
@@ -140,8 +140,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 8,
   },
-  buttonEyebrow: { color: "#C8D9CF", fontSize: 8, letterSpacing: 1.1, fontWeight: "700" },
-  buttonTitle: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", marginTop: 2 },
+  inlineAvatarButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", padding: 3, minWidth: 38, minHeight: 38 },
+  avatarCircle: { width: 30, height: 30, borderRadius: 15, backgroundColor: "rgba(1, 50, 32, 0.1)", alignItems: "center", justifyContent: "center" },
+  avatarText: { color: "#013220", fontSize: 13, fontWeight: "700" },
+  avatarChevron: { color: "#013220", fontSize: 13, fontWeight: "700", marginLeft: -3, marginTop: 11 },
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.48)", justifyContent: "center", padding: 22 },
   sheet: { backgroundColor: "#FFFFFF", borderRadius: 18, padding: 20, maxWidth: 480, width: "100%", alignSelf: "center" },
   sheetHeader: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 },
