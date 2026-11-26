@@ -7,6 +7,7 @@ import { useAuth, homeRouteForRole } from "@/context/AuthContext";
 import type { UserRole } from "@/types/database";
 import type { RootStackParamList } from "@/navigation/RootStackNavigator";
 import { Colors } from "@/constants/theme";
+import { getSupabase } from "@/lib/supabase";
 import { resolvePractitionerId } from "@/services/content/practitionerId";
 import { resolveSellerIdByProfileId } from "@/services/commerce/sellerId";
 
@@ -36,10 +37,29 @@ export default function RequireRole({ role, children }: Props) {
         return;
       }
       let hasRoleProfile = false;
+      const supabase = getSupabase();
       if (role === "Practitioner") {
-        hasRoleProfile = Boolean(await resolvePractitionerId(profile.id));
+        const practitionerId = await resolvePractitionerId(profile.id);
+        if (supabase && practitionerId) {
+          const { data } = await supabase
+            .from("practitioners")
+            .select("id")
+            .eq("id", practitionerId)
+            .eq("is_active", true)
+            .maybeSingle();
+          hasRoleProfile = Boolean(data);
+        }
       } else if (role === "Seller") {
-        hasRoleProfile = Boolean(await resolveSellerIdByProfileId(profile.id));
+        const sellerId = await resolveSellerIdByProfileId(profile.id);
+        if (supabase && sellerId) {
+          const { data } = await supabase
+            .from("sellers")
+            .select("id")
+            .eq("id", sellerId)
+            .eq("is_active", true)
+            .maybeSingle();
+          hasRoleProfile = Boolean(data);
+        }
       }
       if (cancelled) return;
       setRoleAuthorized(hasRoleProfile);
