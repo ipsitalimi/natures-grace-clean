@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireSupabaseAdmin } from "../lib/supabaseAdmin";
 import { fulfillStoreOrderPayment } from "./orderFulfillment";
-import { fulfillBookingPayment } from "./bookingFulfillment";
+import { fulfillBookingPayment, sendPaidBookingReceipts } from "./bookingFulfillment";
+import { sendEventRegistrationReceipts } from "./eventFulfillment";
 
 export function verifyPaymentWebhookSignature(
   rawBody: Buffer | string,
@@ -15,13 +16,13 @@ export function verifyPaymentWebhookSignature(
   if (!signature) return false;
 
   const body = typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
-  // Razorpay sends a 64-character SHA-256 hex digest. Reject malformed
-  // lengths/characters before timingSafeEqual, which requires equal buffers.
-  if (!/^[a-f0-9]{64}$/i.test(signature)) return false;
+  const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
 
-  const expected = crypto.createHmac("sha256", secret).update(body).digest();
-  const supplied = Buffer.from(signature, "hex");
-  return crypto.timingSafeEqual(expected, supplied);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  } catch {
+    return expected === signature;
+  }
 }
 
 async function resolveStoreOrderId(
@@ -46,6 +47,8 @@ export async function handlePaymentCaptured(payload: {
     entity?: {
       id?: string;
       order_id?: string;
+      amount?: number;
+      currency?: string;
       notes?: Record<string, string>;
     };
   };
@@ -64,11 +67,17 @@ export async function handlePaymentCaptured(payload: {
   if (storeOrderId) {
     const { data: order } = await supabase
       .from("orders")
-      .select("user_id")
+      .select("user_id, total, razorpay_order_id, payment_status")
       .eq("id", storeOrderId)
       .maybeSingle();
 
-    if (order?.user_id) {
+    if (
+      order?.user_id &&
+      order.razorpay_order_id === razorpayOrderId &&
+      (order.payment_status === "Pending" || order.payment_status === "Paid") &&
+      entity.currency === "INR" &&
+      Number(entity.amount) === Math.round(Number(order.total) * 100)
+    ) {
       const result = await fulfillStoreOrderPayment({
         supabase,
         storeOrderId,
@@ -87,7 +96,19 @@ export async function handlePaymentCaptured(payload: {
     .eq("razorpay_order_id", razorpayOrderId)
     .maybeSingle();
 
-  if (pending?.user_id) {
+  const bookingDraft = pending?.booking_draft as {
+    feeBreakdown?: { totalInr?: number };
+    amountInr?: number;
+  } | null;
+
+  const expectedBookingTotal = bookingDraft?.feeBreakdown?.totalInr ?? bookingDraft?.amountInr;
+
+  if (
+    pending?.user_id &&
+    entity.currency === "INR" &&
+    Number.isFinite(Number(expectedBookingTotal)) &&
+    Number(entity.amount) === Math.round(Number(expectedBookingTotal) * 100)
+  ) {
     const result = await fulfillBookingPayment({
       supabase,
       userId: pending.user_id as string,
@@ -96,7 +117,61 @@ export async function handlePaymentCaptured(payload: {
       booking: pending.booking_draft as Parameters<typeof fulfillBookingPayment>[0]["booking"],
     });
     if (result.ok) {
+      await sendPaidBookingReceipts(supabase, result.bookingId, paymentId);
       return { matched: true, type: "booking", id: result.bookingId };
+    }
+  }
+
+  const { data: eventRegistration } = await supabase
+    .from("event_registrations")
+    .select("id, payment_status, checkout_amount, razorpay_payment_id")
+    .eq("razorpay_order_id", razorpayOrderId)
+    .maybeSingle();
+
+  if (
+    eventRegistration &&
+    entity.currency === "INR" &&
+    Number.isFinite(Number(eventRegistration.checkout_amount)) &&
+    Number(entity.amount) === Math.round(Number(eventRegistration.checkout_amount) * 100)
+  ) {
+    if (
+      eventRegistration.payment_status === "Paid" &&
+      eventRegistration.razorpay_payment_id === paymentId
+    ) {
+      await sendEventRegistrationReceipts(supabase, { registrationId: eventRegistration.id });
+      return { matched: true, type: "event_registration", id: eventRegistration.id };
+    }
+
+    if (eventRegistration.payment_status === "Pending") {
+      const { data: updated, error: updateError } = await supabase
+        .from("event_registrations")
+        .update({
+          payment_status: "Paid",
+          razorpay_payment_id: paymentId,
+          amount_paid: Number(eventRegistration.checkout_amount),
+        })
+        .eq("id", eventRegistration.id)
+        .eq("payment_status", "Pending")
+        .select("id")
+        .maybeSingle();
+
+      if (!updateError && updated) {
+        await sendEventRegistrationReceipts(supabase, { registrationId: eventRegistration.id });
+        return { matched: true, type: "event_registration", id: eventRegistration.id };
+      }
+
+      const { data: current } = await supabase
+        .from("event_registrations")
+        .select("payment_status, razorpay_payment_id")
+        .eq("id", eventRegistration.id)
+        .maybeSingle();
+      if (
+        current?.payment_status === "Paid" &&
+        current.razorpay_payment_id === paymentId
+      ) {
+        await sendEventRegistrationReceipts(supabase, { registrationId: eventRegistration.id });
+        return { matched: true, type: "event_registration", id: eventRegistration.id };
+      }
     }
   }
 
