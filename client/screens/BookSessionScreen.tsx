@@ -15,12 +15,12 @@ import { useAuth } from "@/context/AuthContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { fetchOfferingsForPractitioner } from "@/services/content/practitionerOfferingsService";
 import { fetchAvailabilityForOffering } from "@/services/content/practitionerAvailabilityService";
+import { fetchBookingBusySlots, type BookingBusySlot } from "@/services/content/practitionerBookingsService";
 import type { SessionOffering } from "@/data/practitionerBookings";
 import type { OfferingAvailabilityState } from "@/data/practitionerBookings";
 import {
   getBookingDates,
   getTimeSlotsForDate,
-  isDateBookable,
 } from "@/lib/bookingSlots";
 
 type RootStackParamList = {
@@ -145,6 +145,8 @@ export default function BookSessionScreen() {
     Record<string, OfferingAvailabilityState>
   >({});
   const [loadingSchedule, setLoadingSchedule] = useState(true);
+  const [busySlots, setBusySlots] = useState<BookingBusySlot[]>([]);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
 
   const { practitionerCategories } = useDataContext();
   const { settings } = usePlatformConfig();
@@ -176,7 +178,7 @@ export default function BookSessionScreen() {
     const slots = offerings.flatMap((offering) => {
       const availability = availabilityByOfferingId[offering.id];
       return availability
-        ? getTimeSlotsForDate(selectedDate.isoDate, availability, offering.duration)
+        ? getTimeSlotsForDate(selectedDate.isoDate, availability, offering.duration, busySlots.filter((slot) => slot.session_date === selectedDate.isoDate))
         : [];
     });
     const toMinutes = (value: string) => {
@@ -187,27 +189,41 @@ export default function BookSessionScreen() {
       return (hour + (match[3].toUpperCase() === "PM" ? 12 : 0)) * 60 + minutes;
     };
     return [...new Set(slots)].sort((a, b) => toMinutes(a) - toMinutes(b));
-  }, [selectedDate, offerings, availabilityByOfferingId]);
+  }, [selectedDate, offerings, availabilityByOfferingId, busySlots]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoadingSchedule(true);
-      const rows = await fetchOfferingsForPractitioner(practitionerId);
-      if (cancelled) return;
-      setOfferings(rows);
-      if (rows.length > 0) {
-        const entries = await Promise.all(
-          rows.map(async (offering) => [
-            offering.id,
-            await fetchAvailabilityForOffering(offering.id),
-          ] as const)
-        );
-        if (!cancelled) {
-          setAvailabilityByOfferingId(Object.fromEntries(entries));
+      setScheduleError(null);
+      try {
+        const rows = await fetchOfferingsForPractitioner(practitionerId);
+        if (cancelled) return;
+        setOfferings(rows);
+        if (rows.length > 0) {
+          const [entries, busy] = await Promise.all([
+            Promise.all(rows.map(async (offering) => [
+              offering.id,
+              await fetchAvailabilityForOffering(offering.id),
+            ] as const)),
+            fetchBookingBusySlots(practitionerId, dates[0].isoDate, dates[dates.length - 1].isoDate),
+          ]);
+          if (!cancelled) {
+            setAvailabilityByOfferingId(Object.fromEntries(entries));
+            setBusySlots(busy);
+          }
+        } else {
+          setAvailabilityByOfferingId({});
+          setBusySlots([]);
         }
+      } catch (error) {
+        if (!cancelled) {
+          setScheduleError(error instanceof Error ? error.message : "Could not load booking availability.");
+          setBusySlots([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingSchedule(false);
       }
-      if (!cancelled) setLoadingSchedule(false);
     })();
     return () => {
       cancelled = true;
@@ -224,12 +240,19 @@ export default function BookSessionScreen() {
       .map((date, index) => {
         const hasAvailability = offerings.some((offering) => {
           const availability = availabilityByOfferingId[offering.id];
-          return availability ? isDateBookable(date.isoDate, availability) : false;
+          return availability
+            ? getTimeSlotsForDate(
+                date.isoDate,
+                availability,
+                offering.duration,
+                busySlots.filter((slot) => slot.session_date === date.isoDate)
+              ).length > 0
+            : false;
         });
         return hasAvailability ? index : -1;
       })
       .filter((index) => index >= 0);
-  }, [dates, offerings, availabilityByOfferingId]);
+  }, [dates, offerings, availabilityByOfferingId, busySlots]);
 
   const availableDurationOptions = useMemo(() => {
     if (!selectedDate || !selectedTime) return [];
@@ -241,10 +264,15 @@ export default function BookSessionScreen() {
         return Boolean(
           offering &&
           availability &&
-          getTimeSlotsForDate(selectedDate.isoDate, availability, option.minutes).includes(selectedTime)
+          getTimeSlotsForDate(
+            selectedDate.isoDate,
+            availability,
+            option.minutes,
+            busySlots.filter((slot) => slot.session_date === selectedDate.isoDate)
+          ).includes(selectedTime)
         );
       });
-  }, [selectedDate, selectedTime, durationOptions, offerings, availabilityByOfferingId]);
+  }, [selectedDate, selectedTime, durationOptions, offerings, availabilityByOfferingId, busySlots]);
 
   if (!practitioner) {
     return (
@@ -326,6 +354,12 @@ export default function BookSessionScreen() {
             </View>
           </View>
         </View>
+
+        {!loadingSchedule && scheduleError ? (
+          <View style={styles.emptyScheduleCard}>
+            <ThemedText style={styles.emptyScheduleText}>{scheduleError}</ThemedText>
+          </View>
+        ) : null}
 
         {!loadingSchedule && offerings.length === 0 ? (
           <View style={styles.emptyScheduleCard}>
