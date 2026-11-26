@@ -6,12 +6,9 @@ import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { WalletTransaction } from "@/data/wallet";
 import { useWalletContext } from "@/context/WalletContext";
-import { useAuth } from "@/context/AuthContext";
 import { formatInr, formatInrSigned } from "@/lib/formatCurrency";
 import { BackHeader } from "@/components/layout";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
-import BankDetailsCard from "@/components/wallet/BankDetailsCard";
-import { updateSellerBankDetails } from "@/services/walletLedgerApi";
 import {
   BANK_NOT_LINKED_NOTICE,
   isBankAccountLinked,
@@ -43,8 +40,6 @@ function TransactionRow({ txn }: { txn: WalletTransaction }) {
 export default function SellerWalletScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(24, 24);
   const { snapshot, walletLoading, walletLoadError, refreshWallet } = useWalletContext();
-  const { session } = useAuth();
-  const bankLinked = isBankAccountLinked(snapshot.bankAccountLabel);
 
 
 
@@ -142,16 +137,6 @@ export default function SellerWalletScreen() {
               <ThemedText style={styles.payoutValue}>{snapshot.nextPayoutDate}</ThemedText>
             </View>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.payoutRow}>
-            <Feather name="credit-card" size={16} color={Colors.light.accent} />
-            <View style={styles.payoutText}>
-              <ThemedText style={styles.payoutLabel}>Payout destination</ThemedText>
-              <ThemedText style={styles.payoutValue}>{snapshot.bankAccountLabel}</ThemedText>
-              {!bankLinked ? (
-                <ThemedText style={styles.payoutHint}>{BANK_NOT_LINKED_NOTICE}</ThemedText>
-              ) : null}
-            </View>
           </View>
         </View>
 
