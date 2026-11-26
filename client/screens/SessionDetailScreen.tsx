@@ -29,6 +29,7 @@ import { fetchAvailabilityForOffering } from "@/services/content/practitionerAva
 import { rescheduleUserBooking } from "@/services/bookingRescheduleApi";
 import { getBookingDates, getTimeSlotsForDate } from "@/lib/bookingSlots";
 import type { OfferingAvailabilityState } from "@/data/practitionerBookings";
+import { fetchBookingBusySlots, type BookingBusySlot } from "@/services/content/practitionerBookingsService";
 
 type ParamList = {
   SessionDetail: { sessionId: string };
@@ -119,6 +120,7 @@ export default function SessionDetailScreen() {
   const [rescheduleVisible, setRescheduleVisible] = useState(false);
   const [rescheduleLoading, setRescheduleLoading] = useState(false);
   const [rescheduleAvailability, setRescheduleAvailability] = useState<OfferingAvailabilityState | null>(null);
+  const [rescheduleBusySlots, setRescheduleBusySlots] = useState<BookingBusySlot[]>([]);
   const [rescheduleDate, setRescheduleDate] = useState<string | null>(null);
   const [rescheduleTime, setRescheduleTime] = useState<string | null>(null);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
@@ -178,7 +180,20 @@ export default function SessionDetailScreen() {
   const canReschedule = isUpcoming && Boolean(sessionStart && sessionStart.getTime() - Date.now() > 24 * 60 * 60 * 1000);
   const sessionDurationMinutes = Number.parseInt(session.duration, 10);
   const rescheduleSlots = rescheduleDate && rescheduleAvailability
-    ? getTimeSlotsForDate(rescheduleDate, rescheduleAvailability, sessionDurationMinutes)
+    ? getTimeSlotsForDate(
+        rescheduleDate,
+        rescheduleAvailability,
+        sessionDurationMinutes,
+        rescheduleBusySlots.filter((slot) => slot.session_date === rescheduleDate)
+      )
+    : [];
+  const rescheduleAvailableDates = rescheduleAvailability
+    ? rescheduleDates.filter((day) => getTimeSlotsForDate(
+        day.isoDate,
+        rescheduleAvailability,
+        sessionDurationMinutes,
+        rescheduleBusySlots.filter((slot) => slot.session_date === day.isoDate)
+      ).length > 0)
     : [];
 
   const openReschedule = async () => {
@@ -189,12 +204,19 @@ export default function SessionDetailScreen() {
     }
     setRescheduleError(null);
     setRescheduleAvailability(null);
+    setRescheduleBusySlots([]);
     setRescheduleDate(null);
     setRescheduleTime(null);
     setRescheduleVisible(true);
     try {
       const availability = await fetchAvailabilityForOffering(session.offeringId);
+      const busy = await fetchBookingBusySlots(
+        session.practitionerId,
+        rescheduleDates[0].isoDate,
+        rescheduleDates[rescheduleDates.length - 1].isoDate
+      );
       setRescheduleAvailability(availability);
+      setRescheduleBusySlots(busy);
     } catch {
       setRescheduleError("Could not load available times. Please try again.");
     }
@@ -375,7 +397,7 @@ export default function SessionDetailScreen() {
                   <ThemedText style={styles.rescheduleSectionTitle}>Select Date</ThemedText>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.rescheduleChoices}>
-                      {rescheduleDates.map((day) => (
+                      {rescheduleAvailableDates.map((day) => (
                         <Pressable
                           key={day.isoDate}
                           style={[styles.rescheduleChoice, rescheduleDate === day.isoDate && styles.rescheduleChoiceSelected]}
