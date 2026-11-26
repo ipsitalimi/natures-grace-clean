@@ -47,6 +47,7 @@ export default function RequireRole({ role, children }: Props) {
             .select("id")
             .eq("id", practitionerId)
             .eq("is_active", true)
+            .eq("approval_status", "Approved")
             .maybeSingle();
           hasRoleProfile = Boolean(data);
         }
