@@ -67,6 +67,15 @@ export async function uploadApplicationDocuments(
     uploaded += 1;
   }
 
+  if (uploaded > 0) {
+    const { error: progressError } = await supabase.rpc("mark_role_application_documents_received", {
+      p_application_id: applicationId,
+    });
+    if (progressError) {
+      console.warn("[applicationDocumentsService] progress update:", progressError.message);
+    }
+  }
+
   return { uploaded, errors };
 }
 
