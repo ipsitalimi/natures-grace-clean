@@ -37,6 +37,7 @@ type RootStackParamList = {
   SellerReviews: undefined;
   SellerStoreCustomization: undefined;
   SellerDeliverySettings: undefined;
+  PractitionerApplication: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -199,6 +200,7 @@ export default function SellerDrawer({ visible, onClose }: SellerDrawerProps) {
               <MenuItem icon="clock" title="Order History" onPress={() => go("SellerOrders")} />
               <MenuItem icon="settings" title="Settings" onPress={() => go("Settings")} />
               <MenuItem icon="help-circle" title="Support" onPress={() => go("Support")} />
+              <MenuItem icon="heart" title="Apply as Practitioner" onPress={() => go("PractitionerApplication")} />
             </View>
 
             <View style={styles.signOutSection}>
