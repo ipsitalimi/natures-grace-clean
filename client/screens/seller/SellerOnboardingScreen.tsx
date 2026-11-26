@@ -1,4 +1,5 @@
 import React, { useCallback, useState } from "react";
+import { Platform } from "react-native";
 import {
   View,
   ScrollView,
@@ -99,7 +100,7 @@ export default function SellerOnboardingScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.scroll,
-          { paddingBottom: getScrollBottomPadding(insets.bottom, 24) },
+          { paddingBottom: getScrollBottomPadding(Platform.OS === "android" ? Math.max(insets.bottom, 24) : insets.bottom, 24) },
         ]}
         keyboardShouldPersistTaps="handled"
       >
