@@ -140,7 +140,7 @@ function TierEditor({
 }
 
 export default function SellerDeliverySettingsScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { scrollPaddingBottom } = useLayoutInsets(24, 24);
   const { session } = useAuth();
   const [settings, setSettings] = useState<SellerDeliverySettings>({
     ...DEFAULT_SELLER_DELIVERY_SETTINGS,
