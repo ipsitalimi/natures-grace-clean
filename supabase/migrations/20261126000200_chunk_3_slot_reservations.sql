@@ -403,7 +403,7 @@ BEGIN
   WHERE id=p_booking_id;
  RETURN jsonb_build_object('ok',true,'booking_id',p_booking_id,'session_date',v_date::text,
   'session_time',btrim(p_new_session_time));
-END $;
+END $$;
 REVOKE ALL ON FUNCTION public.admin_update_practitioner_booking_schedule(uuid,text,text,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_update_practitioner_booking_schedule(uuid,text,text,text) TO service_role;
 
