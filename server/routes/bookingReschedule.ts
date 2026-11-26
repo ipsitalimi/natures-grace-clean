@@ -22,11 +22,12 @@ export function registerBookingRescheduleRoutes(app: Express): void {
     }
     let hour = Number(timeMatch[1]) % 12;
     if (timeMatch[3].toUpperCase() === "PM") hour += 12;
-    const requestedStart = new Date(
+    // Booking dates/times are stored as India-local wall-clock values.
+    const requestedStartMs = Date.UTC(
       Number(dateMatch[1]), Number(dateMatch[2]) - 1, Number(dateMatch[3]),
       hour, Number(timeMatch[2]), 0, 0
-    );
-    if (!Number.isFinite(requestedStart.getTime()) || requestedStart.getTime() <= Date.now()) {
+    ) - 330 * 60 * 1000;
+    if (!Number.isFinite(requestedStartMs) || requestedStartMs <= Date.now()) {
       return res.status(400).json({ error: "Please choose a future session time." });
     }
 
