@@ -410,6 +410,9 @@ export default function SessionDetailScreen() {
                       ))}
                     </View>
                   </ScrollView>
+                  {rescheduleAvailableDates.length === 0 ? (
+                    <ThemedText style={styles.rescheduleEmptyText}>No available dates for this session duration.</ThemedText>
+                  ) : null}
                   {rescheduleDate ? (
                     <>
                       <ThemedText style={styles.rescheduleSectionTitle}>Select Time</ThemedText>
@@ -1070,6 +1073,7 @@ const styles = StyleSheet.create({
     padding: Spacing.lg,
     gap: Spacing.md,
   },
+  rescheduleEmptyText: { fontSize: 13, color: Colors.light.textMuted, marginTop: Spacing.sm },
   rescheduleSectionTitle: {
     fontSize: 14,
     fontWeight: "700",
