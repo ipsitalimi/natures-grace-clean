@@ -63,7 +63,7 @@ export default function ApplicationStatusScreen() {
         <>
           {apps.map((application) => (
             <View key={application.id} style={styles.applicationCard}>
-              <ThemedText style={styles.roleLabel}>{application.targetRole} Application</ThemedText>
+              <ThemedText style={styles.roleLabel}>{application.formData.applicationType === "additional_category" ? "Additional Category Request" : application.formData.applicationType === "product_limit_increase" ? "Product Limit Request" : `${application.targetRole} Application`}</ThemedText>
               <ThemedText style={styles.submitted}>
                 Submitted {new Date(application.createdAt).toLocaleDateString()}
               </ThemedText>
