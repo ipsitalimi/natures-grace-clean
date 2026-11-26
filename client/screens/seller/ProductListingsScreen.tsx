@@ -34,7 +34,7 @@ function getCategoryColor(category: string): { bg: string; text: string } {
 }
 
 export default function ProductListingsScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(30);
+  const { scrollPaddingBottom } = useLayoutInsets(30, 24);
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { sellerCatalog, deleteProduct, refreshSellerCatalog } = useDataContext();
