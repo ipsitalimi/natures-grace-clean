@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -19,6 +19,7 @@ import { usePractitionerContext } from "@/context/PractitionerContext";
 import { useSignOut } from "@/hooks/useSignOut";
 import { navigateAfterDrawerClose } from "@/lib/drawerNavigation";
 import { getHeaderPaddingTop, getScrollBottomPadding } from "@/lib/layoutInsets";
+import { resolveSellerIdByProfileId } from "@/services/commerce/sellerId";
 
 type RootStackParamList = {
   PractitionerProfile: undefined;
@@ -31,6 +32,7 @@ type RootStackParamList = {
   PractitionerReviews: undefined;
   Login: undefined;
   SellerApplication: undefined;
+  SellerMain: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -76,6 +78,16 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
   const navigation = useNavigation<NavigationProp>();
   const signOut = useSignOut();
   const { profile } = useAuth();
+  const [hasSellerRole, setHasSellerRole] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !profile?.id) return;
+    let cancelled = false;
+    void resolveSellerIdByProfileId(profile.id).then((id) => {
+      if (!cancelled) setHasSellerRole(Boolean(id));
+    });
+    return () => { cancelled = true; };
+  }, [visible, profile?.id]);
   const { offerings, stats, dashboard, practiceName } = usePractitionerContext();
   const offeringsCount = offerings.length;
   const displayName =
@@ -167,7 +179,7 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
               <MenuItem icon="credit-card" title="Wallet & Earnings" onPress={() => go("PractitionerWallet")} />
               <MenuItem icon="bar-chart-2" title="Analytics" onPress={() => go("PractitionerAnalytics")} />
               <MenuItem icon="star" title="Client Reviews" onPress={() => go("PractitionerReviews")} />
-              <MenuItem icon="shopping-bag" title="Apply as Seller" onPress={() => go("SellerApplication")} />
+              <MenuItem icon="shopping-bag" title={hasSellerRole ? "Switch to Seller" : "Apply as Seller"} onPress={() => go(hasSellerRole ? "SellerMain" : "SellerApplication")} />
             </View>
 
             <View style={styles.section}>
