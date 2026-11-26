@@ -41,7 +41,7 @@ function TransactionRow({ txn }: { txn: WalletTransaction }) {
 }
 
 export default function SellerWalletScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { scrollPaddingBottom } = useLayoutInsets(24, 24);
   const { snapshot, walletLoading, walletLoadError, refreshWallet } = useWalletContext();
   const { session } = useAuth();
   const bankLinked = isBankAccountLinked(snapshot.bankAccountLabel);
