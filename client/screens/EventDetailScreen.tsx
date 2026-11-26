@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { View, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } from "react-native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -155,6 +155,11 @@ export default function EventDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <ThemedText style={styles.eventTitle}>{event.title}</ThemedText>
+        {event.photos?.length ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.eventPhotoGallery}>
+            {event.photos.map((uri, index) => <Image key={`${uri}-${index}`} source={{ uri }} style={styles.eventPhoto} resizeMode="cover" />)}
+          </ScrollView>
+        ) : null}
         <ThemedText style={styles.eventDescription}>{event.description}</ThemedText>
 
         <View style={styles.infoCard}>
@@ -299,6 +304,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: Colors.light.textSecondary,
   },
+  eventPhotoGallery: { gap: 10, marginBottom: Spacing.lg },
+  eventPhoto: { width: 260, height: 170, borderRadius: BorderRadius.md, backgroundColor: Colors.light.cardBackground },
   eventTitle: {
     fontSize: 26,
     lineHeight: 34,
