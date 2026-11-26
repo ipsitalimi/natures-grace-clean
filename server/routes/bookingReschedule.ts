@@ -15,8 +15,8 @@ export function registerBookingRescheduleRoutes(app: Express): void {
       return res.status(400).json({ error: "Booking id, new date, and new time are required" });
     }
 
-    const dateMatch = sessionDate.trim().match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
-    const timeMatch = sessionTime.trim().match(/^(\\d{1,2}):(\\d{2})\\s*(AM|PM)$/i);
+    const dateMatch = sessionDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const timeMatch = sessionTime.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
     if (!dateMatch || !timeMatch) {
       return res.status(400).json({ error: "Invalid session date or time" });
     }
