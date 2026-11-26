@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS public.booking_payment_reconciliation (
 );
 
 CREATE OR REPLACE FUNCTION public.ng_time_minutes(p_text text)
-RETURNS integer LANGUAGE plpgsql IMMUTABLE STRICT AS $$
+RETURNS integer LANGUAGE plpgsql IMMUTABLE STRICT AS $fn$
 DECLARE v_time time;
 BEGIN
   IF btrim(p_text) ~* '^(0?[1-9]|1[0-2]):[0-5][0-9]\s*(AM|PM)$' THEN
@@ -54,7 +54,7 @@ BEGIN
     RAISE EXCEPTION 'Invalid session time';
   END IF;
   RETURN extract(hour from v_time)::integer * 60 + extract(minute from v_time)::integer;
-END $$;
+END;\n$fn$;
 
 CREATE OR REPLACE FUNCTION public.ng_booking_slot_is_available(
   p_practitioner_id uuid,
