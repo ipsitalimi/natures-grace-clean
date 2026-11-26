@@ -13,7 +13,7 @@ import { useDataContext } from "@/context/DataContext";
 import { formatInr } from "@/lib/formatCurrency";
 
 export default function SellerProductDetailScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(30);
+  const { scrollPaddingBottom } = useLayoutInsets(30, 24);
   const navigation = useNavigation();
   const route = useRoute<any>();
   const { productId } = route.params || {};
