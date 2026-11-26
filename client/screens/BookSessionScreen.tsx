@@ -174,7 +174,7 @@ export default function BookSessionScreen() {
   // Show times that fit at least one published offering. Duration is selected
   // after time, so each duration is filtered against its own availability below.
   const timeSlots = useMemo(() => {
-    if (!selectedDate) return [];
+    if (!selectedDate || scheduleError) return [];
     const slots = offerings.flatMap((offering) => {
       const availability = availabilityByOfferingId[offering.id];
       return availability
@@ -189,13 +189,18 @@ export default function BookSessionScreen() {
       return (hour + (match[3].toUpperCase() === "PM" ? 12 : 0)) * 60 + minutes;
     };
     return [...new Set(slots)].sort((a, b) => toMinutes(a) - toMinutes(b));
-  }, [selectedDate, offerings, availabilityByOfferingId, busySlots]);
+  }, [selectedDate, offerings, availabilityByOfferingId, busySlots, scheduleError]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoadingSchedule(true);
       setScheduleError(null);
+      setBusySlots([]);
+      setAvailabilityByOfferingId({});
+      setSelectedDateIndex(null);
+      setSelectedTime(null);
+      setSelectedDurationIndex(null);
       try {
         const rows = await fetchOfferingsForPractitioner(practitionerId);
         if (cancelled) return;
@@ -236,6 +241,7 @@ export default function BookSessionScreen() {
   }, [selectedDateIndex]);
 
   const bookableDates = useMemo(() => {
+    if (scheduleError) return [];
     return dates
       .map((date, index) => {
         const hasAvailability = offerings.some((offering) => {
@@ -252,10 +258,10 @@ export default function BookSessionScreen() {
         return hasAvailability ? index : -1;
       })
       .filter((index) => index >= 0);
-  }, [dates, offerings, availabilityByOfferingId, busySlots]);
+  }, [dates, offerings, availabilityByOfferingId, busySlots, scheduleError]);
 
   const availableDurationOptions = useMemo(() => {
-    if (!selectedDate || !selectedTime) return [];
+    if (scheduleError || !selectedDate || !selectedTime) return [];
     return durationOptions
       .map((option, index) => ({ option, index }))
       .filter(({ option }) => {
@@ -272,7 +278,7 @@ export default function BookSessionScreen() {
           ).includes(selectedTime)
         );
       });
-  }, [selectedDate, selectedTime, durationOptions, offerings, availabilityByOfferingId, busySlots]);
+  }, [selectedDate, selectedTime, durationOptions, offerings, availabilityByOfferingId, busySlots, scheduleError]);
 
   if (!practitioner) {
     return (
@@ -289,6 +295,7 @@ export default function BookSessionScreen() {
     selectedDurationIndex !== null &&
     timeSlots.length > 0 &&
     !loadingSchedule &&
+    !scheduleError &&
     offerings.length > 0 &&
     selectedAvailability !== null;
 
