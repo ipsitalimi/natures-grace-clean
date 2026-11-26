@@ -573,7 +573,7 @@ function CreatePromoForm({
 }
 
 export default function SellerPromotionsScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { scrollPaddingBottom } = useLayoutInsets(24, 24);
   const { session } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [showFlashSetup, setShowFlashSetup] = useState(false);
