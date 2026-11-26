@@ -35,7 +35,7 @@ export default function SignupLegalScreen() {
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RouteProps>();
   const { name, email, password } = route.params;
-  const { signUp, refreshProfile, setPendingSignupLegal } = useAuth();
+  const { signUp, refreshProfile, setPendingSignupLegal, markLegalAcceptancesCurrent } = useAuth();
   const { syncSessionFromProfile } = usePlatformConfig();
 
   const [versions, setVersions] = useState<LegalVersions | null>(null);
@@ -84,6 +84,10 @@ export default function SignupLegalScreen() {
         return;
       }
 
+      // Update the in-memory profile immediately after the database confirms acceptance.
+      // This prevents RootNavigation from seeing stale policy versions and routing
+      // the new user straight into the separate "updated policies" screen.
+      markLegalAcceptancesCurrent(legalKeys, versions);
       const updatedProfile = (await refreshProfile()) ?? signupResult.profile ?? null;
       if (updatedProfile) {
         syncSessionFromProfile(updatedProfile);
