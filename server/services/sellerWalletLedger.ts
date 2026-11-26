@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isBankAccountLinkedForPayout, validateBankDetailsInput } from "../lib/walletBank";
 
 type OrderRow = {
   id: string;
@@ -18,7 +17,6 @@ type WalletRow = {
   held_balance: number;
   total_earned: number;
   commission_rate: number;
-  bank_account_label?: string | null;
 };
 
 type WalletTxnRow = {
@@ -49,7 +47,6 @@ async function getOrCreateSellerWallet(
     .insert({
       seller_id: sellerId,
       commission_rate: commissionRate,
-      bank_account_label: null,
       next_payout_date: null,
     })
     .select()
@@ -274,27 +271,6 @@ export async function syncSellerWalletFromOrders(
   }
 }
 
-export async function updateSellerBankDetails(
-  supabase: SupabaseClient,
-  sellerId: string,
-  commissionRate: number,
-  input: { bankName: string; last4: string; accountHolder: string }
-): Promise<{ error?: string }> {
-  const validated = validateBankDetailsInput(input);
-  if (!validated.ok) return { error: validated.error };
-
-  const wallet = await getOrCreateSellerWallet(supabase, sellerId, commissionRate);
-  if (!wallet) return { error: "Wallet not found" };
-
-  const { error } = await supabase
-    .from("seller_wallets")
-    .update({ bank_account_label: validated.label })
-    .eq("id", wallet.id);
-
-  if (error) return { error: error.message };
-  return {};
-}
-
 export async function requestSellerPayout(
   supabase: SupabaseClient,
   sellerId: string,
@@ -303,16 +279,6 @@ export async function requestSellerPayout(
 ): Promise<{ payoutId?: string; error?: string }> {
   const wallet = await getOrCreateSellerWallet(supabase, sellerId, commissionRate);
   if (!wallet) return { error: "Wallet not found" };
-
-  const { data: walletRow } = await supabase
-    .from("seller_wallets")
-    .select("bank_account_label")
-    .eq("id", wallet.id)
-    .maybeSingle();
-
-  if (!isBankAccountLinkedForPayout((walletRow as { bank_account_label?: string | null } | null)?.bank_account_label)) {
-    return { error: "Bank account details required before requesting a withdrawal" };
-  }
 
   if (amount <= 0) return { error: "Invalid amount" };
 
@@ -355,7 +321,7 @@ export async function requestSellerPayout(
     type: "debit",
     category: "payout",
     amount,
-    description: "Payout to Bank Account (pending)",
+    description: "Manual payout requested",
     is_released: true,
   });
 
