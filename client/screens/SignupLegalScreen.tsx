@@ -13,7 +13,8 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import LegalDocumentReader, { LegalCheckboxRow } from "@/components/legal/LegalDocumentReader";
+import LegalDocumentReader from "@/components/legal/LegalDocumentReader";
+import { Feather } from "@expo/vector-icons";
 import { USER_SIGNUP_LEGAL_LABELS } from "@/constants/legalDocuments";
 import { useAuth } from "@/context/AuthContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
@@ -38,16 +39,7 @@ export default function SignupLegalScreen() {
   const { syncSessionFromProfile } = usePlatformConfig();
 
   const [versions, setVersions] = useState<LegalVersions | null>(null);
-  const [checked, setChecked] = useState<Record<UserMandatoryLegalKey, boolean>>({
-    user_terms: false,
-    privacy_policy: false,
-    refund_policy: false,
-    medical_disclaimer: false,
-    account_deletion_policy: false,
-    grievance_policy: false,
-    community_guidelines: false,
-    shipping_policy: false,
-  });
+  const [accepted, setAccepted] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<UserMandatoryLegalKey | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -56,17 +48,10 @@ export default function SignupLegalScreen() {
     void fetchLegalVersions().then((v) => setVersions(v));
   }, []);
 
-  const allChecked = useMemo(
-    () => Object.values(checked).every(Boolean),
-    [checked]
-  );
-
-  const toggle = useCallback((key: UserMandatoryLegalKey) => {
-    setChecked((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+  const legalKeys = useMemo(() => Object.keys(USER_SIGNUP_LEGAL_LABELS) as UserMandatoryLegalKey[], []);
 
   const handleContinue = async () => {
-    if (!allChecked || !versions || submitting) return;
+    if (!accepted || !versions || submitting) return;
     setError("");
     setSubmitting(true);
 
@@ -78,7 +63,7 @@ export default function SignupLegalScreen() {
     }
 
     if (signupResult.needsEmailConfirmation) {
-      const keys = Object.keys(checked) as UserMandatoryLegalKey[];
+      const keys = legalKeys;
       setPendingSignupLegal({ keys, versions });
       setSubmitting(false);
       navigation.reset({
@@ -138,25 +123,30 @@ export default function SignupLegalScreen() {
         {!versions ? (
           <ActivityIndicator color={Colors.light.accent} style={{ marginTop: 24 }} />
         ) : (
-          (Object.keys(USER_SIGNUP_LEGAL_LABELS) as UserMandatoryLegalKey[]).map((key) => (
-            <LegalCheckboxRow
-              key={key}
-              label={USER_SIGNUP_LEGAL_LABELS[key]}
-              checked={checked[key]}
-              onToggle={() => toggle(key)}
-              onView={() => setViewingDoc(key)}
-              testID={`checkbox-legal-${key}`}
-            />
-          ))
+          <View style={styles.policyList}>
+            <ThemedText style={styles.policyHeading}>Review the policies</ThemedText>
+            {legalKeys.map((key) => (
+              <Pressable key={key} style={styles.policyLink} onPress={() => setViewingDoc(key)}>
+                <ThemedText style={styles.policyLinkText}>{USER_SIGNUP_LEGAL_LABELS[key]}</ThemedText>
+                <Feather name="chevron-right" size={17} color={Colors.light.accent} />
+              </Pressable>
+            ))}
+            <Pressable style={styles.acceptRow} onPress={() => setAccepted((value) => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: accepted }} testID="checkbox-accept-all-legal">
+              <View style={[styles.checkbox, accepted && styles.checkboxChecked]}>
+                {accepted ? <Feather name="check" size={15} color="#FFFFFF" /> : null}
+              </View>
+              <ThemedText style={styles.acceptText}>I have read and agree to all the above policies and terms.</ThemedText>
+            </Pressable>
+          </View>
         )}
 
         {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
       </ScrollView>
 
       <Pressable
-        style={[styles.primaryButton, (!allChecked || submitting) && styles.primaryButtonDisabled]}
+        style={[styles.primaryButton, (!accepted || submitting) && styles.primaryButtonDisabled]}
         onPress={() => void handleContinue()}
-        disabled={!allChecked || submitting || !versions}
+        disabled={!accepted || submitting || !versions}
         testID="button-signup-legal-continue"
       >
         {submitting ? (
@@ -175,11 +165,11 @@ export default function SignupLegalScreen() {
               <Pressable
                 style={styles.modalDoneBtn}
                 onPress={() => {
-                  toggle(viewingDoc);
+                  
                   setViewingDoc(null);
                 }}
               >
-                <ThemedText style={styles.modalDoneText}>I Agree</ThemedText>
+                <ThemedText style={styles.modalDoneText}>Done</ThemedText>
               </Pressable>
             }
           />
@@ -218,6 +208,14 @@ const styles = StyleSheet.create({
   },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: Spacing.lg },
+  policyList: { gap: 2 },
+  policyHeading: { fontSize: 15, fontWeight: "700", color: Colors.light.text, marginBottom: Spacing.sm },
+  policyLink: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: Colors.light.divider },
+  policyLinkText: { fontSize: 14, color: Colors.light.accent, fontWeight: "500" },
+  acceptRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: Spacing.lg, marginTop: Spacing.md },
+  checkbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: Colors.light.accent, alignItems: "center", justifyContent: "center" },
+  checkboxChecked: { backgroundColor: Colors.light.accent, borderColor: Colors.light.accent },
+  acceptText: { flex: 1, fontSize: 14, lineHeight: 20, color: Colors.light.text },
   errorText: {
     fontSize: 14,
     color: "#C0392B",
