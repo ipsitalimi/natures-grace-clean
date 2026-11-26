@@ -9,6 +9,9 @@ import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import { BackHeader } from "@/components/layout";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { useDataContext } from "@/context/DataContext";
+import { useAuth } from "@/context/AuthContext";
+import { resolveSellerIdByProfileId, fetchSellerProductLimit } from "@/services/commerce/sellerId";
+import { fetchMyRoleApplications, submitSellerProductLimitRequest } from "@/services/platform/roleApplicationsService";
 import type { SellerProduct } from "@/data/sellerMockData";
 
 function getCategoryColor(category: string): { bg: string; text: string } {
@@ -38,16 +41,52 @@ export default function ProductListingsScreen() {
   const navigation = useNavigation();
   const isFocused = useIsFocused();
   const { sellerCatalog, deleteProduct, refreshSellerCatalog } = useDataContext();
+  const { profile } = useAuth();
 
   const listings: SellerProduct[] = sellerCatalog;
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [productLimit, setProductLimit] = useState(10);
+  const [limitRequestPending, setLimitRequestPending] = useState(false);
+  const [limitRequestBusy, setLimitRequestBusy] = useState(false);
+  const [limitRequestError, setLimitRequestError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isFocused) {
-      setDeleteConfirm(null);
-      void refreshSellerCatalog();
+    if (!isFocused) return;
+    setDeleteConfirm(null);
+    let cancelled = false;
+    void (async () => {
+      await refreshSellerCatalog();
+      if (!profile?.id) return;
+      const sellerId = await resolveSellerIdByProfileId(profile.id);
+      if (!sellerId) return;
+      const [limit, applications] = await Promise.all([
+        fetchSellerProductLimit(sellerId),
+        fetchMyRoleApplications(),
+      ]);
+      if (cancelled) return;
+      setProductLimit(limit);
+      setLimitRequestPending(applications.some((app) =>
+        app.targetRole === "Seller" &&
+        app.status === "Pending" &&
+        app.formData.applicationType === "product_limit_increase"
+      ));
+    })();
+    return () => { cancelled = true; };
+  }, [isFocused, refreshSellerCatalog, profile?.id]);
+
+  const handleRequestHigherLimit = async () => {
+    if (limitRequestBusy || limitRequestPending) return;
+    setLimitRequestBusy(true);
+    setLimitRequestError(null);
+    try {
+      await submitSellerProductLimitRequest(20);
+      setLimitRequestPending(true);
+    } catch (error) {
+      setLimitRequestError(error instanceof Error ? error.message : "Could not submit your request.");
+    } finally {
+      setLimitRequestBusy(false);
     }
-  }, [isFocused, refreshSellerCatalog]);
+  };
 
   const handleDelete = (id: string, productName: string) => {
     Alert.alert("Remove product", `Remove "${productName}" from your store?`, [
