@@ -12,6 +12,7 @@ import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import ScreenHeader from "@/components/layout/ScreenHeader";
 import WorkspaceSwitcher from "@/components/account/WorkspaceSwitcher";
+import WorkspaceSwitcher from "@/components/account/WorkspaceSwitcher";
 import { Colors } from "@/constants/theme";
 import { Layout, LayoutSpacing } from "@/constants/layout";
 import { useAppBrandCopy } from "@/hooks/useAppBrandCopy";
@@ -211,9 +212,7 @@ export default function AdminLayout({
               >
                 <Feather name="bell" size={Layout.headerIconSize} color={Colors.light.accent} />
               </Pressable>
-              <View style={styles.avatarCircle}>
-                <ThemedText style={styles.avatarText}>A</ThemedText>
-              </View>
+              <WorkspaceSwitcher inline />
             </View>
           }
           testID="admin-screen-header"
