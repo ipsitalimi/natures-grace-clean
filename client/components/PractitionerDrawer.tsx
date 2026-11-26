@@ -33,6 +33,7 @@ type RootStackParamList = {
   Login: undefined;
   SellerApplication: undefined;
   SellerMain: undefined;
+  PractitionerApplication: undefined;
 };
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
@@ -179,6 +180,7 @@ export default function PractitionerDrawer({ visible, onClose }: PractitionerDra
               <MenuItem icon="credit-card" title="Wallet & Earnings" onPress={() => go("PractitionerWallet")} />
               <MenuItem icon="bar-chart-2" title="Analytics" onPress={() => go("PractitionerAnalytics")} />
               <MenuItem icon="star" title="Client Reviews" onPress={() => go("PractitionerReviews")} />
+              <MenuItem icon="layers" title="Request Additional Category" onPress={() => go("PractitionerApplication")} />
               <MenuItem icon="shopping-bag" title={hasSellerRole ? "Switch to Seller" : "Apply as Seller"} onPress={() => go(hasSellerRole ? "SellerMain" : "SellerApplication")} />
             </View>
 
