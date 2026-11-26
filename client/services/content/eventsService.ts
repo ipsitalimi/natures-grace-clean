@@ -134,6 +134,7 @@ export type EventUpdatePatch = Partial<
     | "whatToExpect"
     | "ctaText"
     | "bottomNote"
+    | "photos"
     | "status"
   >
 >;
