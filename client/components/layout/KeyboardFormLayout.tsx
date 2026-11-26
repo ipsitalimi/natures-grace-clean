@@ -9,6 +9,7 @@ export type KeyboardFormLayoutProps = {
   children: React.ReactNode;
   header?: React.ReactNode;
   footerInset?: number;
+  androidMinBottomInset?: number;
   backgroundColor?: string;
   style?: StyleProp<ViewStyle>;
   contentContainerStyle?: StyleProp<ViewStyle>;
@@ -20,12 +21,13 @@ export default function KeyboardFormLayout({
   children,
   header,
   footerInset = 0,
+  androidMinBottomInset = 0,
   backgroundColor = Colors.light.backgroundRoot,
   style,
   contentContainerStyle,
   testID = "keyboard-form-layout",
 }: KeyboardFormLayoutProps) {
-  const { scrollPaddingBottom, gutter } = useLayoutInsets(footerInset);
+  const { scrollPaddingBottom, gutter } = useLayoutInsets(footerInset, androidMinBottomInset);
 
   return (
     <View style={[styles.root, { backgroundColor }, style]} testID={testID}>
