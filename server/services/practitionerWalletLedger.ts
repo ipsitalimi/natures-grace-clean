@@ -496,3 +496,45 @@ export async function createPaidBooking(
 
   return { bookingId: data.id as string, bookingNumber: data.booking_number as string };
 }
+
+
+export async function reverseBookingEarningForRefund(
+  supabase: SupabaseClient,
+  booking: BookingRow,
+  refundRequestId: string,
+  refundAmountInr: number,
+  customerTotalPaidInr: number,
+  _commissionRate: number
+): Promise<{ reversedAmount: number; error?: string }> {
+  if (!booking.practitioner_id) return { reversedAmount: 0 };
+
+  const refundAmount = Math.round(Number(refundAmountInr) * 100) / 100;
+  const customerTotalPaid = Math.round(Number(customerTotalPaidInr) * 100) / 100;
+  if (!Number.isFinite(refundAmount) || refundAmount <= 0 || customerTotalPaid <= 0) {
+    return { reversedAmount: 0, error: "Invalid refund or booking amount" };
+  }
+  if (refundAmount > customerTotalPaid) {
+    return { reversedAmount: 0, error: "Refund exceeds customer payment" };
+  }
+
+  const { data, error } = await supabase.rpc("apply_practitioner_booking_refund", {
+    p_refund_request_id: refundRequestId,
+    p_booking_id: booking.id,
+    p_refund_amount_inr: refundAmount,
+    p_customer_total_paid_inr: customerTotalPaid,
+  });
+
+  if (error) return { reversedAmount: 0, error: error.message };
+
+  const result = data as {
+    ok?: boolean;
+    error?: string;
+    reversed_amount?: number | string;
+  } | null;
+
+  if (!result?.ok) {
+    return { reversedAmount: 0, error: result?.error ?? "Wallet refund reversal failed" };
+  }
+
+  return { reversedAmount: Number(result.reversed_amount ?? 0) };
+}
