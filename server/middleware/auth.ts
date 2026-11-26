@@ -85,8 +85,29 @@ export async function requireRole(
     return null;
   }
   if (profile.role !== role) {
-    res.status(403).json({ error: "Forbidden" });
-    return null;
+    const supabase = requireSupabaseAdmin();
+    let hasApprovedWorkspace = false;
+    if (role === "Practitioner") {
+      const { data } = await supabase
+        .from("practitioners")
+        .select("id")
+        .eq("profile_id", profile.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      hasApprovedWorkspace = Boolean(data);
+    } else if (role === "Seller") {
+      const { data } = await supabase
+        .from("sellers")
+        .select("id")
+        .eq("profile_id", profile.id)
+        .eq("is_active", true)
+        .maybeSingle();
+      hasApprovedWorkspace = Boolean(data);
+    }
+    if (!hasApprovedWorkspace) {
+      res.status(403).json({ error: "Forbidden" });
+      return null;
+    }
   }
   return profile;
 }
