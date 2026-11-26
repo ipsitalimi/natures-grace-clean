@@ -24,6 +24,11 @@ import { useReviews } from "@/context/ReviewsContext";
 import type { Review } from "@/data/reviews";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { useCancellationPolicy } from "@/lib/cancellationPolicy";
+import { usePlatformConfig } from "@/context/PlatformConfigContext";
+import { fetchAvailabilityForOffering } from "@/services/content/practitionerAvailabilityService";
+import { rescheduleUserBooking } from "@/services/bookingRescheduleApi";
+import { getBookingDates, getTimeSlotsForDate } from "@/lib/bookingSlots";
+import type { OfferingAvailabilityState } from "@/data/practitionerBookings";
 
 type ParamList = {
   SessionDetail: { sessionId: string };
@@ -62,6 +67,16 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getSessionStart(date: string, time: string): Date | null {
+  const match = time.trim().match(/^(\\d{1,2}):(\\d{2})\\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hour = Number(match[1]) % 12;
+  if (match[3].toUpperCase() === "PM") hour += 12;
+  const [year, month, day] = date.split("-").map(Number);
+  const result = new Date(year, month - 1, day, hour, Number(match[2]), 0, 0);
+  return Number.isNaN(result.getTime()) ? null : result;
+}
+
 function formatReceiptAmount(value: number | null | undefined): string {
   if (value == null || !Number.isFinite(Number(value))) return "Unavailable";
   return `₹${Number(value).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -86,6 +101,7 @@ export default function SessionDetailScreen() {
   const { sessionId } = route.params;
 
   const { session: authSession } = useAuth();
+  const { settings } = usePlatformConfig();
   const { userSessions, loading: practitionerLoading, refresh, cancelUserSession } =
     usePractitionerContext();
   const { submitReview, getReviewForBooking, refreshMyReviews } = useReviews();
@@ -100,6 +116,12 @@ export default function SessionDetailScreen() {
   const [cancelConfirmVisible, setCancelConfirmVisible] = useState(false);
   const [cancelResult, setCancelResult] = useState<string | null>(null);
   const [receiptVisible, setReceiptVisible] = useState(false);
+  const [rescheduleVisible, setRescheduleVisible] = useState(false);
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
+  const [rescheduleAvailability, setRescheduleAvailability] = useState<OfferingAvailabilityState | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState<string | null>(null);
+  const [rescheduleTime, setRescheduleTime] = useState<string | null>(null);
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const { bookingCancelMessage } = useCancellationPolicy();
   const session = userSessions.find((s) => s.id === sessionId);
 
@@ -151,6 +173,58 @@ export default function SessionDetailScreen() {
   }
 
   const isUpcoming = session.status === "Upcoming";
+  const rescheduleDates = getBookingDates(Math.max(1, settings.maxAdvanceBookingDays ?? 30));
+  const sessionStart = getSessionStart(session.date, session.time);
+  const canReschedule = isUpcoming && Boolean(sessionStart && sessionStart.getTime() - Date.now() > 24 * 60 * 60 * 1000);
+  const sessionDurationMinutes = Number.parseInt(session.duration, 10);
+  const rescheduleSlots = rescheduleDate && rescheduleAvailability
+    ? getTimeSlotsForDate(rescheduleDate, rescheduleAvailability, sessionDurationMinutes)
+    : [];
+
+  const openReschedule = async () => {
+    if (!session.offeringId || !session.practitionerId) {
+      setRescheduleError("This booking is missing its service details. Please contact support.");
+      setRescheduleVisible(true);
+      return;
+    }
+    setRescheduleError(null);
+    setRescheduleDate(null);
+    setRescheduleTime(null);
+    setRescheduleVisible(true);
+    try {
+      const availability = await fetchAvailabilityForOffering(session.offeringId);
+      setRescheduleAvailability(availability);
+    } catch {
+      setRescheduleError("Could not load available times. Please try again.");
+    }
+  };
+
+  const confirmReschedule = async () => {
+    if (!rescheduleDate || !rescheduleTime || !authSession?.access_token || rescheduleLoading) return;
+    setRescheduleLoading(true);
+    setRescheduleError(null);
+    try {
+      const result = await rescheduleUserBooking(
+        session.id,
+        authSession.access_token,
+        rescheduleDate,
+        rescheduleTime
+      );
+      if (!result.ok) {
+        setRescheduleError(result.error ?? "Rescheduling failed. Please try another slot.");
+        return;
+      }
+      await refresh();
+      setRescheduleVisible(false);
+      setRescheduleDate(null);
+      setRescheduleTime(null);
+      setCancelResult("Your session has been successfully rescheduled.");
+    } catch (error) {
+      setRescheduleError(error instanceof Error ? error.message : "Rescheduling failed.");
+    } finally {
+      setRescheduleLoading(false);
+    }
+  };
 
   const handleCancelSession = () => {
     setCancelConfirmVisible(true);
@@ -257,6 +331,91 @@ export default function SessionDetailScreen() {
             <Feather name="external-link" size={18} color={Colors.light.textMuted} />
           </Pressable>
         ) : null}
+
+        {canReschedule ? (
+          <Pressable
+            style={styles.rescheduleButton}
+            onPress={() => void openReschedule()}
+            testID="button-reschedule-session"
+          >
+            <Feather name="calendar" size={18} color={Colors.light.accent} />
+            <ThemedText style={styles.rescheduleButtonText}>Reschedule Session</ThemedText>
+          </Pressable>
+        ) : null}
+
+        <Modal
+          visible={rescheduleVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setRescheduleVisible(false)}
+        >
+          <View style={styles.cancelModalOverlay}>
+            <View style={styles.rescheduleModalCard}>
+              <ThemedText style={styles.cancelModalTitle}>Reschedule Session</ThemedText>
+              <ThemedText style={styles.cancelModalText}>
+                Choose a new date and time. Rescheduling is available until 24 hours before your current session.
+              </ThemedText>
+              {!rescheduleAvailability && !rescheduleError ? (
+                <ActivityIndicator color={Colors.light.accent} />
+              ) : null}
+              {rescheduleAvailability ? (
+                <>
+                  <ThemedText style={styles.rescheduleSectionTitle}>Select Date</ThemedText>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={styles.rescheduleChoices}>
+                      {rescheduleDates.map((day) => (
+                        <Pressable
+                          key={day.isoDate}
+                          style={[styles.rescheduleChoice, rescheduleDate === day.isoDate && styles.rescheduleChoiceSelected]}
+                          onPress={() => { setRescheduleDate(day.isoDate); setRescheduleTime(null); }}
+                        >
+                          <ThemedText style={[styles.rescheduleChoiceText, rescheduleDate === day.isoDate && styles.rescheduleChoiceTextSelected]}>
+                            {day.dayName} {day.dayNum} {day.monthName}
+                          </ThemedText>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                  {rescheduleDate ? (
+                    <>
+                      <ThemedText style={styles.rescheduleSectionTitle}>Select Time</ThemedText>
+                      <ScrollView style={styles.rescheduleTimeScroll} nestedScrollEnabled>
+                        <View style={styles.rescheduleChoices}>
+                          {rescheduleSlots.map((time) => (
+                            <Pressable
+                              key={time}
+                              style={[styles.rescheduleChoice, rescheduleTime === time && styles.rescheduleChoiceSelected]}
+                              onPress={() => setRescheduleTime(time)}
+                            >
+                              <ThemedText style={[styles.rescheduleChoiceText, rescheduleTime === time && styles.rescheduleChoiceTextSelected]}>
+                                {time}
+                              </ThemedText>
+                            </Pressable>
+                          ))}
+                        </View>
+                        {rescheduleSlots.length === 0 ? (
+                          <ThemedText style={styles.cancelModalText}>No available times on this date.</ThemedText>
+                        ) : null}
+                      </ScrollView>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+              {rescheduleError ? <ThemedText style={styles.reviewError}>{rescheduleError}</ThemedText> : null}
+              <Pressable
+                style={[styles.cancelModalButton, (!rescheduleDate || !rescheduleTime || rescheduleLoading) && styles.submitReviewDisabled]}
+                onPress={() => void confirmReschedule()}
+                disabled={!rescheduleDate || !rescheduleTime || rescheduleLoading}
+                testID="button-confirm-reschedule"
+              >
+                {rescheduleLoading ? <ActivityIndicator color="#FFFFFF" /> : <ThemedText style={styles.cancelModalButtonText}>Confirm New Time</ThemedText>}
+              </Pressable>
+              <Pressable style={styles.cancelModalKeepButton} onPress={() => setRescheduleVisible(false)}>
+                <ThemedText style={styles.cancelModalKeepText}>Keep Current Session</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
 
         {session.paymentStatus === "Paid" ? (
           <>
@@ -836,6 +995,66 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  rescheduleButton: {
+    borderWidth: 1,
+    borderColor: Colors.light.accent,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 9,
+    marginBottom: Spacing.md,
+  },
+  rescheduleButtonText: {
+    color: Colors.light.accent,
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  rescheduleModalCard: {
+    width: "100%",
+    maxWidth: 520,
+    maxHeight: "85%",
+    backgroundColor: Colors.light.backgroundRoot,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  rescheduleSectionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Colors.light.text,
+    marginTop: Spacing.xs,
+  },
+  rescheduleChoices: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  rescheduleChoice: {
+    backgroundColor: Colors.light.cardBackground,
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: Colors.light.divider,
+  },
+  rescheduleChoiceSelected: {
+    backgroundColor: Colors.light.button,
+    borderColor: Colors.light.button,
+  },
+  rescheduleChoiceText: {
+    color: Colors.light.text,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  rescheduleChoiceTextSelected: {
+    color: "#FFFFFF",
+  },
+  rescheduleTimeScroll: {
+    maxHeight: 150,
   },
   cancelModalOverlay: {
     flex: 1,
