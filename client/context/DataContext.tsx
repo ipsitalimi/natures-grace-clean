@@ -200,7 +200,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setSellerCatalogProducts([]);
       return;
     }
-    if (!profile?.id || profile.role !== "Seller") {
+    if (!profile?.id) {
       setSellerCatalogProducts([]);
       return;
     }
@@ -211,7 +211,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     const products = await productsService.fetchProductsBySellerId(sellerId);
     setSellerCatalogProducts(products);
-  }, [profile?.id, profile?.role]);
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!isSupabaseConfigured()) {
@@ -419,7 +419,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     async (product: Omit<StoreProduct, "id"> & { id?: string }): Promise<StoreProduct | null> => {
       if (!isSupabaseConfigured()) return null;
       let sellerId: string | null = null;
-      if (profile?.id && profile.role === "Seller") {
+      if (profile?.id) {
         sellerId = await resolveSellerIdByProfileId(profile.id);
         if (!sellerId) {
           console.error("[DataContext] addProduct: seller profile not provisioned");
@@ -439,7 +439,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
       return null;
     },
-    [profile?.id, profile?.role, platformSettings.autoApproveProducts]
+    [profile?.id, platformSettings.autoApproveProducts]
   );
 
   const updateProduct = useCallback(async (id: string, updates: Partial<StoreProduct>): Promise<boolean> => {
