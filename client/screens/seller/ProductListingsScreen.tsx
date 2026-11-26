@@ -116,16 +116,34 @@ export default function ProductListingsScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: scrollPaddingBottom }]}
         showsVerticalScrollIndicator={false}
       >
-        <Pressable
-          style={styles.addButton}
-          onPress={() => (navigation as any).navigate("AddEditProductListing", { listingId: null })}
-          testID="button-add-listing"
-        >
-          <View style={styles.addIconCircle}>
-            <Feather name="plus" size={18} color="#FFFFFF" />
+        {listings.length < productLimit ? (
+          <Pressable
+            style={styles.addButton}
+            onPress={() => (navigation as any).navigate("AddEditProductListing", { listingId: null })}
+            testID="button-add-listing"
+          >
+            <View style={styles.addIconCircle}>
+              <Feather name="plus" size={18} color="#FFFFFF" />
+            </View>
+            <ThemedText style={styles.addButtonText}>Add Product Listing</ThemedText>
+          </Pressable>
+        ) : (
+          <View style={styles.limitCard}>
+            <ThemedText style={styles.limitTitle}>You've reached your {productLimit}-product limit</ThemedText>
+            <ThemedText style={styles.limitHint}>
+              Request a higher limit to add more products. The team will review your request.
+            </ThemedText>
+            {limitRequestPending ? (
+              <ThemedText style={styles.limitPending}>Your request is pending admin review.</ThemedText>
+            ) : (
+              <Pressable style={styles.limitRequestButton} onPress={() => void handleRequestHigherLimit()} disabled={limitRequestBusy}>
+                <ThemedText style={styles.limitRequestText}>{limitRequestBusy ? "Submitting…" : "Request 20 product slots"}</ThemedText>
+              </Pressable>
+            )}
+            {limitRequestError ? <ThemedText style={styles.limitError}>{limitRequestError}</ThemedText> : null}
           </View>
-          <ThemedText style={styles.addButtonText}>Add Product Listing</ThemedText>
-        </Pressable>
+        )}
+        <ThemedText style={styles.limitCount}>{listings.length} of {productLimit} product listings used</ThemedText>
 
         <ThemedText style={styles.sectionSubtitle}>
           Define what users will see in the NG Store. Listings marked Pending are hidden until an admin approves them.
@@ -241,6 +259,14 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: Spacing.lg,
   },
+  limitCard: { backgroundColor: Colors.light.cardBackground, borderRadius: BorderRadius.md, padding: Spacing.lg, marginBottom: Spacing.md, gap: Spacing.sm },
+  limitTitle: { fontSize: 15, fontFamily: "Nunito_700Bold", color: Colors.light.text },
+  limitHint: { fontSize: 13, lineHeight: 18, color: Colors.light.textMuted },
+  limitPending: { fontSize: 13, color: Colors.light.accent, fontFamily: "Nunito_700Bold" },
+  limitRequestButton: { backgroundColor: Colors.light.accent, borderRadius: BorderRadius.sm, padding: Spacing.md, alignItems: "center" },
+  limitRequestText: { color: "#FFFFFF", fontFamily: "Nunito_700Bold" },
+  limitError: { color: "#8B3A3A", fontSize: 12 },
+  limitCount: { fontSize: 12, color: Colors.light.textMuted, marginBottom: Spacing.md },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
