@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import LegalDocumentReader, { LegalCheckboxRow } from "@/components/legal/LegalDocumentReader";
+import LegalDocumentReader from "@/components/legal/LegalDocumentReader";
 import { USER_SIGNUP_LEGAL_LABELS } from "@/constants/legalDocuments";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -106,14 +106,18 @@ export default function LegalReacceptanceScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {visibleKeys.map((key) => (
-          <LegalCheckboxRow
+          <Pressable
             key={key}
-            label={USER_SIGNUP_LEGAL_LABELS[key]}
-            checked={false}
-            onToggle={() => setViewingDoc(key)}
-            onView={() => setViewingDoc(key)}
+            style={styles.policyLink}
+            onPress={() => setViewingDoc(key)}
+            accessibilityRole="button"
             testID={`link-reaccept-${key}`}
-          />
+          >
+            <ThemedText style={styles.policyLinkText}>
+              {USER_SIGNUP_LEGAL_LABELS[key]}
+            </ThemedText>
+            <ThemedText style={styles.policyLinkArrow}>›</ThemedText>
+          </Pressable>
         ))}
         <Pressable
           style={styles.acceptRow}
@@ -202,6 +206,16 @@ const styles = StyleSheet.create({
   },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: Spacing.lg },
+  policyLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.divider,
+  },
+  policyLinkText: { fontSize: 14, color: Colors.light.accent, fontWeight: "500" },
+  policyLinkArrow: { fontSize: 22, color: Colors.light.accent },
   acceptRow: {
     flexDirection: "row",
     alignItems: "center",
