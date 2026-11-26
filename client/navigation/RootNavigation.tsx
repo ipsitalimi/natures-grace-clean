@@ -3,6 +3,7 @@ import { ActivityIndicator, View, StyleSheet, Image } from "react-native";
 import { NavigationContainerRef } from "@react-navigation/native";
 
 import RootStackNavigator, { RootStackParamList } from "@/navigation/RootStackNavigator";
+import WorkspaceSwitcher from "@/components/account/WorkspaceSwitcher";
 import { useAuth, homeRouteForRole } from "@/context/AuthContext";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
@@ -91,7 +92,7 @@ export default function RootNavigation({ navigationRef }: Props) {
 
     let cancelled = false;
 
-    void fetchSellerStorefrontByProfileId(session.user.id).then((res) => {
+    void fetchSellerStorefrontByProfileId(profile.id).then((res) => {
       if (cancelled) return;
       if (!res.ok) {
         return;
@@ -102,7 +103,7 @@ export default function RootNavigation({ navigationRef }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [isConfigured, session?.user?.id, profile?.role]);
+  }, [isConfigured, session?.user?.id, profile?.id, profile?.role]);
 
   useEffect(() => {
     if (!isConfigured || !session?.user?.id || profile?.role !== "Practitioner") {
@@ -112,7 +113,7 @@ export default function RootNavigation({ navigationRef }: Props) {
 
     let cancelled = false;
 
-    void fetchPractitionerOnboardingState(session.user.id).then((res) => {
+    void fetchPractitionerOnboardingState(profile.id).then((res) => {
       if (cancelled) return;
       if (!res.ok) {
         return;
@@ -360,7 +361,7 @@ export default function RootNavigation({ navigationRef }: Props) {
     );
   }
 
-  return <RootStackNavigator />;
+  return <><RootStackNavigator /><WorkspaceSwitcher /></>;
 }
 
 const styles = StyleSheet.create({
