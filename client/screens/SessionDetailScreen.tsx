@@ -188,6 +188,7 @@ export default function SessionDetailScreen() {
       return;
     }
     setRescheduleError(null);
+    setRescheduleAvailability(null);
     setRescheduleDate(null);
     setRescheduleTime(null);
     setRescheduleVisible(true);
