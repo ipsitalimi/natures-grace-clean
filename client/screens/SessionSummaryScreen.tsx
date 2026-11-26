@@ -16,7 +16,6 @@ import { resolveApiAccessToken } from "@/lib/apiAccessToken";
 import { getApiBaseUrl } from "@/lib/apiBase";
 import { runBookingCheckoutPayment } from "@/services/storeCheckoutService";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
-import { useCancellationPolicy } from "@/lib/cancellationPolicy";
 
 type RootStackParamList = {
   SessionSummary: {
@@ -80,7 +79,6 @@ export default function SessionSummaryScreen() {
   const { refresh: refreshPractitionerData } = usePractitionerContext();
   const [confirming, setConfirming] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const { freeHours } = useCancellationPolicy();
 
   const { practitionerCategories } = useDataContext();
   const practitioner = practitionerCategories.flatMap((c) => c.practitioners).find((p) => p.id === practitionerId);
@@ -229,8 +227,7 @@ export default function SessionSummaryScreen() {
         <View style={styles.noteCard}>
           <Feather name="info" size={16} color={Colors.light.accent} />
           <ThemedText style={styles.noteText}>
-            You can cancel at least {freeHours} hours before your session per our cancellation policy. To
-            change the time, cancel (if eligible) and book again — in-app rescheduling is not available yet.
+            You can reschedule or cancel up to 24 hours before your session. Cancellations incur a 20% fee (80% refund); within 24 hours, cancellations are non-refundable.
           </ThemedText>
         </View>
 
