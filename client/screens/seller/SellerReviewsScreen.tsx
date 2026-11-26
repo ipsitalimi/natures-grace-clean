@@ -150,7 +150,7 @@ function ReviewCard({
 }
 
 export default function SellerReviewsScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { scrollPaddingBottom } = useLayoutInsets(24, 24);
   const {
     sellerReviews,
     sellerStoreStats,
