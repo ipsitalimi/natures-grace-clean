@@ -516,7 +516,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session?.user?.id, loadProfile]);
 
   const refreshWorkspaces = useCallback(async () => {
-    if (!session?.access_token || profile?.role !== "Admin") return [];
+    if (!session?.access_token) return [];
     try {
       const response = await fetch(`${getApiBaseUrl()}/api/account/workspaces`, {
         headers: authJsonHeaders(session.access_token),
@@ -530,7 +530,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("[AuthContext] refreshWorkspaces:", error);
       return [];
     }
-  }, [session?.access_token, profile?.role]);
+  }, [session?.access_token]);
 
   const switchWorkspace = useCallback(async (workspaceProfileId: string) => {
     const supabase = getSupabase();
