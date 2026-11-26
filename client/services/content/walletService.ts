@@ -73,7 +73,7 @@ export async function getOrCreateWallet(commissionRate = 10): Promise<DbSellerWa
 
   const { data: retry } = await supabase
     .from("seller_wallets")
-    .select("*")
+    .select("id, seller_id, available_balance, pending_payout, held_balance, total_earned, commission_rate, next_payout_date")
     .eq("seller_id", sellerId)
     .maybeSingle();
 
