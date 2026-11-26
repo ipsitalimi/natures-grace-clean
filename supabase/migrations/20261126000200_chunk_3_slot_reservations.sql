@@ -242,7 +242,13 @@ BEGIN
  PERFORM pg_advisory_xact_lock(hashtext(v_practitioner::text),hashtext(v_date));
  SELECT * INTO v_reservation FROM public.practitioner_slot_reservations
   WHERE razorpay_order_id=p_razorpay_order_id AND user_id=p_user_id FOR UPDATE;
- IF NOT FOUND OR v_reservation.status NOT IN ('reserved','expired') THEN
+ IF NOT FOUND THEN
+   -- Backward compatibility for Razorpay orders created immediately before this
+   -- reservation release: they may complete only if the slot is still free.
+   IF NOT public.ng_booking_slot_is_available(v_practitioner,v_offering,v_date,v_time,v_duration,NULL,NULL) THEN
+     v_conflict:=true;
+   END IF;
+ ELSIF v_reservation.status NOT IN ('reserved','expired') THEN
    v_conflict:=true;
  ELSIF NOT public.ng_booking_slot_is_available(v_practitioner,v_offering,v_date,v_time,v_duration,NULL,
        CASE WHEN v_reservation.status='reserved' THEN v_reservation.id ELSE NULL END) THEN
