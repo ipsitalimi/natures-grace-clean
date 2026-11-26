@@ -60,6 +60,8 @@ import FirebaseDebugScreen from "@/screens/FirebaseDebugScreen";
 import NGBuddyScreen from "@/screens/NGBuddyScreen";
 import TrustSafetyScreen from "@/screens/TrustSafetyScreen";
 import ApplicationStatusScreen from "@/screens/ApplicationStatusScreen";
+import PractitionerApplicationScreen from "@/screens/PractitionerApplicationScreen";
+import SellerApplicationScreen from "@/screens/SellerApplicationScreen";
 import NotificationPreferencesScreen from "@/screens/NotificationPreferencesScreen";
 import RefundRequestScreen from "@/screens/RefundRequestScreen";
 import CartScreen from "@/screens/CartScreen";
@@ -135,6 +137,8 @@ export type RootStackParamList = {
   UserLegalPolicies: undefined;
   TrustSafety: undefined;
   ApplicationStatus: undefined;
+  PractitionerApplication: undefined;
+  SellerApplication: undefined;
   NotificationPreferences: undefined;
   RefundRequest: { orderId?: string; bookingId?: string };
   Support: undefined;
@@ -337,6 +341,16 @@ export default function RootStackNavigator() {
       <Stack.Screen
         name="ApplicationStatus"
         component={ApplicationStatusScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="PractitionerApplication"
+        component={PractitionerApplicationScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="SellerApplication"
+        component={SellerApplicationScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
