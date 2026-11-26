@@ -14,7 +14,6 @@ export type DbPractitionerWalletRow = {
   held_balance: number;
   total_earned: number;
   commission_rate: number;
-  bank_account_label: string | null;
   next_payout_date: string | null;
 };
 
@@ -56,7 +55,7 @@ async function fetchWalletByPractitionerId(
 
   const { data, error } = await supabase
     .from("practitioner_wallets")
-    .select("*")
+    .select("id, practitioner_id, available_balance, pending_payout, held_balance, total_earned, commission_rate, next_payout_date")
     .eq("practitioner_id", practitionerId)
     .maybeSingle();
 
@@ -160,7 +159,6 @@ export async function fetchWalletSnapshot(
     heldBalance: Number(wallet.held_balance),
     totalEarned: Number(wallet.total_earned),
     commissionRate: Number(wallet.commission_rate),
-    bankAccountLabel: wallet.bank_account_label?.trim() || "Bank account not linked",
     nextPayoutDate: wallet.next_payout_date?.trim() || "Scheduled after admin review",
     transactions,
     payouts: payoutRows.map((p) => ({
