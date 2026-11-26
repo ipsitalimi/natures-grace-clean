@@ -16,9 +16,13 @@ async function sendRoleApprovalNotifications(
   const event = isPractitioner ? "practitioner_approved" : "seller_approved";
   const emailTemplate = event;
   const linkRoute = isPractitioner ? "PractitionerOnboarding" : "SellerOnboarding";
-  const message = isPractitioner
-    ? "Congratulations! Your practitioner application has been approved."
-    : "Congratulations! Your seller application was approved. Set up your store to get started.";
+  const message = application.formData.applicationType === "additional_category"
+    ? "Your request for an additional practitioner category has been approved."
+    : application.formData.applicationType === "product_limit_increase"
+      ? "Your request for a higher product listing limit has been approved."
+      : isPractitioner
+        ? "Congratulations! Your practitioner application has been approved."
+        : "Congratulations! Your seller application was approved. Set up your store to get started.";
 
   if (accessToken) {
     void notifyUserHook(accessToken, {
