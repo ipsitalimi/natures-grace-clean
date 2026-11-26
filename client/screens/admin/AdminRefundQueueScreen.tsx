@@ -173,7 +173,11 @@ export default function AdminRefundQueueScreen({
               {notesModal?.status === "approved" ? "Confirm refund approval" : notesModal?.status === "rejected" ? "Confirm refund rejection" : "Move refund to review"}
             </ThemedText>
             {notesModal?.status === "approved" ? (
-              <ThemedText style={styles.modalDescription}>Approval only authorises a manual bank transfer. No money is sent automatically. After transferring the refund, record the bank reference using Mark Bank Transfer Paid.</ThemedText>
+              <ThemedText style={styles.modalDescription}>
+                {refunds.some((r) => r.id === notesModal.id && Boolean(r.booking_id))
+                  ? "Approval only authorises a manual bank transfer. No transfer is initiated automatically. After transferring the refund, record the bank reference using Mark Bank Transfer Paid."
+                  : "This is a store order refund. Its existing order-refund processing remains unchanged."}
+              </ThemedText>
             ) : null}
             <ThemedText style={styles.modalDescription}>Admin notes (optional)</ThemedText>
             <TextInput
