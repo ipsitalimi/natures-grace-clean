@@ -64,13 +64,16 @@ export default function RootNavigation({ navigationRef }: Props) {
 
   const bootLoading = isConfigured && (authLoading || configLoading);
 
+  // Do not route users to legal reacceptance until the live policy versions
+  // have loaded. Falling back to bundled defaults here can create a false
+  // "updated policies" screen during the initial post-signup profile load.
   const pendingUserLegalKeys = useMemo(() => {
-    if (!profile) return [];
-    const versions = legalVersions ?? DEFAULT_LEGAL_VERSIONS;
-    return getPendingUserLegalKeys(parseProfileLegalAcceptance(profile), versions);
+    if (!profile || !legalVersions) return [];
+    return getPendingUserLegalKeys(parseProfileLegalAcceptance(profile), legalVersions);
   }, [profile, legalVersions]);
 
-  const needsLegalReacceptance = pendingUserLegalKeys.length > 0;
+  const needsLegalReacceptance =
+    legalVersions !== null && pendingUserLegalKeys.length > 0;
 
   const sellerHomeRoute = useMemo((): keyof RootStackParamList => {
     if (profile?.role !== "Seller") return "SellerMain";
