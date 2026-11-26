@@ -140,14 +140,6 @@ export default function PractitionerWalletScreen() {
               ) : null}
             </View>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.payoutRow}>
-            <Feather name="percent" size={16} color={Colors.light.accent} />
-            <View style={styles.payoutText}>
-              <ThemedText style={styles.payoutLabel}>Platform Commission</ThemedText>
-              <ThemedText style={styles.payoutValue}>{snapshot.commissionRate}% per session</ThemedText>
-            </View>
-          </View>
         </View>
 
         <View style={styles.card}>
