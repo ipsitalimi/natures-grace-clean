@@ -31,6 +31,7 @@ export default function RequireRole({ role, children }: Props) {
     }
 
     let cancelled = false;
+    setRoleAuthorized(false);
     const verifyRoleAccess = async () => {
       if (profile.role === role) {
         if (!cancelled) setRoleAuthorized(true);
@@ -82,12 +83,6 @@ export default function RequireRole({ role, children }: Props) {
       return;
     }
 
-    if (profile.role !== role) {
-      navigation.reset({
-        index: 0,
-        routes: [{ name: homeRouteForRole(profile.role) }],
-      });
-    }
     return () => { cancelled = true; };
   }, [loading, session, profile, role, navigation, signOut]);
 
