@@ -175,3 +175,26 @@ export async function uploadOrderDispatchVideo(
     return { error: err instanceof Error ? err.message : "Dispatch video upload failed" };
   }
 }
+
+
+/** Upload a public event photo managed by an administrator. */
+export async function uploadEventPhoto(
+  adminUserId: string,
+  file: LocalFile
+): Promise<{ url?: string; error?: string }> {
+  const supabase = getSupabase();
+  if (!supabase) return { error: "Supabase not configured" };
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const path = `${adminUserId}/${Date.now()}-${safeName}`;
+  try {
+    const bytes = await readFileBytes(file.uri);
+    if (bytes.byteLength > 8 * 1024 * 1024) return { error: "Event photos must be 8 MB or smaller." };
+    const { error } = await supabase.storage.from("event-photos").upload(path, bytes, { contentType: file.mimeType, upsert: false });
+    if (error) return { error: error.message };
+    const { data } = supabase.storage.from("event-photos").getPublicUrl(path);
+    return { url: data.publicUrl };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Event photo upload failed" };
+  }
+}
