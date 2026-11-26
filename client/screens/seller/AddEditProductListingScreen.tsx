@@ -173,6 +173,7 @@ export default function AddEditProductListingScreen() {
   return (
     <KeyboardFormLayout
       footerInset={30}
+      androidMinBottomInset={24}
       header={<BackHeader title={screenTitle} showNotifications={false} />}
       contentContainerStyle={styles.scrollContent}
     >
