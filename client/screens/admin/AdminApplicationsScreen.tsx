@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   ScrollView,
@@ -6,12 +6,14 @@ import {
   Pressable,
   ActivityIndicator,
   TextInput,
+  Linking,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
 import type { RoleApplication, ApplicationProgressStage } from "@/data/roleApplications";
+import { fetchApplicationDocuments, type ApplicationDocument } from "@/services/platform/applicationDocumentsService";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useDataContext } from "@/context/DataContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
@@ -97,6 +99,7 @@ export default function AdminApplicationsScreen({
   const [bioDraft, setBioDraft] = useState("");
   const [bioSaving, setBioSaving] = useState(false);
   const [bioError, setBioError] = useState("");
+  const [applicationDocuments, setApplicationDocuments] = useState<ApplicationDocument[]>([]);
 
   const loadApplications = useCallback(async () => {
     if (!isSupabaseConfigured()) {
@@ -123,6 +126,18 @@ export default function AdminApplicationsScreen({
       void loadApplications();
     }, [loadApplications])
   );
+
+  useEffect(() => {
+    if (!selectedId) {
+      setApplicationDocuments([]);
+      return;
+    }
+    let cancelled = false;
+    void fetchApplicationDocuments(selectedId).then((rows) => {
+      if (!cancelled) setApplicationDocuments(rows);
+    });
+    return () => { cancelled = true; };
+  }, [selectedId]);
 
   const pendingPractitioner = applications.filter(
     (a) => a.targetRole === "Practitioner" && a.status === "Pending"
@@ -227,6 +242,31 @@ export default function AdminApplicationsScreen({
             {selected.targetRole} · {selected.status}
           </ThemedText>
           <ThemedText style={styles.detailMeta}>Submitted {formatDate(selected.createdAt)}</ThemedText>
+        </View>
+
+        <View style={styles.detailCard}>
+          <ThemedText style={styles.detailLabel}>Supporting documents</ThemedText>
+          {applicationDocuments.length === 0 ? (
+            <ThemedText style={styles.detailMeta}>No documents uploaded.</ThemedText>
+          ) : applicationDocuments.map((document) => (
+            <Pressable
+              key={document.id}
+              style={styles.documentLink}
+              onPress={() => {
+                if (document.signedUrl) void Linking.openURL(document.signedUrl);
+              }}
+              disabled={!document.signedUrl}
+            >
+              <Feather name="file-text" size={15} color={Colors.light.accent} />
+              <View style={{ flex: 1 }}>
+                <ThemedText style={styles.documentName}>{document.fileName}</ThemedText>
+                <ThemedText style={styles.detailMeta}>
+                  {document.documentType} · {formatDate(document.uploadedAt)}
+                </ThemedText>
+              </View>
+              <Feather name="external-link" size={14} color={Colors.light.textMuted} />
+            </Pressable>
+          ))}
         </View>
 
         {selected.status === "Pending" ? (
@@ -525,6 +565,8 @@ const styles = StyleSheet.create({
   detailRole: { fontSize: 14, color: Colors.light.textSecondary, marginTop: 4 },
   detailMeta: { fontSize: 12, color: Colors.light.textMuted, marginTop: 2, marginBottom: Spacing.sm },
   detailField: { marginTop: Spacing.md },
+  documentLink: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.light.divider },
+  documentName: { color: Colors.light.accent, fontSize: 13, fontFamily: "Nunito_700Bold" },
   progressActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: Spacing.sm },
   progressAction: { borderWidth: 1, borderColor: Colors.light.divider, borderRadius: BorderRadius.full, paddingHorizontal: 10, paddingVertical: 8 },
   progressActionSelected: { backgroundColor: Colors.light.accent, borderColor: Colors.light.accent },
