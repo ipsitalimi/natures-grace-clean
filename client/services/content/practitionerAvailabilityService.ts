@@ -15,7 +15,8 @@ type DbAvailabilityRow = {
 };
 
 const EMPTY: OfferingAvailabilityState = {
-  alwaysAvailable: true,
+  // Missing or unreadable schedules must never be treated as open all day.
+  alwaysAvailable: false,
   selectedDates: [],
   timingMode: "same",
   globalTiming: { start: "9:00 AM", end: "5:00 PM" },
