@@ -41,14 +41,14 @@ BEGIN
     last_webhook_event=p_webhook_event,failure_reason=NULL,notes=COALESCE(p_notes,notes) WHERE id=p_payout_id RETURNING * INTO v_payout;
    SELECT COALESCE(SUM(amount),0) INTO v_pending FROM seller_payouts WHERE wallet_id=v_wallet AND status IN ('Pending','Under Review','Processing');
    UPDATE seller_wallets SET pending_payout=v_pending WHERE id=v_wallet;
-   UPDATE wallet_transactions SET description='Payout to Bank Account (completed)' WHERE payout_id=p_payout_id AND category='payout';
+   UPDATE wallet_transactions SET description='Manual payout completed' WHERE payout_id=p_payout_id AND category='payout';
   ELSE
    UPDATE practitioner_payouts SET status='Completed',razorpay_payout_id=COALESCE(p_razorpay_payout_id,razorpay_payout_id),
     razorpay_fund_account_id=COALESCE(p_razorpay_fund_account_id,razorpay_fund_account_id),completed_at=NOW(),
     last_webhook_event=p_webhook_event,failure_reason=NULL,notes=COALESCE(p_notes,notes) WHERE id=p_payout_id RETURNING * INTO v_payout;
    SELECT COALESCE(SUM(amount),0) INTO v_pending FROM practitioner_payouts WHERE wallet_id=v_wallet AND status IN ('Pending','Under Review','Processing');
    UPDATE practitioner_wallets SET pending_payout=v_pending WHERE id=v_wallet;
-   UPDATE practitioner_wallet_transactions SET description='Payout to Bank Account (completed)' WHERE payout_id=p_payout_id AND category='payout';
+   UPDATE practitioner_wallet_transactions SET description='Manual payout completed' WHERE payout_id=p_payout_id AND category='payout';
   END IF;
  ELSE
   IF v_status NOT IN ('Pending','Under Review','Processing') THEN RETURN jsonb_build_object('ok',false,'error','Invalid failure transition'); END IF;
