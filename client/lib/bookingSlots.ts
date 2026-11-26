@@ -77,9 +77,20 @@ export function getTimeSlotsForDate(
       : availability.globalTiming;
 
   const windows = [timing, ...(timing.additional ?? [])];
+  const now = new Date();
+  const todayIsoDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
   return [...new Set(windows.flatMap((window) =>
     slotsBetween(window.start, window.end, 60, durationMinutes)
-  ))].sort((a, b) => (parseTime12h(a) ?? 0) - (parseTime12h(b) ?? 0));
+  ))]
+    // Same-day bookings must start in the future; never offer elapsed slots.
+    .filter((slot) => {
+      if (isoDate !== todayIsoDate) return true;
+      const slotMinutes = parseTime12h(slot);
+      return slotMinutes !== null && slotMinutes > currentMinutes;
+    })
+    .sort((a, b) => (parseTime12h(a) ?? 0) - (parseTime12h(b) ?? 0));
 }
 
 export function isDateBookable(isoDate: string, availability: OfferingAvailabilityState): boolean {
