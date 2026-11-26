@@ -432,7 +432,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
 
-      if (error) return { error: error.message };
+      // If a previous tap created the Auth user but the UI did not finish,
+      // recover by signing in with the same credentials instead of surfacing
+      // Supabase's confusing "User already registered" response.
+      if (error) {
+        const message = error.message.toLowerCase();
+        const alreadyRegistered =
+          message.includes("already registered") ||
+          message.includes("already been registered") ||
+          message.includes("user already exists");
+        if (!alreadyRegistered) return { error: error.message };
+
+        const recovery = await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+        if (recovery.error) {
+          if (isEmailNotConfirmedError(recovery.error.message)) {
+            return {
+              needsEmailConfirmation: true,
+              error: "Your account was created. Please verify your email using the link we sent, then sign in.",
+            };
+          }
+          return {
+            error: "An account with this email already exists. We couldn't sign in with the password entered. Please use Login or reset your password.",
+          };
+        }
+        data.user = recovery.data.user;
+        data.session = recovery.data.session;
+      }
 
       if (!data.session) {
         return {
