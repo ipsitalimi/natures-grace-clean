@@ -136,6 +136,63 @@ export async function submitRoleApplication(
   return application;
 }
 
+export async function submitSellerProductLimitRequest(
+  requestedLimit = 20
+): Promise<RoleApplication> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error("Supabase not configured");
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Sign in to request a higher product limit.");
+
+  const safeLimit = Math.max(11, Math.min(100, Math.floor(requestedLimit)));
+  const fullName = String(user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "Seller");
+  const formData = {
+    applicationType: "product_limit_increase",
+    requestedProductLimit: String(safeLimit),
+    fullName,
+    email: user.email ?? "",
+    brandName: "Product limit increase request",
+    category: "Seller account request",
+    productTypes: "",
+    description: "",
+    website: "",
+    whyJoin: "Requesting a higher product listing limit.",
+  };
+
+  const { data, error } = await supabase
+    .from("role_applications")
+    .insert({
+      user_id: user.id,
+      target_role: "Seller",
+      status: "Pending",
+      progress_stage: "submitted",
+      form_data: formData,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === "23505") {
+      throw new Error("You already have a seller request waiting for review.");
+    }
+    throw new Error(error.message);
+  }
+  if (!data) throw new Error("Your request could not be saved. Please try again.");
+
+  const application = mapRow(data as DbRoleApplicationRow);
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    void selfNotifyHook(session.access_token, {
+      event: "application_submitted",
+      message: "Your request for a higher product listing limit has been submitted for review.",
+      linkRoute: "ApplicationStatus",
+      emailTemplate: "seller_application_submitted",
+    });
+  }
+  return application;
+}
+
 export async function fetchMyRoleApplications(): Promise<RoleApplication[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
