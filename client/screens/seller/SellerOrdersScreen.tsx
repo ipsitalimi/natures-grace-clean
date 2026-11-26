@@ -13,6 +13,7 @@ import {
   Platform,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Platform } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 
@@ -162,7 +163,7 @@ function ShipOrderModal({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <Pressable style={styles.modalBackdrop} onPress={onCancel} />
-        <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom, Spacing.lg) }]}>
+        <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom, Platform.OS === "android" ? 24 : Spacing.lg) }]}>
           <ThemedText style={styles.modalTitle}>Mark as shipped</ThemedText>
           <ThemedText style={styles.modalSubtitle}>
             Order {order?.orderId} — add tracking so the buyer can follow delivery.
@@ -228,7 +229,7 @@ function ShipOrderModal({
 }
 
 export default function SellerOrdersScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { scrollPaddingBottom } = useLayoutInsets(24, 24);
   const [activeTab, setActiveTab] = useState<OrderStatus>("Pending");
   const { orders, advanceOrderStatus, ordersLoading, ordersError, refreshOrders } =
     useOrdersContext();
