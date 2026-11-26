@@ -124,6 +124,7 @@ export function toUserSessionHistory(
   return {
     id: row.id,
     practitionerId: row.practitioner_id ?? undefined,
+    offeringId: row.offering_id ?? undefined,
     practitionerName,
     serviceType: row.service_name,
     date: row.session_date,
