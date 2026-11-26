@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { View, StyleSheet, TextInput, Pressable, Image, ActivityIndicator } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -30,6 +31,7 @@ export default function LoginScreen() {
   const { syncSessionFromProfile, isAccountSuspended, refreshRemoteConfig } = usePlatformConfig();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [needsVerification, setNeedsVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
@@ -174,9 +176,12 @@ export default function LoginScreen() {
               placeholderTextColor={Colors.light.textSecondary}
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              secureTextEntry={!showPassword}
               testID="input-password"
             />
+            <Pressable style={styles.passwordToggle} onPress={() => setShowPassword((value) => !value)} accessibilityRole="button" accessibilityLabel={showPassword ? "Hide password" : "Show password"}>
+              <Feather name={showPassword ? "eye-off" : "eye"} size={19} color={Colors.light.textMuted} />
+            </Pressable>
           </View>
 
           <Pressable
@@ -304,7 +309,9 @@ const styles = StyleSheet.create({
   },
   inputWrapper: {
     gap: 6,
+    position: "relative",
   },
+  passwordToggle: { position: "absolute", right: 14, bottom: 13, padding: 4 },
   inputLabel: {
     fontSize: 14,
     fontWeight: "500",
@@ -320,6 +327,7 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     borderWidth: 1,
     borderColor: Colors.light.divider,
+    paddingRight: 48,
   },
   forgotLink: {
     alignSelf: "flex-end",
