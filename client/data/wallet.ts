@@ -36,7 +36,6 @@ export interface SellerWalletSnapshot {
   heldBalance: number;
   totalEarned: number;
   commissionRate: number;
-  bankAccountLabel: string;
   nextPayoutDate: string;
   transactions: WalletTransaction[];
   payouts: SellerPayout[];
