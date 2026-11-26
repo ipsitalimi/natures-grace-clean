@@ -15,7 +15,7 @@ async function sendRoleApprovalNotifications(
   const isPractitioner = application.targetRole === "Practitioner";
   const event = isPractitioner ? "practitioner_approved" : "seller_approved";
   const emailTemplate = event;
-  const linkRoute = isPractitioner ? "PractitionerOnboarding" : "SellerOnboarding";
+  const linkRoute = application.formData.applicationType === "additional_category" || application.formData.applicationType === "product_limit_increase" ? "ApplicationStatus" : isPractitioner ? "PractitionerOnboarding" : "SellerOnboarding";
   const message = application.formData.applicationType === "additional_category"
     ? "Your request for an additional practitioner category has been approved."
     : application.formData.applicationType === "product_limit_increase"
