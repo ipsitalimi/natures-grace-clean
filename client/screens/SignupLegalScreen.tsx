@@ -79,7 +79,7 @@ export default function SignupLegalScreen() {
     );
 
     if (!recordResult.ok) {
-      const keys = Object.keys(checked) as UserMandatoryLegalKey[];
+      const keys = legalKeys;
       setPendingSignupLegal({ keys, versions });
       setSubmitting(false);
       setError(
