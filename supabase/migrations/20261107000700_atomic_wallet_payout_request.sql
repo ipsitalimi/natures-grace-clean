@@ -42,14 +42,14 @@ BEGIN
     INSERT INTO seller_payouts(wallet_id, amount, status, notes)
       VALUES (p_wallet_id, p_amount, 'Pending', p_notes) RETURNING id INTO v_payout_id;
     INSERT INTO wallet_transactions(wallet_id,payout_id,type,category,amount,description,is_released)
-      VALUES(p_wallet_id,v_payout_id,'debit','payout',p_amount,'Payout to Bank Account (pending)',true);
+      VALUES(p_wallet_id,v_payout_id,'debit','payout',p_amount,'Manual payout requested',true);
   ELSE
     UPDATE practitioner_wallets SET available_balance = available_balance - p_amount,
       pending_payout = pending_payout + p_amount WHERE id = p_wallet_id;
     INSERT INTO practitioner_payouts(wallet_id, amount, status, notes)
       VALUES (p_wallet_id, p_amount, 'Pending', p_notes) RETURNING id INTO v_payout_id;
     INSERT INTO practitioner_wallet_transactions(wallet_id,payout_id,type,category,amount,description,is_released)
-      VALUES(p_wallet_id,v_payout_id,'debit','payout',p_amount,'Payout to Bank Account (pending)',true);
+      VALUES(p_wallet_id,v_payout_id,'debit','payout',p_amount,'Manual payout requested',true);
   END IF;
 
   RETURN jsonb_build_object('ok', true, 'payout_id', v_payout_id);
