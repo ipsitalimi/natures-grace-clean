@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import * as ImagePicker from "expo-image-picker";
+import { Image } from "react-native";
 import {
   View,
   ScrollView,
@@ -18,6 +20,8 @@ import type { EventRegistration } from "@/data/eventRegistrations";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useModeration } from "@/context/ModerationContext";
 import { useGratitude } from "@/context/GratitudeContext";
+import { useAuth } from "@/context/AuthContext";
+import { uploadEventPhoto } from "@/lib/storageUpload";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
 import { formatInr } from "@/lib/formatCurrency";
 import { fetchActiveCommunityMemberCount } from "@/services/profileService";
@@ -169,6 +173,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     banFromReport,
   } = useModeration();
   const { refreshGratitude } = useGratitude();
+  const { session } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -178,6 +183,9 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
   const [venue, setVenue] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const [saved, setSaved] = useState(false);
   const [activeMembersCount, setActiveMembersCount] = useState<number | null>(null);
   const [activeMembersLoading, setActiveMembersLoading] = useState(() => isSupabaseConfigured());
@@ -229,6 +237,8 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     setVenue("");
     setPrice("");
     setDescription("");
+    setPhotos([]);
+    setPhotoError("");
     setEditingEventId(null);
   };
 
@@ -246,12 +256,36 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     setVenue(event.venue ?? "");
     setPrice(extractPriceInput(event));
     setDescription(event.description);
+    setPhotos(event.photos ?? []);
+    setPhotoError("");
     setShowForm(true);
   };
 
   const closeForm = () => {
     setShowForm(false);
     resetForm();
+  };
+
+  const handleAddEventPhotos = async () => {
+    if (!session?.user?.id) { setPhotoError("Please sign in again before uploading photos."); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"], allowsMultipleSelection: true, quality: 0.82,
+    });
+    if (result.canceled || !result.assets.length) return;
+    setPhotoUploading(true); setPhotoError("");
+    const uploaded: string[] = [];
+    for (const asset of result.assets) {
+      if (!asset.uri) continue;
+      const response = await uploadEventPhoto(session.user.id, {
+        uri: asset.uri,
+        name: asset.fileName || `event-photo-${Date.now()}.jpg`,
+        mimeType: asset.mimeType || "image/jpeg",
+      });
+      if (response.url) uploaded.push(response.url);
+      else { setPhotoError(response.error || "A photo could not be uploaded."); break; }
+    }
+    setPhotos((current) => [...current, ...uploaded]);
+    setPhotoUploading(false);
   };
 
   const handleSaveEvent = async () => {
@@ -270,6 +304,7 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
     const mapped = {
       title: title.trim(),
       description: description.trim() || `${title.trim()} - a community wellness event.`,
+      photos,
       date: date.trim(),
       time: time.trim(),
       mode,
@@ -719,6 +754,22 @@ export default function AdminCommunityScreen({ onBackToDashboard }: { onBackToDa
                 testID="input-event-venue"
               />
 
+              <ThemedText style={styles.inputLabel}>Event photos</ThemedText>
+              <ThemedText style={styles.cardMeta}>Upload photos to display in the event details page.</ThemedText>
+              <Pressable style={styles.photoUploadButton} onPress={() => void handleAddEventPhotos()} disabled={photoUploading} testID="button-upload-event-photos">
+                {photoUploading ? <ActivityIndicator color="#FFFFFF" size="small" /> : <Feather name="image" size={16} color="#FFFFFF" />}
+                <ThemedText style={styles.addButtonText}>{photoUploading ? "Uploading…" : "Add photos"}</ThemedText>
+              </Pressable>
+              {photoError ? <ThemedText style={styles.errorText}>{photoError}</ThemedText> : null}
+              {photos.length ? <View style={styles.photoPreviewRow}>{photos.map((uri, index) => (
+                <View key={uri} style={styles.photoPreviewWrap}>
+                  <Image source={{ uri }} style={styles.photoPreview} />
+                  <Pressable style={styles.removePhotoButton} onPress={() => setPhotos((current) => current.filter((_, i) => i !== index))} accessibilityLabel="Remove event photo">
+                    <Feather name="x" size={13} color="#FFFFFF" />
+                  </Pressable>
+                </View>
+              ))}</View> : null}
+
               <ThemedText style={styles.inputLabel}>Ticket price in INR (leave empty for Free)</ThemedText>
               <TextInput
                 style={styles.input}
@@ -1006,6 +1057,11 @@ const styles = StyleSheet.create({
     fontFamily: "Nunito_700Bold",
     color: Colors.light.text,
   },
+  photoUploadButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: Colors.light.accent, padding: 12, borderRadius: BorderRadius.sm, marginBottom: Spacing.sm },
+  photoPreviewRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: Spacing.md },
+  photoPreviewWrap: { width: 76, height: 76, position: "relative" },
+  photoPreview: { width: 76, height: 76, borderRadius: 8 },
+  removePhotoButton: { position: "absolute", top: 3, right: 3, width: 22, height: 22, borderRadius: 11, backgroundColor: "#8B3A3A", alignItems: "center", justifyContent: "center" },
   inputLabel: {
     fontSize: 13,
     fontFamily: "Nunito_700Bold",
