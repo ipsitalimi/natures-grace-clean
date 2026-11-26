@@ -53,7 +53,7 @@ function BarChart({ data, period }: { data: { label: string; amount: number }[];
 }
 
 export default function SellerAnalyticsScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(32);
+  const { scrollPaddingBottom } = useLayoutInsets(32, 24);
   const { sellerStoreStats } = useReviews();
   const {
     stats,
