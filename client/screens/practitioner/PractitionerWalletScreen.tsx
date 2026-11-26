@@ -107,7 +107,6 @@ export default function PractitionerWalletScreen() {
               <ThemedText style={styles.payoutValue}>{snapshot.nextPayoutDate}</ThemedText>
             </View>
           </View>
-          </View>
         </View>
 
         <View style={styles.card}>
