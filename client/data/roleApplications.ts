@@ -12,6 +12,7 @@ export type ApplicationProgressStage =
   | "rejected";
 
 export type PractitionerApplicationForm = {
+  applicationType?: "additional_category";
   fullName: string;
   email: string;
   phone: string;
