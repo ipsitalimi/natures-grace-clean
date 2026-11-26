@@ -141,6 +141,7 @@ export function eventRowToCommunityEvent(row: DbEventRow): CommunityEvent {
     status: row.status as CommunityEvent["status"],
     price: row.price_label,
     isVisible: row.is_visible,
+    photos: Array.isArray(meta.photos) ? (meta.photos as string[]) : [],
   };
 }
 
@@ -164,6 +165,7 @@ export function communityEventToRow(
       whatToExpect: event.whatToExpect,
       ctaText: event.ctaText,
       bottomNote: event.bottomNote,
+      photos: event.photos ?? [],
     },
   };
 }
