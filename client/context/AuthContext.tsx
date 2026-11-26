@@ -447,11 +447,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const userId = data.user?.id;
-      if (userId) {
-        const row = await loadProfile(userId);
-        if (row) return { route: homeRouteForRole(row.role), profile: row };
+      if (!userId) {
+        return { error: "Your account was created, but we could not confirm the account details. Please sign in rather than creating it again." };
       }
-      return { route: "Main" as AuthHomeRoute };
+
+      // Supabase can return before the database profile trigger has finished.
+      // Wait for the profile so the app can route into the new account immediately.
+      const row = await loadProfileWithRetry(userId, 12);
+      if (!row) {
+        return { error: "Your account was created, but your profile is still being prepared. Please wait a moment and sign in; do not create the account again." };
+      }
+      setProfile(row);
+      return { route: homeRouteForRole(row.role), profile: row };
     },
     [loadProfile]
   );
