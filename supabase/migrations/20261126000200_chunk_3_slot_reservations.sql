@@ -380,7 +380,7 @@ GRANT EXECUTE ON FUNCTION public.reschedule_user_practitioner_booking(uuid,uuid,
 -- Admin schedule edits use the same availability/overlap guard.
 CREATE OR REPLACE FUNCTION public.admin_update_practitioner_booking_schedule(
  p_booking_id uuid,p_new_session_date text,p_new_session_time text,p_meeting_link text DEFAULT NULL
-) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $ 
+) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE v_booking record; v_date date;
 BEGIN
  SELECT * INTO v_booking FROM public.practitioner_bookings WHERE id=p_booking_id FOR UPDATE;
