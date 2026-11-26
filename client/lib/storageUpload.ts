@@ -184,7 +184,6 @@ export async function uploadEventPhoto(
 ): Promise<{ url?: string; error?: string }> {
   const supabase = getSupabase();
   if (!supabase) return { error: "Supabase not configured" };
-  const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${adminUserId}/${Date.now()}-${safeName}`;
   try {
