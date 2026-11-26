@@ -9,11 +9,7 @@ import type { PractitionerWalletTransaction } from "@/data/practitionerBookings"
 import { usePractitionerContext } from "@/context/PractitionerContext";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
 import { formatInr, formatInrSigned } from "@/lib/formatCurrency";
-import {
-  BANK_NOT_LINKED_NOTICE,
-  isBankAccountLinked,
-  MANUAL_PAYOUT_NOTICE,
-} from "@/lib/payoutDisclosure";
+import { MANUAL_PAYOUT_NOTICE } from "@/lib/payoutDisclosure";
 
 function TransactionRow({ txn }: { txn: PractitionerWalletTransaction }) {
   const isCredit = txn.type === "credit";
