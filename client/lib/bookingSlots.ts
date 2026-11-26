@@ -64,7 +64,8 @@ export function getBookingDates(maxDays: number): {
 export function getTimeSlotsForDate(
   isoDate: string,
   availability: OfferingAvailabilityState,
-  durationMinutes = 0
+  durationMinutes = 0,
+  busySlots: { session_time: string; duration_minutes: number }[] = []
 ): string[] {
   if (!availability.alwaysAvailable && !availability.selectedDates.includes(isoDate)) {
     return [];
@@ -89,6 +90,18 @@ export function getTimeSlotsForDate(
       if (isoDate !== todayIsoDate) return true;
       const slotMinutes = parseTime12h(slot);
       return slotMinutes !== null && slotMinutes > currentMinutes;
+    })
+    // Hide any candidate interval that overlaps an existing pending or confirmed booking.
+    .filter((slot) => {
+      const slotStart = parseTime12h(slot);
+      if (slotStart === null || durationMinutes <= 0) return true;
+      const slotEnd = slotStart + durationMinutes;
+      return !busySlots.some((busy) => {
+        const busyStart = parseTime12h(busy.session_time);
+        if (busyStart === null || !Number.isFinite(busy.duration_minutes)) return false;
+        const busyEnd = busyStart + Math.max(0, busy.duration_minutes);
+        return slotStart < busyEnd && slotEnd > busyStart;
+      });
     })
     .sort((a, b) => (parseTime12h(a) ?? 0) - (parseTime12h(b) ?? 0));
 }
