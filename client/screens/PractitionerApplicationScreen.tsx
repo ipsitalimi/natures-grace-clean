@@ -22,6 +22,7 @@ import ApplicationDocumentsSection from "@/components/ApplicationDocumentsSectio
 import PractitionerCategoryFields from "@/components/PractitionerCategoryFields";
 import type { LocalFile } from "@/lib/storageUpload";
 import { useLayoutInsets } from "@/hooks/useLayoutInsets";
+import { resolvePractitionerId } from "@/services/content/practitionerId";
 
 export default function PractitionerApplicationScreen() {
   const { scrollPaddingBottom } = useLayoutInsets(30);
@@ -29,6 +30,7 @@ export default function PractitionerApplicationScreen() {
   const { appNameDisplay } = useAppBrandCopy();
   const { session, profile, refreshProfile } = useAuth();
   const [submitted, setSubmitted] = useState(false);
+  const [isExistingPractitioner, setIsExistingPractitioner] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [agreementChecked, setAgreementChecked] = useState(false);
@@ -54,6 +56,15 @@ export default function PractitionerApplicationScreen() {
       if (profile.phone) setPhone(profile.phone);
     }
   }, [profile?.full_name, profile?.email, profile?.phone]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    let cancelled = false;
+    void resolvePractitionerId(session.user.id).then((id) => {
+      if (!cancelled) setIsExistingPractitioner(Boolean(id));
+    });
+    return () => { cancelled = true; };
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!profile) return;
@@ -90,6 +101,7 @@ export default function PractitionerApplicationScreen() {
       }
 
       const application = await submitRoleApplication("Practitioner", {
+        ...(isExistingPractitioner ? { applicationType: "additional_category" } : {}),
         fullName: fullName.trim(),
         email: email.trim(),
         phone: phone.trim(),
@@ -132,7 +144,7 @@ export default function PractitionerApplicationScreen() {
           <View style={styles.confirmationIconCircle}>
             <Feather name="check" size={36} color={Colors.light.accent} />
           </View>
-          <ThemedText style={styles.confirmationTitle}>Application Submitted</ThemedText>
+          <ThemedText style={styles.confirmationTitle}>{isExistingPractitioner ? "Category Request Submitted" : "Application Submitted"}</ThemedText>
           <ThemedText style={styles.confirmationMessage}>
             Your application has been sent to the {appNameDisplay} team for review.
           </ThemedText>
@@ -166,7 +178,7 @@ export default function PractitionerApplicationScreen() {
             minimumFontScale={0.8}
             maxFontSizeMultiplier={1.25}
           >
-            Become a Practitioner
+            {isExistingPractitioner ? "Request Additional Category" : "Become a Practitioner"}
           </ThemedText>
         }
       />
@@ -195,6 +207,8 @@ export default function PractitionerApplicationScreen() {
           </ThemedText>
         ) : null}
 
+        {!isExistingPractitioner ? (
+          <>
         <ThemedText style={styles.label}>Full Name</ThemedText>
         <TextInput
           style={styles.input}
@@ -228,14 +242,19 @@ export default function PractitionerApplicationScreen() {
           testID="input-phone"
         />
 
+          </>
+        ) : null}
+
         <PractitionerCategoryFields
           category={category}
           subcategories={subcategories}
           onCategoryChange={setCategory}
           onSubcategoriesChange={setSubcategories}
-          showSingleApplicationHint
+          showSingleApplicationHint={!isExistingPractitioner}
         />
 
+        {!isExistingPractitioner ? (
+          <>
         <ThemedText style={styles.label}>Years of Experience</ThemedText>
         <TextInput
           style={styles.input}
@@ -300,6 +319,9 @@ export default function PractitionerApplicationScreen() {
           testID="input-availability"
         />
 
+          </>
+        ) : null}
+
         <ApplicationDocumentsSection
           files={pendingDocs}
           onChange={setPendingDocs}
@@ -325,7 +347,7 @@ export default function PractitionerApplicationScreen() {
           {submitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <ThemedText style={styles.submitButtonText}>Submit Application</ThemedText>
+            <ThemedText style={styles.submitButtonText}>{isExistingPractitioner ? "Request Additional Category" : "Submit Application"}</ThemedText>
           )}
         </Pressable>
       </ScrollView>
