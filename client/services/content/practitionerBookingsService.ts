@@ -281,6 +281,35 @@ export async function getBookingById(
   return data as DbBookingRow | null;
 }
 
+export type BookingBusySlot = {
+  session_date: string;
+  session_time: string;
+  duration_minutes: number;
+};
+
+/** Public-safe busy intervals only; no customer or payment data is returned. */
+export async function fetchBookingBusySlots(
+  practitionerId: string,
+  startDate: string,
+  endDate: string
+): Promise<BookingBusySlot[]> {
+  const supabase = getSupabase();
+  if (!supabase) throw new Error("Booking availability is not connected.");
+
+  const { data, error } = await supabase.rpc("get_practitioner_busy_slots", {
+    p_practitioner_id: practitionerId,
+    p_start_date: startDate,
+    p_end_date: endDate,
+  });
+
+  if (error) {
+    console.error("[practitionerBookings] busy slots:", error.message);
+    throw new Error("Could not load current booking availability. Please try again.");
+  }
+
+  return (data ?? []) as BookingBusySlot[];
+}
+
 export type CreateBookingInput = {
   practitionerId: string;
   offeringId?: string;
