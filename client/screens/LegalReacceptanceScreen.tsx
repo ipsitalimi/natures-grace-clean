@@ -30,16 +30,7 @@ export default function LegalReacceptanceScreen() {
 
   const [versions, setVersions] = useState<Awaited<ReturnType<typeof fetchLegalVersions>> | null>(null);
   const [pendingKeys, setPendingKeys] = useState<UserMandatoryLegalKey[]>([]);
-  const [checked, setChecked] = useState<Record<UserMandatoryLegalKey, boolean>>({
-    user_terms: false,
-    privacy_policy: false,
-    refund_policy: false,
-    medical_disclaimer: false,
-    account_deletion_policy: false,
-    grievance_policy: false,
-    community_guidelines: false,
-    shipping_policy: false,
-  });
+  const [acceptedAll, setAcceptedAll] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<UserMandatoryLegalKey | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -58,13 +49,12 @@ export default function LegalReacceptanceScreen() {
 
   const visibleKeys = pendingKeys;
 
-  const allChecked = useMemo(() => {
-    return visibleKeys.every((key) => checked[key]);
-  }, [visibleKeys, checked]);
-
-  const toggle = useCallback((key: UserMandatoryLegalKey) => {
-    setChecked((prev) => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+  // One consolidated acceptance, matching the signup screen. Users can
+  // still open each document to read it without ticking every policy.
+  const allChecked = useMemo(
+    () => visibleKeys.length > 0 && acceptedAll,
+    [visibleKeys.length, acceptedAll]
+  );
 
   const handleContinue = async () => {
     if (!allChecked || !versions || submitting || visibleKeys.length === 0) return;
@@ -119,12 +109,26 @@ export default function LegalReacceptanceScreen() {
           <LegalCheckboxRow
             key={key}
             label={USER_SIGNUP_LEGAL_LABELS[key]}
-            checked={checked[key]}
-            onToggle={() => toggle(key)}
+            checked={false}
+            onToggle={() => setViewingDoc(key)}
             onView={() => setViewingDoc(key)}
-            testID={`checkbox-reaccept-${key}`}
+            testID={`link-reaccept-${key}`}
           />
         ))}
+        <Pressable
+          style={styles.acceptRow}
+          onPress={() => setAcceptedAll((value) => !value)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: acceptedAll }}
+          testID="checkbox-reaccept-all-legal"
+        >
+          <View style={[styles.checkbox, acceptedAll && styles.checkboxChecked]}>
+            {acceptedAll ? <ThemedText style={styles.checkmark}>✓</ThemedText> : null}
+          </View>
+          <ThemedText style={styles.acceptText}>
+            I have reviewed and agree to all the updated policies listed above.
+          </ThemedText>
+        </Pressable>
         {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
       </ScrollView>
 
@@ -150,7 +154,6 @@ export default function LegalReacceptanceScreen() {
               <Pressable
                 style={styles.modalDoneBtn}
                 onPress={() => {
-                  toggle(viewingDoc);
                   setViewingDoc(null);
                 }}
               >
@@ -199,6 +202,25 @@ const styles = StyleSheet.create({
   },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: Spacing.lg },
+  acceptRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: Spacing.lg,
+    marginTop: Spacing.md,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: Colors.light.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxChecked: { backgroundColor: Colors.light.accent, borderColor: Colors.light.accent },
+  checkmark: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+  acceptText: { flex: 1, fontSize: 14, lineHeight: 20, color: Colors.light.text },
   errorText: {
     fontSize: 14,
     color: "#C0392B",
