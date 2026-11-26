@@ -29,6 +29,8 @@ export type CheckoutConfirmResult = {
   bookingId?: string;
   bookingNumber?: string;
   error?: string;
+  paymentReceived?: boolean;
+  requiresAdminReview?: boolean;
 };
 
 async function readResponseBodyForDevLog(res: Response): Promise<string | null> {
@@ -91,6 +93,7 @@ export async function createCheckoutOrder(params: {
       error?: string;
       bookingId?: string;
     };
+    if (res.status === 202) return json;
     if (!res.ok) {
       if (res.status === 401) {
         return {
