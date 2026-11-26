@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useAuth } from "@/context/AuthContext";
 
-export default function WorkspaceSwitcher() {
+export default function WorkspaceSwitcher({ inline = false }: { inline?: boolean }) {
   const {
     session,
     profile,
@@ -32,7 +32,7 @@ export default function WorkspaceSwitcher() {
     [workspaces, activeWorkspaceProfileId, profile?.id]
   );
 
-  if (!session || workspaces.length < 2) return null;
+  if (!session || workspaces.length < 2 || (inline && profile?.role !== "Admin") || (!inline && profile?.role === "Admin")) return null;
 
   const openSwitcher = async () => {
     setVisible(true);
