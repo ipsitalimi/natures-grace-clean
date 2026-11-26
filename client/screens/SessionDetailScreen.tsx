@@ -333,14 +333,25 @@ export default function SessionDetailScreen() {
           </Pressable>
         ) : null}
 
-        {canReschedule ? (
+        {isUpcoming ? (
           <Pressable
-            style={styles.rescheduleButton}
-            onPress={() => void openReschedule()}
+            style={[styles.rescheduleButton, !canReschedule && styles.rescheduleButtonDisabled]}
+            onPress={canReschedule ? () => void openReschedule() : undefined}
+            disabled={!canReschedule}
             testID="button-reschedule-session"
+            accessibilityState={{ disabled: !canReschedule }}
           >
-            <Feather name="calendar" size={18} color={Colors.light.accent} />
-            <ThemedText style={styles.rescheduleButtonText}>Reschedule Session</ThemedText>
+            <Feather name="calendar" size={18} color={canReschedule ? Colors.light.accent : Colors.light.textMuted} />
+            <View style={styles.rescheduleButtonBody}>
+              <ThemedText style={[styles.rescheduleButtonText, !canReschedule && styles.rescheduleButtonTextDisabled]}>
+                {canReschedule ? "Reschedule Session" : "Rescheduling unavailable"}
+              </ThemedText>
+              {!canReschedule ? (
+                <ThemedText style={styles.rescheduleButtonHint}>
+                  Rescheduling closes 24 hours before your session.
+                </ThemedText>
+              ) : null}
+            </View>
           </Pressable>
         ) : null}
 
@@ -1012,6 +1023,21 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
     fontSize: 16,
     fontWeight: "600",
+  },
+  rescheduleButtonDisabled: {
+    borderColor: Colors.light.divider,
+    opacity: 0.85,
+  },
+  rescheduleButtonBody: {
+    alignItems: "center",
+  },
+  rescheduleButtonTextDisabled: {
+    color: Colors.light.textMuted,
+  },
+  rescheduleButtonHint: {
+    color: Colors.light.textMuted,
+    fontSize: 12,
+    marginTop: 3,
   },
   rescheduleModalCard: {
     width: "100%",
