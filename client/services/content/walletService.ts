@@ -15,7 +15,6 @@ export type DbSellerWalletRow = {
   held_balance: number;
   total_earned: number;
   commission_rate: number;
-  bank_account_label: string | null;
   next_payout_date: string | null;
 };
 
@@ -54,7 +53,7 @@ export async function getOrCreateWallet(commissionRate = 10): Promise<DbSellerWa
 
   const { data: existing } = await supabase
     .from("seller_wallets")
-    .select("*")
+    .select("id, seller_id, available_balance, pending_payout, held_balance, total_earned, commission_rate, next_payout_date")
     .eq("seller_id", sellerId)
     .maybeSingle();
 
@@ -161,7 +160,6 @@ export async function fetchWalletSnapshot(commissionRate = 10): Promise<SellerWa
     heldBalance: Number(wallet.held_balance),
     totalEarned: Number(wallet.total_earned),
     commissionRate: Number(wallet.commission_rate),
-    bankAccountLabel: wallet.bank_account_label?.trim() || "Bank account not linked",
     nextPayoutDate: wallet.next_payout_date?.trim() || "Scheduled after admin review",
     transactions: ((txns ?? []) as DbWalletTransactionRow[]).map(mapTransaction),
     payouts: payoutRows.map(mapPayout),
