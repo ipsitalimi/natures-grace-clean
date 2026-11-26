@@ -47,7 +47,7 @@ const EMPTY_SETTINGS: StorefrontSettings = {
 };
 
 export default function SellerStoreCustomizationScreen() {
-  const { scrollPaddingBottom } = useLayoutInsets(24);
+  const { scrollPaddingBottom } = useLayoutInsets(24, 24);
   const { session } = useAuth();
   const { sellerCatalog: sellerProducts } = useDataContext();
 
