@@ -8,7 +8,6 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useRoute, RouteProp } from "@react-navigation/native";
@@ -98,6 +97,8 @@ export default function SessionDetailScreen() {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [cancelConfirmVisible, setCancelConfirmVisible] = useState(false);
+  const [cancelResult, setCancelResult] = useState<string | null>(null);
   const [receiptVisible, setReceiptVisible] = useState(false);
   const { bookingCancelMessage } = useCancellationPolicy();
   const session = userSessions.find((s) => s.id === sessionId);
@@ -152,36 +153,32 @@ export default function SessionDetailScreen() {
   const isUpcoming = session.status === "Upcoming";
 
   const handleCancelSession = () => {
-    const refundNote = bookingCancelMessage(`${session.date}T${session.time || "12:00"}`);
-    Alert.alert(
-      "Cancel Session",
-      `${refundNote}\n\nDo you wish to continue?`,
-      [
-        { text: "Keep Session", style: "cancel" },
-        {
-          text: "Cancel Session",
-          style: "destructive",
-          onPress: async () => {
-            if (cancelling) return;
-            setCancelling(true);
-            const updated = await cancelUserSession(session.id);
-            setCancelling(false);
-            if (!updated) {
-              Alert.alert("Could not cancel", "Please try again or contact support.");
-              return;
-            }
-            await refresh();
-            Alert.alert(
-              "Session cancelled",
-              session.paymentStatus === "Paid"
-                ? "Your session was cancelled and a refund request was submitted. Our team will review it shortly."
-                : "Your session was cancelled.",
-              [{ text: "OK", onPress: () => navigation.goBack() }]
-            );
-          },
-        },
-      ]
-    );
+    setCancelConfirmVisible(true);
+  };
+
+  const confirmCancelSession = async () => {
+    if (cancelling) return;
+    setCancelling(true);
+    try {
+      const updated = await cancelUserSession(session.id);
+      if (!updated) {
+        setCancelConfirmVisible(false);
+        setCancelResult("Could not cancel this session. Please try again or contact support.");
+        return;
+      }
+      await refresh();
+      setCancelConfirmVisible(false);
+      setCancelResult(
+        session.paymentStatus === "Paid"
+          ? "Your session was cancelled and a refund request was submitted. Our team will review it shortly."
+          : "Your session was cancelled."
+      );
+    } catch (error) {
+      setCancelConfirmVisible(false);
+      setCancelResult(error instanceof Error ? error.message : "Could not cancel this session. Please try again.");
+    } finally {
+      setCancelling(false);
+    }
   };
 
   const handleSubmitReview = async () => {
@@ -459,6 +456,60 @@ export default function SessionDetailScreen() {
             )}
           </View>
         ) : null}
+
+        <Modal
+          visible={cancelConfirmVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCancelConfirmVisible(false)}
+        >
+          <View style={styles.cancelModalOverlay}>
+            <View style={styles.cancelModalCard}>
+              <ThemedText style={styles.cancelModalTitle}>Cancel Session?</ThemedText>
+              <ThemedText style={styles.cancelModalText}>
+                {bookingCancelMessage(`${session.date}T${session.time || "12:00"}`)}
+              </ThemedText>
+              <ThemedText style={styles.cancelModalText}>Do you wish to continue?</ThemedText>
+              <Pressable
+                style={[styles.cancelModalButton, cancelling && styles.submitReviewDisabled]}
+                onPress={() => void confirmCancelSession()}
+                disabled={cancelling}
+              >
+                {cancelling ? <ActivityIndicator color="#FFFFFF" /> : <ThemedText style={styles.cancelModalButtonText}>Confirm Cancellation</ThemedText>}
+              </Pressable>
+              <Pressable
+                style={styles.cancelModalKeepButton}
+                onPress={() => setCancelConfirmVisible(false)}
+                disabled={cancelling}
+              >
+                <ThemedText style={styles.cancelModalKeepText}>Keep Session</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={cancelResult !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCancelResult(null)}
+        >
+          <View style={styles.cancelModalOverlay}>
+            <View style={styles.cancelModalCard}>
+              <ThemedText style={styles.cancelModalTitle}>Cancellation Update</ThemedText>
+              <ThemedText style={styles.cancelModalText}>{cancelResult}</ThemedText>
+              <Pressable
+                style={styles.cancelModalButton}
+                onPress={() => {
+                  setCancelResult(null);
+                  if (session.status === "Upcoming") navigation.goBack();
+                }}
+              >
+                <ThemedText style={styles.cancelModalButtonText}>OK</ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
 
         {isUpcoming ? (
           <View style={styles.actionSection}>
@@ -785,6 +836,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#FFFFFF",
+  },
+  cancelModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: Spacing.lg,
+  },
+  cancelModalCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: Colors.light.backgroundRoot,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    gap: Spacing.md,
+  },
+  cancelModalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Colors.light.text,
+  },
+  cancelModalText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: Colors.light.textSecondary,
+  },
+  cancelModalButton: {
+    backgroundColor: "#D4534A",
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 13,
+    alignItems: "center",
+  },
+  cancelModalButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  cancelModalKeepButton: {
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  cancelModalKeepText: {
+    color: Colors.light.text,
+    fontSize: 14,
+    fontWeight: "600",
   },
   cancelButton: {
     backgroundColor: "transparent",
