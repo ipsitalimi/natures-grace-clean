@@ -22,7 +22,7 @@ import {
   getPendingUserLegalKeys,
   parseProfileLegalAcceptance,
 } from "@/services/legal/legalAcceptanceService";
-import { DEFAULT_LEGAL_VERSIONS, type LegalVersions } from "@/types/legal";
+import type { LegalVersions } from "@/types/legal";
 import { Colors } from "@/constants/theme";
 import appLogo from "../../assets/images/natures-grace-logo.png";
 import type { UserRole } from "@/types/database";
