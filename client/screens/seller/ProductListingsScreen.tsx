@@ -79,7 +79,7 @@ export default function ProductListingsScreen() {
     setLimitRequestBusy(true);
     setLimitRequestError(null);
     try {
-      await submitSellerProductLimitRequest(20);
+      await submitSellerProductLimitRequest(Math.max(20, productLimit + 10));
       setLimitRequestPending(true);
     } catch (error) {
       setLimitRequestError(error instanceof Error ? error.message : "Could not submit your request.");
@@ -135,9 +135,13 @@ export default function ProductListingsScreen() {
             </ThemedText>
             {limitRequestPending ? (
               <ThemedText style={styles.limitPending}>Your request is pending admin review.</ThemedText>
+            ) : productLimit >= 100 ? (
+              <ThemedText style={styles.limitPending}>Your account is at the maximum listing limit.</ThemedText>
             ) : (
               <Pressable style={styles.limitRequestButton} onPress={() => void handleRequestHigherLimit()} disabled={limitRequestBusy}>
-                <ThemedText style={styles.limitRequestText}>{limitRequestBusy ? "Submitting…" : "Request 20 product slots"}</ThemedText>
+                <ThemedText style={styles.limitRequestText}>
+                  {limitRequestBusy ? "Submitting…" : `Request ${Math.max(20, productLimit + 10)} product slots`}
+                </ThemedText>
               </Pressable>
             )}
             {limitRequestError ? <ThemedText style={styles.limitError}>{limitRequestError}</ThemedText> : null}
