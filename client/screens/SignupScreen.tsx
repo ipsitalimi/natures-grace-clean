@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Feather } from "@expo/vector-icons";
 import {
   View,
   StyleSheet,
@@ -29,6 +30,8 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
 
   const handleContinue = () => {
@@ -117,9 +120,12 @@ export default function SignupScreen() {
               placeholderTextColor={Colors.light.textSecondary}
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              secureTextEntry={!showPassword}
               testID="input-password"
             />
+            <Pressable style={styles.passwordToggle} onPress={() => setShowPassword((value) => !value)} accessibilityRole="button" accessibilityLabel={showPassword ? "Hide password" : "Show password"}>
+              <Feather name={showPassword ? "eye-off" : "eye"} size={19} color={Colors.light.textMuted} />
+            </Pressable>
           </View>
 
           <View style={styles.inputWrapper}>
@@ -130,9 +136,12 @@ export default function SignupScreen() {
               placeholderTextColor={Colors.light.textSecondary}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              secureTextEntry
+              secureTextEntry={!showConfirmPassword}
               testID="input-confirm-password"
             />
+            <Pressable style={styles.passwordToggle} onPress={() => setShowConfirmPassword((value) => !value)} accessibilityRole="button" accessibilityLabel={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}>
+              <Feather name={showConfirmPassword ? "eye-off" : "eye"} size={19} color={Colors.light.textMuted} />
+            </Pressable>
           </View>
 
           {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
@@ -186,7 +195,8 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   formArea: { gap: 16 },
-  inputWrapper: { gap: 6 },
+  inputWrapper: { gap: 6, position: "relative" },
+  passwordToggle: { position: "absolute", right: 14, bottom: 13, padding: 4 },
   inputLabel: {
     fontSize: 14,
     fontWeight: "500",
@@ -202,6 +212,7 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     borderWidth: 1,
     borderColor: Colors.light.divider,
+    paddingRight: 48,
   },
   errorText: { fontSize: 14, color: "#C0392B", textAlign: "center" },
   infoText: { fontSize: 14, color: Colors.light.accent, textAlign: "center" },
