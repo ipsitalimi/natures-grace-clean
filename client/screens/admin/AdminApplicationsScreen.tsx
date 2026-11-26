@@ -337,6 +337,10 @@ export default function AdminApplicationsScreen({
         <Pressable style={styles.backButton} onPress={onBackToDashboard} testID="button-back-dashboard">
           <Feather name="arrow-left" size={16} color={Colors.light.accent} />
         </Pressable>
+        <Pressable style={styles.refreshButton} onPress={() => void loadApplications()} disabled={loading} testID="button-refresh-applications">
+          {loading ? <ActivityIndicator size="small" color={Colors.light.accent} /> : <Feather name="refresh-cw" size={16} color={Colors.light.accent} />}
+          <ThemedText style={styles.refreshText}>Refresh</ThemedText>
+        </Pressable>
         
       </View>
 
@@ -409,6 +413,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   sectionTitle: { fontSize: 22, fontWeight: "700", fontFamily: "Nunito_700Bold" },
+  refreshButton: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 7, borderRadius: BorderRadius.sm, backgroundColor: Colors.light.cardBackground },
+  refreshText: { color: Colors.light.accent, fontSize: 12, fontWeight: "600" },
   statsRow: { flexDirection: "row", gap: 8, marginBottom: Spacing.lg },
   statCard: {
     flex: 1,
