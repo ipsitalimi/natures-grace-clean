@@ -11,7 +11,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { Feather } from "@expo/vector-icons";
 import { ThemedText } from "@/components/ThemedText";
 import { Colors, Spacing, BorderRadius } from "@/constants/theme";
-import type { RoleApplication } from "@/data/roleApplications";
+import type { RoleApplication, ApplicationProgressStage } from "@/data/roleApplications";
 import { usePlatformConfig } from "@/context/PlatformConfigContext";
 import { useDataContext } from "@/context/DataContext";
 import { isSupabaseConfigured } from "@/lib/supabaseConfig";
@@ -22,6 +22,7 @@ import {
   fetchAllRoleApplications,
   rejectRoleApplication,
   updateRoleApplicationBio,
+  updateApplicationProgressStage,
 } from "@/services/platform/roleApplicationsService";
 
 function formatDate(iso: string): string {
@@ -169,6 +170,21 @@ export default function AdminApplicationsScreen({
     setApproveTarget(null);
   };
 
+  const handleProgressStage = async (stage: ApplicationProgressStage) => {
+    if (!selected || selected.status !== "Pending" || actionBusy) return;
+    setActionBusy(true);
+    setActionError(null);
+    const ok = await updateApplicationProgressStage(selected.id, stage);
+    setActionBusy(false);
+    if (!ok) {
+      setActionError("Could not update the application review stage.");
+      return;
+    }
+    setApplications((prev) => prev.map((app) =>
+      app.id === selected.id ? { ...app, progressStage: stage } : app
+    ));
+  };
+
   const handleReject = async (application: RoleApplication, reason: string) => {
     setActionBusy(true);
     setActionError(null);
@@ -212,6 +228,37 @@ export default function AdminApplicationsScreen({
           </ThemedText>
           <ThemedText style={styles.detailMeta}>Submitted {formatDate(selected.createdAt)}</ThemedText>
         </View>
+
+        {selected.status === "Pending" ? (
+          <View style={styles.detailCard}>
+            <ThemedText style={styles.detailLabel}>Review progress</ThemedText>
+            <ThemedText style={styles.detailMeta}>
+              Current stage: {selected.progressStage.replace(/_/g, " ")}
+            </ThemedText>
+            <View style={styles.progressActions}>
+              {([
+                ["documents_received", "Documents received"],
+                ["under_review", "Under review"],
+                ["verification", "Verification"],
+              ] as [ApplicationProgressStage, string][]).map(([stage, label]) => (
+                <Pressable
+                  key={stage}
+                  style={[
+                    styles.progressAction,
+                    selected.progressStage === stage && styles.progressActionSelected,
+                  ]}
+                  onPress={() => void handleProgressStage(stage)}
+                  disabled={actionBusy || selected.progressStage === stage}
+                >
+                  <ThemedText style={[
+                    styles.progressActionText,
+                    selected.progressStage === stage && styles.progressActionTextSelected,
+                  ]}>{label}</ThemedText>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.detailCard}>
           <DetailField label="Email" value={form.email ?? ""} />
@@ -470,6 +517,11 @@ const styles = StyleSheet.create({
   detailRole: { fontSize: 14, color: Colors.light.textSecondary, marginTop: 4 },
   detailMeta: { fontSize: 12, color: Colors.light.textMuted, marginTop: 2, marginBottom: Spacing.sm },
   detailField: { marginTop: Spacing.md },
+  progressActions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: Spacing.sm },
+  progressAction: { borderWidth: 1, borderColor: Colors.light.divider, borderRadius: BorderRadius.full, paddingHorizontal: 10, paddingVertical: 8 },
+  progressActionSelected: { backgroundColor: Colors.light.accent, borderColor: Colors.light.accent },
+  progressActionText: { color: Colors.light.text, fontSize: 12 },
+  progressActionTextSelected: { color: "#FFFFFF", fontWeight: "700" },
   bioInput: { borderWidth: 1, borderColor: Colors.light.divider, borderRadius: BorderRadius.sm, minHeight: 110, padding: Spacing.md, color: Colors.light.text, fontSize: 14, marginTop: Spacing.sm },
   saveBioButton: { backgroundColor: Colors.light.accent, paddingVertical: 10, paddingHorizontal: 14, borderRadius: BorderRadius.sm, alignSelf: "flex-start", marginTop: Spacing.sm },
   detailLabel: {
