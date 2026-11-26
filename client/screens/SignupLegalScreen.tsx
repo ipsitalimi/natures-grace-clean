@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -73,7 +73,7 @@ export default function SignupLegalScreen() {
       return;
     }
 
-    const keys = Object.keys(checked) as UserMandatoryLegalKey[];
+    const keys = legalKeys;
     const recordResult = await recordLegalAcceptances(
       buildAcceptanceInputs(keys, versions)
     );
